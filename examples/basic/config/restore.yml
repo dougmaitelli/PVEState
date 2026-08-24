@@ -1,0 +1,13 @@
+schema_version: 1
+target:
+  production_address: pve.example.test
+  plan_max_age_minutes: 30
+pbs_bootstrap:
+  lxc_template: null
+  storage_attached_to_pve: false
+archives: {}
+restore_order: []
+reattach_mounts: []
+application:
+  configure_command: null
+

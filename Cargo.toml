@@ -1,0 +1,41 @@
+[package]
+name = "pve-iac"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Safe desired-state, drift, and recovery tooling for Proxmox VE"
+repository = "https://github.com/dougmaitelli/pve-iac"
+rust-version = "1.85"
+
+[[bin]]
+name = "pve-iac"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.5", features = ["derive", "env"] }
+dotenvy = "0.15"
+hex = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+schemars = { version = "1.0", features = ["chrono04"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+sha2 = "0.10"
+thiserror = "2.0"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3.20"
+
+[profile.release]
+lto = "thin"
+strip = true
+codegen-units = 1
+
+[lints.rust]
+unsafe_code = "forbid"
+

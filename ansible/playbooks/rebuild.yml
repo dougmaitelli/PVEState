@@ -1,5 +1,0 @@
----
-- import_playbook: bootstrap-pve.yml
-- import_playbook: bootstrap-pbs.yml
-- import_playbook: restore-guests.yml
-- import_playbook: configure.yml

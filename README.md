@@ -1,120 +1,113 @@
-# h4des Proxmox infrastructure and recovery
+# pve-iac
 
-This repository is the source of truth for rebuilding the existing production
-Proxmox environment at `https://pve.h4des.dev:8006`.
+`pve-iac` is a safety-focused, standalone Rust CLI for capturing, planning, and
+applying explicitly owned Proxmox VE configuration. Environment configuration
+lives in a separate repository; the binary contains no site-specific state.
 
-The project starts in **discovery-only mode**. The first milestone is to record
-the current PVE topology without changing it. Provisioning and restoration code
-will be added only after the discovered inventory has been reviewed.
+## Install
 
-## Safety model
+Linux x86_64 and macOS:
 
-- No CI/CD system is authorized to apply infrastructure changes.
-- Discovery uses only HTTP `GET` requests.
-- Apply and restore operations will require explicit local commands and confirmation.
-- API secrets remain outside Git.
-- Existing production guests are never implicitly adopted, replaced, or destroyed.
-- OpenTofu state is not created until an import strategy is reviewed.
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/dougmaitelli/pve-iac/main/install.sh | sh
+```
 
-## Current layout
+The installer downloads the latest GitHub Release, verifies its SHA-256 file,
+and installs `pve-iac` under `${HOME}/.local/bin` by default. Override the
+destination with `PVE_IAC_INSTALL_DIR`.
+
+Rust users may also build from source:
+
+```bash
+cargo install --git https://github.com/dougmaitelli/pve-iac
+```
+
+## Configuration repository
+
+Create or select a separate environment repository:
+
+```bash
+pve-iac init ./my-proxmox
+export IAC_CONFIG_DIR="$PWD/my-proxmox"
+```
+
+The current Hades environment is stored separately at `/root/pveconf`.
 
 ```text
-.
-├── ansible/                 future desired configuration and playbooks
-├── artifacts/discovery/     ignored API snapshots
-├── bin/iac                  operator entry point
-├── config/site.yml          non-secret site facts
-├── config/backup.yml        discovered non-secret backup topology
-├── config/host.yml          discovered non-secret host/storage topology
-├── config/guests.yml        discovered guest adoption baseline
-├── config/network.yml       replacement-host bridge configuration
-├── config/firewall.yml      declarative PVE cluster firewall policy
-├── config/storage.yml       required pools, mounts, and PVE storage definitions
-├── config/restore.yml       guarded recovery inputs and archive selections
-├── config/services.yml      discovered service/persistence inventory
-├── docs/current-state.md     reviewed production baseline
-├── docs/restore-plan.md     staged disaster-recovery plan
-└── scripts/pve_discover.py  read-only PVE API collector
+my-proxmox/
+├── config/                 desired YAML
+├── observed/production/    sanitized, reviewable native exports
+├── .runtime/               ignored raw observations and plans
+├── .env                    ignored API credentials
+└── .secrets/               ignored SSH material
 ```
 
-## First use
-
-Set up the repository-local tooling once:
+## Workflow
 
 ```bash
-./bin/iac setup
+pve-iac capture
+pve-iac plan
+
+# Edit config/*.yml and review the plan again.
+pve-iac plan
+
+# Commit changes with normal Git commands in the configuration repository.
+git diff
+git add config observed
+git commit -m "Describe the infrastructure change"
+
+pve-iac apply
+pve-iac validate
 ```
 
-You do not need to activate or deactivate a Python virtual environment. The
-`./bin/iac` wrapper invokes the repository's own Python and Ansible binaries
-directly, leaving your shell environment unchanged.
+Every command also accepts `--config-dir PATH`.
 
-Create a least-privilege, privilege-separated PVE API token with audit-only
-permissions. A token's permissions are constrained by both the backing user and
-the token ACL, so grant the token only `PVEAuditor` access needed for discovery.
+### Safety model
+
+`apply` requires a plan less than 30 minutes old, an exact plan SHA, an exact
+target, explicitly approved domains, and separate mutation credentials. Guest
+deletion/replacement, disk shrinking, and implicit storage moves are not modeled.
+Proxmox config digests and remote file hashes reject concurrent changes.
+Network files are not activated unless `IAC_APPLY_NETWORK_NOW=YES`.
 
 ```bash
-cp .env.example .env
-chmod 600 .env
-# edit .env locally
-
-./bin/iac capture
-./bin/iac plan
-./bin/iac validate
+export IAC_ENABLE_PRODUCTION_APPLY=YES
+export IAC_CONFIRM_PLAN_SHA='<sha from .runtime/production-plan.json>'
+export IAC_APPLY_TARGET='https://pve.example:8006'
+export IAC_APPLY_DOMAINS='guests,firewall,dns'
+pve-iac apply
 ```
 
-For a disaster rebuild, fill the deliberately unresolved values in
-`config/restore.yml`, generate `./bin/iac recover plan RECOVERY_HOST`, and follow
-the hash-confirmed staged procedure in
-[docs/operator-workflow.md](docs/operator-workflow.md). Rebuild commands are
-fail-closed and cannot overwrite existing guest IDs.
+## Commands
 
-For routine configuration management:
+- `init PATH`: scaffold an environment repository.
+- `capture`: refresh API observations and sanitized host/firewall exports.
+- `plan`: validate desired state and create a deterministic guarded plan.
+- `apply`: execute exactly the confirmed non-destructive plan.
+- `validate`: verify all managed guests are running.
+- `recover ACTION TARGET`: grouped disaster-recovery interface.
+- `schema`: emit the generated JSON Schema for guest configuration.
+
+## Development
+
+The local quality gate follows the same format/lint/test pattern as `/root/ada`:
 
 ```bash
-./bin/iac capture
-./bin/iac plan
-# edit config/*.yml, repeat plan, then review
-./bin/iac save "reviewed desired-state change"
-# set the separate apply identity and exact plan confirmations
-./bin/iac apply
+make check
+make build
 ```
 
-Observed state and desired state are intentionally separate: `capture` refreshes
-ignored evidence and sanitized `exports/production/`, while human edits live in
-`config/`. See [docs/operator-workflow.md](docs/operator-workflow.md) for the
-apply gates and managed-field boundaries.
+CI runs `rustfmt`, Clippy with warnings denied, tests, and release builds on
+Linux, macOS, and Windows. Pushing a `v*` tag creates checksummed GitHub Release
+archives consumed by `install.sh`.
 
-`discover` writes a timestamped JSON snapshot beneath `artifacts/discovery/` and
-updates `latest.json`. Those files are ignored because they describe the private
-production topology. Discovery includes node, storage, backup-job, guest
-configuration, and guest snapshot metadata. It does not enter guests or read
-their filesystems.
+## Security
 
-The wrapper loads `.env` without printing it. The Python client sends the token
-through an HTTP authorization header and never writes it to disk or command-line
-arguments.
+Never commit `.env`, `.secrets`, raw runtime observations, API tokens, private
+keys, application secrets, or PBS S3 credentials. Use a read-only discovery
+identity and a distinct, narrowly scoped mutation identity.
 
-## What comes next
+## License
 
-1. Run and review read-only discovery.
-2. Classify every guest as rebuildable, stateful, or infrastructure-critical.
-3. Document PBS placement, datastore name, encryption material, S3 endpoint, and
-   local-cache recovery requirements without committing secrets.
-4. Export current guest and host configuration into reviewed Ansible data.
-5. Add idempotent configuration roles one service at a time.
-6. Test restores into isolated IDs/storage/networking before declaring the plan ready.
+MIT
 
-See [docs/restore-plan.md](docs/restore-plan.md) for the recovery model.
-The first discovery findings are recorded in
-[docs/current-state.md](docs/current-state.md).
-The application repository findings are recorded in
-[docs/application-source-audit.md](docs/application-source-audit.md).
-Persistent state and its current recovery sources are mapped in
-[docs/persistence-map.md](docs/persistence-map.md).
-Manual plan/apply operations are documented in
-[docs/operator-workflow.md](docs/operator-workflow.md).
-The independent PBS recovery sequence is documented in
-[docs/pbs-bootstrap.md](docs/pbs-bootstrap.md).
-Service checks and their limitations are documented in
-[docs/service-recovery-checks.md](docs/service-recovery-checks.md).
