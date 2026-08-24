@@ -1,1 +1,25 @@
-services: {}
+services:
+  101:
+    guest: apps
+    type: lxc
+    os: Debian 13
+    primary_services: [docker]
+    compose_roots: [/srv/stacks]
+    containers: [reverse-proxy, dashboard]
+    named_volumes: 2
+    anonymous_volumes: 0
+    persistence: [guest_rootfs, /srv/data]
+    qemu_guest_agent: null
+    risks: [bind_mount_not_in_vzdump]
+  201:
+    guest: home-automation
+    type: qemu
+    os: Home Assistant OS
+    primary_services: [home-assistant]
+    compose_roots: null
+    containers: null
+    named_volumes: null
+    anonymous_volumes: null
+    persistence: opaque_vm_disk
+    qemu_guest_agent: true
+    risks: null

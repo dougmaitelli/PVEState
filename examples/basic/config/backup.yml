@@ -20,5 +20,5 @@ pve_backup_job:
   datastore: example-backup
   schedule: weekly
   mode: snapshot
-  guest_ids: []
+  guest_ids: [101, 201]
   retention: {keep_last: 3}

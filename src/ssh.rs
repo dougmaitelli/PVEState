@@ -11,6 +11,7 @@ pub struct Ssh {
     key: String,
     known: String,
 }
+
 impl Ssh {
     pub fn discovery(root: &Path) -> Result<Self> {
         Ok(Self {
@@ -76,6 +77,7 @@ impl Ssh {
         Ok(())
     }
 }
+
 fn req(n: &str) -> Result<String> {
     std::env::var(n).with_context(|| format!("missing {n}"))
 }

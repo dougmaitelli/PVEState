@@ -24,12 +24,14 @@ pub struct SiteConfig {
     pub workload_profile: WorkloadProfile,
     pub backup: SiteBackup,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SiteIdentity {
     pub name: String,
     pub environment: String,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProxmoxSite {
@@ -37,30 +39,35 @@ pub struct ProxmoxSite {
     pub existing_environment: bool,
     pub change_policy: String,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct WorkloadProfile {
     pub virtual_machines: Count,
     pub containers: Count,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum Count {
     Number(u32),
     Text(String),
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SiteBackup {
     pub pbs: SitePbs,
     pub s3: SiteS3,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SitePbs {
     pub deployment: String,
     pub endpoint: String,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SiteS3 {
@@ -74,6 +81,7 @@ pub struct HostConfig {
     pub host: HostIdentity,
     pub storage_topology: BTreeMap<String, StorageTopology>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct HostIdentity {
@@ -82,6 +90,7 @@ pub struct HostIdentity {
     pub pve_version: String,
     pub kernel: String,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StorageTopology {
@@ -105,12 +114,14 @@ pub struct FirewallConfig {
     pub guests: BTreeMap<u32, FirewallPolicy>,
     pub absent_guest_files: Vec<u32>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NodeFirewall {
     pub present: bool,
     pub rules: Vec<FirewallRule>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FirewallPolicy {
@@ -118,6 +129,7 @@ pub struct FirewallPolicy {
     pub log_level_in: Option<String>,
     pub rules: Vec<FirewallRule>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FirewallRule {
@@ -131,6 +143,7 @@ pub struct FirewallRule {
     pub log: String,
     pub comment: Option<String>,
 }
+
 fn yes() -> bool {
     true
 }
@@ -142,6 +155,7 @@ pub struct StorageConfig {
     pub pools: Vec<Pool>,
     pub storages: Vec<Storage>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct HostMount {
@@ -149,6 +163,7 @@ pub struct HostMount {
     pub required: bool,
     pub purpose: String,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Pool {
@@ -160,6 +175,7 @@ pub struct Pool {
     pub content: Vec<String>,
     pub sparse: Option<bool>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Storage {
@@ -184,6 +200,7 @@ pub struct BackupConfig {
     pub pbs: PbsBackup,
     pub pve_backup_job: PveBackupJob,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PbsBackup {
@@ -194,6 +211,7 @@ pub struct PbsBackup {
     pub s3_endpoint: S3Endpoint,
     pub jobs: BackupJobs,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BackupGuest {
@@ -201,6 +219,7 @@ pub struct BackupGuest {
     pub kind: String,
     pub vmid: u32,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Datastore {
@@ -211,6 +230,7 @@ pub struct Datastore {
     pub s3_endpoint_id: String,
     pub garbage_collection_schedule: String,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct S3Endpoint {
@@ -218,17 +238,20 @@ pub struct S3Endpoint {
     pub endpoint_template: String,
     pub region: String,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BackupJobs {
     pub prune: Schedule,
     pub verify: VerifySchedule,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Schedule {
     pub schedule: String,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct VerifySchedule {
@@ -236,6 +259,7 @@ pub struct VerifySchedule {
     pub ignore_verified: bool,
     pub outdated_after_days: u32,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PveBackupJob {
@@ -245,6 +269,7 @@ pub struct PveBackupJob {
     pub guest_ids: Vec<u32>,
     pub retention: Retention,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Retention {
@@ -263,6 +288,7 @@ pub struct RestoreConfig {
     pub reattach_mounts: Vec<RestoreMount>,
     pub application: RestoreApplication,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RestoreTarget {
@@ -270,6 +296,7 @@ pub struct RestoreTarget {
     pub production_address: String,
     pub plan_max_age_minutes: u32,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PbsBootstrap {
@@ -282,6 +309,7 @@ pub struct PbsBootstrap {
     pub lxc_template: Option<String>,
     pub storage_attached_to_pve: bool,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RestoreMount {
@@ -290,6 +318,7 @@ pub struct RestoreMount {
     pub source: String,
     pub target: String,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RestoreApplication {
@@ -304,6 +333,7 @@ pub struct RestoreApplication {
 pub struct ServicesConfig {
     pub services: BTreeMap<u32, Service>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Service {
@@ -320,6 +350,7 @@ pub struct Service {
     pub qemu_guest_agent: Option<bool>,
     pub risks: Option<Vec<String>>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum Persistence {
@@ -333,6 +364,7 @@ pub struct RequiredSecretsConfig {
     pub required_for_disaster_recovery: SecretGroups,
     pub never_commit: Vec<String>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SecretGroups {

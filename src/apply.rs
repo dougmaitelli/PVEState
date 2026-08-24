@@ -141,12 +141,14 @@ pub fn run(repo: &Repository) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(&results)?);
     Ok(())
 }
+
 fn require_eq(n: &str, w: &str) -> Result<()> {
     if std::env::var(n).unwrap_or_default() != w {
         bail!("{n} must equal {w}")
     }
     Ok(())
 }
+
 fn resource(o: &Operation) -> &str {
     match o {
         Operation::ApiUpdate { resource, .. }
@@ -154,6 +156,7 @@ fn resource(o: &Operation) -> &str {
         | Operation::WriteFile { resource, .. } => resource,
     }
 }
+
 fn quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }

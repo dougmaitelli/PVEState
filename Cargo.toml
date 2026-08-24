@@ -5,31 +5,31 @@ edition = "2024"
 license = "MIT"
 description = "Safe desired-state, drift, and recovery tooling for Proxmox VE"
 repository = "https://github.com/dougmaitelli/pve-iac"
-rust-version = "1.85"
+rust-version = "1.88"
 
 [[bin]]
 name = "pve-iac"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0"
-base64 = "0.22"
-chrono = { version = "0.4", features = ["serde"] }
-clap = { version = "4.5", features = ["derive", "env"] }
-dotenvy = "0.15"
-hex = "0.4"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-schemars = { version = "1.0", features = ["chrono04"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-serde_yaml = "0.9"
-sha2 = "0.10"
-thiserror = "2.0"
+anyhow = "1.0.104"
+base64 = "0.23.1"
+chrono = { version = "0.4.45", features = ["serde"] }
+clap = { version = "4.6.6", features = ["derive", "env"] }
+dotenvy = "0.15.7"
+hex = "0.4.3"
+reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "form", "json", "rustls"] }
+schemars = { version = "1.2.2", features = ["chrono04"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+serde_yaml = "0.9.34"
+sha2 = "0.11.0"
+thiserror = "2.0.20"
 
 [dev-dependencies]
-assert_cmd = "2.0"
-predicates = "3.1"
-tempfile = "3.20"
+assert_cmd = "2.2.2"
+predicates = "3.1.4"
+tempfile = "3.27.0"
 
 [profile.release]
 lto = "thin"
@@ -38,4 +38,3 @@ codegen-units = 1
 
 [lints.rust]
 unsafe_code = "forbid"
-

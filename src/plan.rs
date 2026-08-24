@@ -35,6 +35,7 @@ pub enum Operation {
         activate: bool,
     },
 }
+
 impl Operation {
     pub fn domain(&self) -> &str {
         match self {
@@ -44,6 +45,7 @@ impl Operation {
         }
     }
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Plan {
     pub schema_version: u8,
@@ -53,6 +55,7 @@ pub struct Plan {
     pub blockers: Vec<String>,
     pub plan_sha256: String,
 }
+
 impl Plan {
     pub fn calculate_hash(&self) -> Result<String> {
         let mut x = self.clone();
@@ -66,6 +69,7 @@ impl Plan {
         Ok(())
     }
 }
+
 pub fn run(repo: &Repository) -> Result<Plan> {
     validate(repo)?;
     let manifest: Value = serde_json::from_slice(
@@ -168,16 +172,19 @@ pub fn run(repo: &Repository) -> Result<Plan> {
     )?;
     Ok(p)
 }
+
 fn cmp(ch: &mut BTreeMap<String, String>, k: &str, w: &impl ToString, a: &Value) {
     if a.get(k).map(val).as_deref() != Some(&w.to_string()) {
         ch.insert(k.into(), w.to_string());
     }
 }
+
 fn val(v: &Value) -> String {
     v.as_str()
         .map(str::to_string)
         .unwrap_or_else(|| v.to_string())
 }
+
 fn opts(s: &str) -> BTreeMap<String, String> {
     s.split(',')
         .enumerate()
@@ -188,6 +195,7 @@ fn opts(s: &str) -> BTreeMap<String, String> {
         })
         .collect()
 }
+
 fn changed(w: &BTreeMap<String, String>, a: &Value) -> BTreeMap<String, String> {
     w.iter()
         .filter(|(k, v)| {
@@ -210,6 +218,7 @@ fn changed(w: &BTreeMap<String, String>, a: &Value) -> BTreeMap<String, String> 
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect()
 }
+
 fn guest_lxc(
     node: &str,
     id: u32,
@@ -259,6 +268,7 @@ fn guest_lxc(
         block,
     )
 }
+
 fn guest_vm(
     node: &str,
     id: u32,
@@ -304,6 +314,7 @@ fn guest_vm(
         block,
     )
 }
+
 fn disk(
     node: &str,
     identity: (&str, u32),
@@ -337,6 +348,7 @@ fn disk(
     }
     Ok(())
 }
+
 fn file_op(
     repo: &Repository,
     identity: (&str, &str),
@@ -366,6 +378,7 @@ fn file_op(
     }
     Ok(())
 }
+
 fn validate(repo: &Repository) -> Result<()> {
     let mut macs = std::collections::BTreeSet::new();
     for l in repo.guests.lxcs.values() {

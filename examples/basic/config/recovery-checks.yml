@@ -1,2 +1,7 @@
-checks: []
-
+checks:
+  - id: pve-api
+    description: Proxmox API responds locally
+    command: pvesh get /version
+  - id: guest-status
+    description: Managed guests exist after restore
+    command: qm status 201 && pct status 101
