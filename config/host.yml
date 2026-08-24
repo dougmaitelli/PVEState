@@ -1,0 +1,41 @@
+# Non-secret storage topology discovered from the production PVE host.
+host:
+  name: pve
+  standalone: true
+  pve_version: 9.2.11
+  kernel: 7.0.14-8-pve
+
+storage_topology:
+  system:
+    layout: lvmthin
+    redundancy: none
+    device_class: nvme
+    provides: [pve-root, local, local-lvm]
+
+  VMs:
+    layout: zfs_single_device
+    redundancy: none
+    device_class: nvme
+    provides: [guest_root_disks]
+
+  Data:
+    layout: zfs_mirror
+    redundancy: mirror
+    devices: 2
+    device_class: sata_ssd
+
+  pbs_cache:
+    mount: /mnt/pve/backup
+    filesystem: ext4
+    redundancy: none
+    device_class: sata_hdd
+    size_tb: 1
+    consumers: [docker, proxmox-backup-server]
+
+  security:
+    mount: /mnt/pve/security
+    filesystem: ext4
+    redundancy: none
+    device_class: surveillance_hdd
+    size_tb: 2
+    consumers: [nvr]

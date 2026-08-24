@@ -1,0 +1,12 @@
+[OPTIONS]
+
+enable: 1
+
+[RULES]
+
+IN ACCEPT -p tcp -dport 53 -log nolog # DNS
+IN ACCEPT -p udp -dport 53 -log nolog # DNS
+IN ACCEPT -p tcp -dport 853 -log nolog # DNS TLS/QUIC
+IN ACCEPT -p tcp -dport 80 -log nolog # Web Interface
+IN ACCEPT -p tcp -dport 443 -log nolog # Web Interface
+

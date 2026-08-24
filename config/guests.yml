@@ -1,0 +1,128 @@
+# Discovered PVE definitions. These are an adoption baseline, not yet an apply file.
+node: pve
+
+lxcs:
+  102:
+    hostname: omada
+    os: ubuntu
+    unprivileged: true
+    cores: 1
+    memory_mb: 8192
+    swap_mb: 512
+    rootfs: {storage: VMs, size_gb: 8}
+    network: {name: eth0, mac: "BC:24:11:CD:84:41", bridge: vmbr0, firewall: true, ipv4: 192.168.0.2/24, gateway4: 192.168.0.1}
+    start: {onboot: true, order: 1}
+
+  103:
+    hostname: dns
+    os: ubuntu
+    unprivileged: true
+    cores: 1
+    memory_mb: 512
+    swap_mb: 0
+    rootfs: {storage: VMs, size_gb: 8}
+    network:
+      name: eth0
+      mac: "2A:41:0C:DE:92:FB"
+      bridge: vmbr0
+      firewall: true
+      ipv4: 192.168.0.3/24
+      gateway4: 192.168.0.1
+      ipv6: fd00::3/64
+      gateway6: fd00::1
+    start: {onboot: true, order: 1}
+
+  105:
+    hostname: docker
+    os: alpine
+    unprivileged: true
+    cores: 4
+    memory_mb: 12288
+    swap_mb: 512
+    rootfs: {storage: VMs, size_gb: 32}
+    bind_mounts:
+      - {source: /mnt/pve/backup, target: /mnt/backup, backed_up_by_pve: false}
+    network:
+      name: eth0
+      mac: "BC:24:11:70:5B:E3"
+      bridge: vmbr0
+      firewall: true
+      ipv4: 192.168.0.5/24
+      gateway4: 192.168.0.1
+      ipv6: fd00::5/64
+      gateway6: fd00::1
+    additional_networks:
+      - {name: net1, mac: "BC:24:11:B7:84:A1", bridge: vmbr1, firewall: true, ipv4: 192.168.7.5/24}
+    start: {onboot: true, order: 2}
+
+  106:
+    hostname: nvr
+    os: ubuntu
+    unprivileged: false
+    cores: 4
+    memory_mb: 8192
+    swap_mb: 0
+    rootfs: {storage: VMs, size_gb: 16}
+    bind_mounts:
+      - {source: /mnt/pve/security, target: /mnt/security, backed_up_by_pve: false}
+    network: {name: net0, mac: "BC:24:11:38:26:3E", bridge: vmbr0, firewall: true, ipv4: 192.168.0.6/24, gateway4: 192.168.0.1}
+    additional_networks:
+      - {name: net1, mac: "F6:4A:7C:59:2B:C6", bridge: vmbr1, firewall: false, ipv4: 192.168.7.6/24}
+    start: {onboot: true, order: 4}
+
+  108:
+    hostname: pelican
+    os: ubuntu
+    unprivileged: true
+    cores: 1
+    memory_mb: 1024
+    swap_mb: 0
+    rootfs: {storage: VMs, size_gb: 8}
+    network: {name: net0, mac: "BC:24:11:90:96:CC", bridge: vmbr0, firewall: true, ipv4: 192.168.0.8/24, gateway4: 192.168.0.1}
+    additional_networks:
+      - {name: net1, mac: "BC:24:11:CE:97:F7", bridge: vmbr1, firewall: false, ipv4: 192.168.7.8/24}
+    start: {onboot: true, order: 5}
+
+  111:
+    hostname: proxmox-backup-server
+    os: debian
+    unprivileged: false
+    cores: 2
+    memory_mb: 2048
+    swap_mb: 512
+    rootfs: {storage: VMs, size_gb: 10}
+    bind_mounts:
+      - {source: /mnt/pve/backup, target: /mnt/backup, backed_up_by_pve: false}
+    network: {name: eth0, mac: "BC:24:11:62:84:95", bridge: vmbr0, firewall: false, ipv4: 192.168.0.11/24, gateway4: 192.168.0.1}
+    start: {onboot: true, order: 6}
+
+  121:
+    hostname: p-wing-1
+    os: ubuntu
+    unprivileged: true
+    cores: 8
+    memory_mb: 12288
+    swap_mb: 512
+    rootfs: {storage: VMs, size_gb: 32}
+    network: {name: eth0, mac: "6E:E9:C2:0B:8E:83", bridge: vmbr0, firewall: false, ipv4: 192.168.0.21/24, gateway4: 192.168.0.1}
+    additional_networks:
+      - {name: net1, mac: "52:C8:3F:79:CC:01", bridge: vmbr1, firewall: false, ipv4: 192.168.7.21/24}
+    start: {onboot: true, order: 10, delay_seconds: 100}
+
+vms:
+  107:
+    name: hass
+    machine: q35
+    bios: ovmf
+    cpu: {type: host, sockets: 1, cores: 4}
+    memory_mb: 24576
+    disk: {storage: VMs, interface: scsi0, size_gb: 64, discard: true}
+    efi: {storage: VMs, pre_enrolled_keys: true}
+    networks:
+      - {model: virtio, mac: "9E:E4:C1:84:EC:D5", bridge: vmbr0, firewall: true}
+      - {model: virtio, mac: "0A:03:B6:4D:88:75", bridge: vmbr1, firewall: false}
+      - {model: virtio, mac: "02:03:33:F1:A0:D3", bridge: vmbr0, firewall: true, vlan: 10}
+    usb_passthrough:
+      - {slot: usb2, host: "303a:4001"}
+    qemu_guest_agent: false
+    start: {onboot: true, order: 3}

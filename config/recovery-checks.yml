@@ -1,0 +1,78 @@
+checks:
+  - id: pve-lxcs-running
+    description: All seven production LXCs are running
+    command: >-
+      for id in 102 103 105 106 108 111 121; do
+      pct status "$id" | grep -q 'status: running' || exit 1;
+      done
+
+  - id: home-assistant-running
+    description: Home Assistant VM 107 is running
+    command: "qm status 107 | grep -q 'status: running'"
+
+  - id: omada-service
+    description: Omada controller service is active
+    command: pct exec 102 -- systemctl is-active --quiet tpeap
+
+  - id: dns-service
+    description: AdGuard Home is active and listening on DNS port 53
+    command: >-
+      pct exec 103 -- sh -c 'systemctl is-active --quiet AdGuardHome &&
+      ss -H -lntu | grep -Eq "(:53[[:space:]])|(:53$)"'
+
+  - id: docker-service
+    description: Docker daemon is active in LXC 105
+    command: pct exec 105 -- rc-service docker status
+
+  - id: docker-containers
+    description: All 27 expected Docker application containers are running
+    command: >-
+      pct exec 105 -- sh -c 'test "$(docker ps --format "{{.Names}}" | wc -l)" -eq 27'
+
+  - id: docker-health
+    description: No running Docker application container reports unhealthy
+    command: >-
+      pct exec 105 -- sh -c 'test -z "$(docker ps --filter health=unhealthy -q)"'
+
+  - id: reverse-proxy-listeners
+    description: Traefik is listening on HTTP and HTTPS
+    command: >-
+      pct exec 105 -- sh -c '(ss -H -lnt 2>/dev/null || netstat -lnt) |
+      grep -Eq ":80[[:space:]]" &&
+      (ss -H -lnt 2>/dev/null || netstat -lnt) | grep -Eq ":443[[:space:]]"'
+
+  - id: frigate-service
+    description: Frigate and its Docker proxy are running
+    command: >-
+      pct exec 106 -- sh -c 'docker inspect -f "{{.State.Running}}" frigate | grep -qx true &&
+      docker inspect -f "{{.State.Running}}" dockerproxy | grep -qx true'
+
+  - id: nvr-storage
+    description: Frigate recording storage is mounted from the expected host disk
+    command: >-
+      pct exec 106 -- findmnt -n -S /dev/sdc1 -T /mnt/security
+
+  - id: pelican-panel
+    description: Pelican panel dependencies are active
+    command: >-
+      pct exec 108 -- sh -c 'systemctl is-active --quiet nginx php8.5-fpm redis-server'
+
+  - id: pbs-services
+    description: PBS daemon and proxy are active
+    command: >-
+      pct exec 111 -- sh -c 'systemctl is-active --quiet proxmox-backup proxmox-backup-proxy'
+
+  - id: pbs-s3-datastore
+    description: PBS reports pve-backup with the expected S3 backend
+    command: >-
+      pct exec 111 -- sh -c 'proxmox-backup-manager datastore list --output-format json |
+      grep -q "bucket=hades-bkp,client=backblaze,type=s3"'
+
+  - id: pve-pbs-storage
+    description: PVE reports PBS storage as active
+    command: pvesm status --storage pbs | grep -q 'active'
+
+  - id: wings-service
+    description: Pelican Wings and Docker are active
+    command: >-
+      pct exec 121 -- sh -c 'systemctl is-active --quiet wings docker'

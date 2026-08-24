@@ -1,0 +1,25 @@
+host: pve
+management_address: 192.168.0.10/24
+management_gateway: 192.168.0.1
+dns:
+  search: h4des.dev
+  servers: []  # populate from reviewed PVE node DNS settings before managing
+interfaces:
+  - {name: enp4s0, method: manual}
+  - {name: enp3s0, method: manual}
+  - {name: enp5s0f0np0, method: manual}
+  - {name: enp5s0f1np1, method: manual}
+  - {name: wlp6s0, method: manual}
+bridges:
+  - name: vmbr0
+    method: static
+    address: 192.168.0.10/24
+    gateway: 192.168.0.1
+    ports: [enp4s0]
+    stp: false
+    forward_delay: 0
+  - name: vmbr1
+    method: manual
+    ports: []
+    stp: false
+    forward_delay: 0

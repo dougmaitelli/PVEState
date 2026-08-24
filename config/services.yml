@@ -1,0 +1,105 @@
+# Service inventory discovered without reading application configuration values.
+services:
+  102:
+    guest: omada
+    type: lxc
+    os: Ubuntu 26.04 LTS
+    primary_services: [tpeap]
+    persistence: guest_rootfs
+
+  103:
+    guest: dns
+    type: lxc
+    os: Ubuntu 26.04 LTS
+    primary_services: [AdGuardHome]
+    persistence: guest_rootfs
+
+  105:
+    guest: docker
+    type: lxc
+    os: Alpine Linux 3.23
+    compose_roots:
+      - /srv/ai
+      - /srv/stacks/bot
+      - /srv/stacks/code
+      - /srv/stacks/home
+      - /srv/stacks/monitoring
+      - /srv/stacks/mqtt
+      - /srv/stacks/network
+      - /srv/stacks/proxy
+      - /srv/stacks/trek
+    containers:
+      - dockdash
+      - pulse
+      - netalertx
+      - homepage
+      - dockhand
+      - dozzle
+      - apprise
+      - goaccess_nginx
+      - uptime-kuma
+      - traefik
+      - pocket-id
+      - newt
+      - shitbot
+      - retroassembly
+      - vscode
+      - speedtest
+      - certvault
+      - skysend
+      - open-webui
+      - goaccess
+      - trek
+      - error-pages
+      - freshrss
+      - tinyauth
+      - mqtt
+      - prunemate
+      - it-tools
+    named_volumes: 19
+    anonymous_volumes: 4
+    persistence: guest_rootfs_and_named_docker_volumes
+
+  106:
+    guest: nvr
+    type: lxc
+    os: Ubuntu 26.04 LTS
+    compose_roots: [/root/frigate]
+    containers: [dockerproxy, frigate]
+    persistence:
+      - guest_rootfs
+      - /mnt/security
+    risks:
+      - bind_mount_not_in_vzdump
+      - docker_socket_proxy_published_on_all_interfaces_port_2375
+
+  107:
+    guest: hass
+    type: qemu
+    os: Home Assistant OS
+    persistence: opaque_vm_disk
+    qemu_guest_agent: false
+
+  108:
+    guest: pelican
+    type: lxc
+    os: Ubuntu 26.04 LTS
+    primary_services: [nginx, php8.5-fpm, redis-server]
+    persistence: guest_rootfs
+
+  111:
+    guest: proxmox-backup-server
+    type: lxc
+    os: Debian 13
+    primary_services: [proxmox-backup, proxmox-backup-proxy]
+    persistence:
+      - guest_rootfs
+      - s3_datastore
+      - /mnt/backup_local_s3_cache
+
+  121:
+    guest: p-wing-1
+    type: lxc
+    os: Ubuntu 26.04 LTS
+    primary_services: [wings, docker]
+    persistence: guest_rootfs
