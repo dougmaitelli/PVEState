@@ -1,0 +1,346 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Guests",
+  "type": "object",
+  "properties": {
+    "lxcs": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "patternProperties": {
+        "^\\d+$": {
+          "$ref": "#/$defs/Lxc"
+        }
+      }
+    },
+    "node": {
+      "type": "string"
+    },
+    "vms": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "patternProperties": {
+        "^\\d+$": {
+          "$ref": "#/$defs/Vm"
+        }
+      }
+    }
+  },
+  "required": [
+    "node"
+  ],
+  "$defs": {
+    "BindMount": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "target"
+      ]
+    },
+    "Cpu": {
+      "type": "object",
+      "properties": {
+        "cores": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "sockets": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "sockets",
+        "cores"
+      ]
+    },
+    "Disk": {
+      "type": "object",
+      "properties": {
+        "size_gb": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "storage": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "storage",
+        "size_gb"
+      ]
+    },
+    "Lxc": {
+      "type": "object",
+      "properties": {
+        "additional_networks": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Nic"
+          }
+        },
+        "bind_mounts": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BindMount"
+          }
+        },
+        "cores": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "hostname": {
+          "type": "string"
+        },
+        "memory_mb": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "network": {
+          "$ref": "#/$defs/Nic"
+        },
+        "rootfs": {
+          "$ref": "#/$defs/Disk"
+        },
+        "start": {
+          "$ref": "#/$defs/Start"
+        },
+        "swap_mb": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "hostname",
+        "cores",
+        "memory_mb",
+        "swap_mb",
+        "rootfs",
+        "network",
+        "start"
+      ]
+    },
+    "Nic": {
+      "type": "object",
+      "properties": {
+        "bridge": {
+          "type": "string"
+        },
+        "firewall": {
+          "type": "boolean",
+          "default": false
+        },
+        "gateway4": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gateway6": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ipv4": {
+          "type": "string"
+        },
+        "ipv6": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mac": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "mac",
+        "bridge",
+        "ipv4"
+      ]
+    },
+    "Start": {
+      "type": "object",
+      "properties": {
+        "delay_seconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "onboot": {
+          "type": "boolean"
+        },
+        "order": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "onboot",
+        "order"
+      ]
+    },
+    "Usb": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string"
+        },
+        "slot": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "slot",
+        "host"
+      ]
+    },
+    "Vm": {
+      "type": "object",
+      "properties": {
+        "bios": {
+          "type": "string"
+        },
+        "cpu": {
+          "$ref": "#/$defs/Cpu"
+        },
+        "disk": {
+          "$ref": "#/$defs/VmDisk"
+        },
+        "machine": {
+          "type": "string"
+        },
+        "memory_mb": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "networks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VmNic"
+          }
+        },
+        "qemu_guest_agent": {
+          "type": "boolean"
+        },
+        "start": {
+          "$ref": "#/$defs/Start"
+        },
+        "usb_passthrough": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Usb"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "machine",
+        "bios",
+        "cpu",
+        "memory_mb",
+        "disk",
+        "networks",
+        "qemu_guest_agent",
+        "start"
+      ]
+    },
+    "VmDisk": {
+      "type": "object",
+      "properties": {
+        "discard": {
+          "type": "boolean",
+          "default": false
+        },
+        "interface": {
+          "type": "string"
+        },
+        "size_gb": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "storage": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "storage",
+        "interface",
+        "size_gb"
+      ]
+    },
+    "VmNic": {
+      "type": "object",
+      "properties": {
+        "bridge": {
+          "type": "string"
+        },
+        "firewall": {
+          "type": "boolean",
+          "default": false
+        },
+        "mac": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "vlan": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "required": [
+        "model",
+        "mac",
+        "bridge"
+      ]
+    }
+  }
+}
