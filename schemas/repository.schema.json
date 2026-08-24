@@ -1,0 +1,1763 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RepositoryDocument",
+  "type": "object",
+  "properties": {
+    "backup": {
+      "$ref": "#/$defs/BackupConfig"
+    },
+    "firewall": {
+      "$ref": "#/$defs/FirewallConfig"
+    },
+    "guests": {
+      "$ref": "#/$defs/Guests"
+    },
+    "host": {
+      "$ref": "#/$defs/HostConfig"
+    },
+    "iac": {
+      "$ref": "#/$defs/RepositoryManifest"
+    },
+    "network": {
+      "$ref": "#/$defs/Network"
+    },
+    "recovery_checks": {
+      "$ref": "#/$defs/RecoveryChecks"
+    },
+    "required_secrets": {
+      "$ref": "#/$defs/RequiredSecretsConfig"
+    },
+    "restore": {
+      "$ref": "#/$defs/RestoreConfig"
+    },
+    "services": {
+      "$ref": "#/$defs/ServicesConfig"
+    },
+    "site": {
+      "$ref": "#/$defs/SiteConfig"
+    },
+    "storage": {
+      "$ref": "#/$defs/StorageConfig"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "iac",
+    "site",
+    "host",
+    "guests",
+    "network",
+    "firewall",
+    "storage",
+    "backup",
+    "restore",
+    "recovery_checks",
+    "services",
+    "required_secrets"
+  ],
+  "$defs": {
+    "BackupConfig": {
+      "type": "object",
+      "properties": {
+        "pbs": {
+          "$ref": "#/$defs/PbsBackup"
+        },
+        "pve_backup_job": {
+          "$ref": "#/$defs/PveBackupJob"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "pbs",
+        "pve_backup_job"
+      ]
+    },
+    "BackupGuest": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "vmid": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "vmid"
+      ]
+    },
+    "BackupJobs": {
+      "type": "object",
+      "properties": {
+        "prune": {
+          "$ref": "#/$defs/Schedule"
+        },
+        "verify": {
+          "$ref": "#/$defs/VerifySchedule"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "prune",
+        "verify"
+      ]
+    },
+    "BindMount": {
+      "type": "object",
+      "properties": {
+        "backed_up_by_pve": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "target",
+        "backed_up_by_pve"
+      ]
+    },
+    "Bridge": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "forward_delay": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "gateway": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "method": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "ports": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "stp": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "method",
+        "stp",
+        "forward_delay"
+      ]
+    },
+    "Count": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "Cpu": {
+      "type": "object",
+      "properties": {
+        "cores": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "sockets": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "sockets",
+        "cores"
+      ]
+    },
+    "Datastore": {
+      "type": "object",
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "bucket": {
+          "type": "string"
+        },
+        "garbage_collection_schedule": {
+          "type": "string"
+        },
+        "local_cache_path": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "s3_endpoint_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "backend",
+        "local_cache_path",
+        "bucket",
+        "s3_endpoint_id",
+        "garbage_collection_schedule"
+      ]
+    },
+    "Disk": {
+      "type": "object",
+      "properties": {
+        "size_gb": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "storage": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "storage",
+        "size_gb"
+      ]
+    },
+    "Dns": {
+      "type": "object",
+      "properties": {
+        "search": {
+          "type": "string"
+        },
+        "servers": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "search"
+      ]
+    },
+    "Efi": {
+      "type": "object",
+      "properties": {
+        "pre_enrolled_keys": {
+          "type": "boolean"
+        },
+        "storage": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "storage",
+        "pre_enrolled_keys"
+      ]
+    },
+    "FirewallConfig": {
+      "type": "object",
+      "properties": {
+        "absent_guest_files": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "cluster": {
+          "$ref": "#/$defs/FirewallPolicy"
+        },
+        "guests": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^\\d+$": {
+              "$ref": "#/$defs/FirewallPolicy"
+            }
+          }
+        },
+        "nodes": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/NodeFirewall"
+          }
+        },
+        "schema_version": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "cluster",
+        "nodes",
+        "guests",
+        "absent_guest_files"
+      ]
+    },
+    "FirewallPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "log_level_in": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FirewallRule"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "rules"
+      ]
+    },
+    "FirewallRule": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "comment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "destination_port": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "direction": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "interface": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "log": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "direction",
+        "action",
+        "log"
+      ]
+    },
+    "Guests": {
+      "type": "object",
+      "properties": {
+        "lxcs": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "patternProperties": {
+            "^\\d+$": {
+              "$ref": "#/$defs/Lxc"
+            }
+          }
+        },
+        "node": {
+          "type": "string"
+        },
+        "vms": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "patternProperties": {
+            "^\\d+$": {
+              "$ref": "#/$defs/Vm"
+            }
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "node"
+      ]
+    },
+    "HostConfig": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "$ref": "#/$defs/HostIdentity"
+        },
+        "storage_topology": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/StorageTopology"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "storage_topology"
+      ]
+    },
+    "HostIdentity": {
+      "type": "object",
+      "properties": {
+        "kernel": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "pve_version": {
+          "type": "string"
+        },
+        "standalone": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "standalone",
+        "pve_version",
+        "kernel"
+      ]
+    },
+    "HostMount": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "required",
+        "purpose"
+      ]
+    },
+    "Interface": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "method"
+      ]
+    },
+    "Lxc": {
+      "type": "object",
+      "properties": {
+        "additional_networks": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Nic"
+          }
+        },
+        "bind_mounts": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/BindMount"
+          }
+        },
+        "cores": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "hostname": {
+          "type": "string"
+        },
+        "memory_mb": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "network": {
+          "$ref": "#/$defs/Nic"
+        },
+        "os": {
+          "type": "string"
+        },
+        "rootfs": {
+          "$ref": "#/$defs/Disk"
+        },
+        "start": {
+          "$ref": "#/$defs/Start"
+        },
+        "swap_mb": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "unprivileged": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "hostname",
+        "os",
+        "unprivileged",
+        "cores",
+        "memory_mb",
+        "swap_mb",
+        "rootfs",
+        "network",
+        "start"
+      ]
+    },
+    "Network": {
+      "type": "object",
+      "properties": {
+        "bridges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Bridge"
+          }
+        },
+        "dns": {
+          "$ref": "#/$defs/Dns"
+        },
+        "host": {
+          "type": "string"
+        },
+        "interfaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Interface"
+          }
+        },
+        "management_address": {
+          "type": "string"
+        },
+        "management_gateway": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "host",
+        "management_address",
+        "management_gateway",
+        "dns",
+        "interfaces",
+        "bridges"
+      ]
+    },
+    "Nic": {
+      "type": "object",
+      "properties": {
+        "bridge": {
+          "type": "string"
+        },
+        "firewall": {
+          "type": "boolean",
+          "default": false
+        },
+        "gateway4": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gateway6": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ipv4": {
+          "type": "string"
+        },
+        "ipv6": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mac": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "mac",
+        "bridge",
+        "ipv4"
+      ]
+    },
+    "NodeFirewall": {
+      "type": "object",
+      "properties": {
+        "present": {
+          "type": "boolean"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FirewallRule"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "present",
+        "rules"
+      ]
+    },
+    "PbsBackup": {
+      "type": "object",
+      "properties": {
+        "datastore": {
+          "$ref": "#/$defs/Datastore"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "guest": {
+          "$ref": "#/$defs/BackupGuest"
+        },
+        "jobs": {
+          "$ref": "#/$defs/BackupJobs"
+        },
+        "s3_endpoint": {
+          "$ref": "#/$defs/S3Endpoint"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "endpoint",
+        "version",
+        "guest",
+        "datastore",
+        "s3_endpoint",
+        "jobs"
+      ]
+    },
+    "PbsBootstrap": {
+      "type": "object",
+      "properties": {
+        "bucket": {
+          "type": "string"
+        },
+        "cache_path": {
+          "type": "string"
+        },
+        "datastore": {
+          "type": "string"
+        },
+        "lxc_template": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "region": {
+          "type": "string"
+        },
+        "s3_endpoint_id": {
+          "type": "string"
+        },
+        "storage_attached_to_pve": {
+          "type": "boolean"
+        },
+        "vmid": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "vmid",
+        "datastore",
+        "cache_path",
+        "s3_endpoint_id",
+        "bucket",
+        "region",
+        "storage_attached_to_pve"
+      ]
+    },
+    "Persistence": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "Pool": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mountpoint": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "sparse": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string"
+        },
+        "zpool": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "zpool",
+        "mountpoint",
+        "content"
+      ]
+    },
+    "ProxmoxSite": {
+      "type": "object",
+      "properties": {
+        "change_policy": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "existing_environment": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "endpoint",
+        "existing_environment",
+        "change_policy"
+      ]
+    },
+    "PveBackupJob": {
+      "type": "object",
+      "properties": {
+        "datastore": {
+          "type": "string"
+        },
+        "guest_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "mode": {
+          "type": "string"
+        },
+        "retention": {
+          "$ref": "#/$defs/Retention"
+        },
+        "schedule": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "datastore",
+        "schedule",
+        "mode",
+        "guest_ids",
+        "retention"
+      ]
+    },
+    "RecoveryCheck": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "description",
+        "command"
+      ]
+    },
+    "RecoveryChecks": {
+      "type": "object",
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RecoveryCheck"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "checks"
+      ]
+    },
+    "RepositoryManifest": {
+      "type": "object",
+      "properties": {
+        "environment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schema_version": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolRequirement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version"
+      ]
+    },
+    "RequiredSecretsConfig": {
+      "type": "object",
+      "properties": {
+        "never_commit": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "required_for_disaster_recovery": {
+          "$ref": "#/$defs/SecretGroups"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "required_for_disaster_recovery",
+        "never_commit"
+      ]
+    },
+    "RestoreApplication": {
+      "type": "object",
+      "properties": {
+        "configure_command": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "configure_playbook": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "docker_guest_vmid": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "repository": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "docker_guest_vmid"
+      ]
+    },
+    "RestoreConfig": {
+      "type": "object",
+      "properties": {
+        "application": {
+          "$ref": "#/$defs/RestoreApplication"
+        },
+        "archives": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^\\d+$": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "pbs_bootstrap": {
+          "$ref": "#/$defs/PbsBootstrap"
+        },
+        "protected_vmids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "reattach_mounts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RestoreMount"
+          }
+        },
+        "restore_order": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "schema_version": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "target": {
+          "$ref": "#/$defs/RestoreTarget"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "target",
+        "pbs_bootstrap",
+        "archives",
+        "restore_order",
+        "protected_vmids",
+        "reattach_mounts",
+        "application"
+      ]
+    },
+    "RestoreMount": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "vmid": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "vmid",
+        "index",
+        "source",
+        "target"
+      ]
+    },
+    "RestoreTarget": {
+      "type": "object",
+      "properties": {
+        "expected_hostname": {
+          "type": "string"
+        },
+        "plan_max_age_minutes": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "production_address": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "expected_hostname",
+        "production_address",
+        "plan_max_age_minutes"
+      ]
+    },
+    "Retention": {
+      "type": "object",
+      "properties": {
+        "keep_last": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "keep_last"
+      ]
+    },
+    "S3Endpoint": {
+      "type": "object",
+      "properties": {
+        "endpoint_template": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "region": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "endpoint_template",
+        "region"
+      ]
+    },
+    "Schedule": {
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schedule"
+      ]
+    },
+    "SecretGroups": {
+      "type": "object",
+      "properties": {
+        "application": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pbs_identity": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pbs_s3": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pve_to_pbs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "pbs_s3",
+        "pbs_identity",
+        "pve_to_pbs",
+        "application"
+      ]
+    },
+    "Service": {
+      "type": "object",
+      "properties": {
+        "anonymous_volumes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "compose_roots": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "containers": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "guest": {
+          "type": "string"
+        },
+        "named_volumes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "os": {
+          "type": "string"
+        },
+        "persistence": {
+          "$ref": "#/$defs/Persistence"
+        },
+        "primary_services": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "qemu_guest_agent": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "risks": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "guest",
+        "type",
+        "os",
+        "persistence"
+      ]
+    },
+    "ServicesConfig": {
+      "type": "object",
+      "properties": {
+        "services": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^\\d+$": {
+              "$ref": "#/$defs/Service"
+            }
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "services"
+      ]
+    },
+    "SiteBackup": {
+      "type": "object",
+      "properties": {
+        "pbs": {
+          "$ref": "#/$defs/SitePbs"
+        },
+        "s3": {
+          "$ref": "#/$defs/SiteS3"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "pbs",
+        "s3"
+      ]
+    },
+    "SiteConfig": {
+      "type": "object",
+      "properties": {
+        "backup": {
+          "$ref": "#/$defs/SiteBackup"
+        },
+        "proxmox": {
+          "$ref": "#/$defs/ProxmoxSite"
+        },
+        "site": {
+          "$ref": "#/$defs/SiteIdentity"
+        },
+        "workload_profile": {
+          "$ref": "#/$defs/WorkloadProfile"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "site",
+        "proxmox",
+        "workload_profile",
+        "backup"
+      ]
+    },
+    "SiteIdentity": {
+      "type": "object",
+      "properties": {
+        "environment": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "environment"
+      ]
+    },
+    "SitePbs": {
+      "type": "object",
+      "properties": {
+        "deployment": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "deployment",
+        "endpoint"
+      ]
+    },
+    "SiteS3": {
+      "type": "object",
+      "properties": {
+        "configured_in_pbs": {
+          "type": "boolean"
+        },
+        "endpoint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "configured_in_pbs",
+        "endpoint"
+      ]
+    },
+    "Start": {
+      "type": "object",
+      "properties": {
+        "delay_seconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "onboot": {
+          "type": "boolean"
+        },
+        "order": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "onboot",
+        "order"
+      ]
+    },
+    "Storage": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "datastore": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mountpoint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pool": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "server": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sparse": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "thinpool": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string"
+        },
+        "username": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vgname": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "content"
+      ]
+    },
+    "StorageConfig": {
+      "type": "object",
+      "properties": {
+        "host_mounts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HostMount"
+          }
+        },
+        "pools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Pool"
+          }
+        },
+        "storages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Storage"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "host_mounts",
+        "pools",
+        "storages"
+      ]
+    },
+    "StorageTopology": {
+      "type": "object",
+      "properties": {
+        "consumers": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "device_class": {
+          "type": "string"
+        },
+        "devices": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "filesystem": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "layout": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mount": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provides": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "redundancy": {
+          "type": "string"
+        },
+        "size_tb": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "redundancy",
+        "device_class"
+      ]
+    },
+    "ToolRequirement": {
+      "type": "object",
+      "properties": {
+        "minimum_version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "minimum_version"
+      ]
+    },
+    "Usb": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string"
+        },
+        "slot": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "slot",
+        "host"
+      ]
+    },
+    "VerifySchedule": {
+      "type": "object",
+      "properties": {
+        "ignore_verified": {
+          "type": "boolean"
+        },
+        "outdated_after_days": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "schedule": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schedule",
+        "ignore_verified",
+        "outdated_after_days"
+      ]
+    },
+    "Vm": {
+      "type": "object",
+      "properties": {
+        "bios": {
+          "type": "string"
+        },
+        "cpu": {
+          "$ref": "#/$defs/Cpu"
+        },
+        "disk": {
+          "$ref": "#/$defs/VmDisk"
+        },
+        "efi": {
+          "$ref": "#/$defs/Efi"
+        },
+        "machine": {
+          "type": "string"
+        },
+        "memory_mb": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "networks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VmNic"
+          }
+        },
+        "qemu_guest_agent": {
+          "type": "boolean"
+        },
+        "start": {
+          "$ref": "#/$defs/Start"
+        },
+        "usb_passthrough": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Usb"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "machine",
+        "bios",
+        "cpu",
+        "memory_mb",
+        "disk",
+        "efi",
+        "networks",
+        "qemu_guest_agent",
+        "start"
+      ]
+    },
+    "VmDisk": {
+      "type": "object",
+      "properties": {
+        "discard": {
+          "type": "boolean",
+          "default": false
+        },
+        "interface": {
+          "type": "string"
+        },
+        "size_gb": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "storage": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "storage",
+        "interface",
+        "size_gb"
+      ]
+    },
+    "VmNic": {
+      "type": "object",
+      "properties": {
+        "bridge": {
+          "type": "string"
+        },
+        "firewall": {
+          "type": "boolean",
+          "default": false
+        },
+        "mac": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "vlan": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "mac",
+        "bridge"
+      ]
+    },
+    "WorkloadProfile": {
+      "type": "object",
+      "properties": {
+        "containers": {
+          "$ref": "#/$defs/Count"
+        },
+        "virtual_machines": {
+          "$ref": "#/$defs/Count"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "virtual_machines",
+        "containers"
+      ]
+    }
+  }
+}

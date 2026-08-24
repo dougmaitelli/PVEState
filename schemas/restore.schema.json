@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RestoreConfig",
+  "type": "object",
+  "properties": {
+    "application": {
+      "$ref": "#/$defs/RestoreApplication"
+    },
+    "archives": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^\\d+$": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "pbs_bootstrap": {
+      "$ref": "#/$defs/PbsBootstrap"
+    },
+    "protected_vmids": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint32",
+        "minimum": 0
+      }
+    },
+    "reattach_mounts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RestoreMount"
+      }
+    },
+    "restore_order": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint32",
+        "minimum": 0
+      }
+    },
+    "schema_version": {
+      "type": "integer",
+      "format": "uint16",
+      "maximum": 65535,
+      "minimum": 0
+    },
+    "target": {
+      "$ref": "#/$defs/RestoreTarget"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "target",
+    "pbs_bootstrap",
+    "archives",
+    "restore_order",
+    "protected_vmids",
+    "reattach_mounts",
+    "application"
+  ],
+  "$defs": {
+    "PbsBootstrap": {
+      "type": "object",
+      "properties": {
+        "bucket": {
+          "type": "string"
+        },
+        "cache_path": {
+          "type": "string"
+        },
+        "datastore": {
+          "type": "string"
+        },
+        "lxc_template": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "region": {
+          "type": "string"
+        },
+        "s3_endpoint_id": {
+          "type": "string"
+        },
+        "storage_attached_to_pve": {
+          "type": "boolean"
+        },
+        "vmid": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "vmid",
+        "datastore",
+        "cache_path",
+        "s3_endpoint_id",
+        "bucket",
+        "region",
+        "storage_attached_to_pve"
+      ]
+    },
+    "RestoreApplication": {
+      "type": "object",
+      "properties": {
+        "configure_command": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "configure_playbook": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "docker_guest_vmid": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "repository": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "docker_guest_vmid"
+      ]
+    },
+    "RestoreMount": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "vmid": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "vmid",
+        "index",
+        "source",
+        "target"
+      ]
+    },
+    "RestoreTarget": {
+      "type": "object",
+      "properties": {
+        "expected_hostname": {
+          "type": "string"
+        },
+        "plan_max_age_minutes": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "production_address": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "expected_hostname",
+        "production_address",
+        "plan_max_age_minutes"
+      ]
+    }
+  }
+}

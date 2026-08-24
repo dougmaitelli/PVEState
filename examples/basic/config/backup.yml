@@ -1,0 +1,24 @@
+pbs:
+  endpoint: https://pbs.example.test:8007
+  version: "4.0"
+  guest: {type: lxc, vmid: 111}
+  datastore:
+    name: example-backup
+    backend: s3
+    local_cache_path: /mnt/backup
+    bucket: example-backups
+    s3_endpoint_id: example
+    garbage_collection_schedule: daily
+  s3_endpoint:
+    id: example
+    endpoint_template: "{{bucket}}.s3.example.test"
+    region: us-west-1
+  jobs:
+    prune: {schedule: daily}
+    verify: {schedule: weekly, ignore_verified: true, outdated_after_days: 30}
+pve_backup_job:
+  datastore: example-backup
+  schedule: weekly
+  mode: snapshot
+  guest_ids: []
+  retention: {keep_last: 3}

@@ -1,5 +1,7 @@
-use crate::config::{Network, Nic, VmNic};
-use serde_yaml::{Mapping, Value};
+use crate::{
+    config::{Network, Nic, VmNic},
+    model::FirewallPolicy,
+};
 
 pub fn options(items: Vec<(&str, Option<String>)>) -> String {
     items
@@ -56,49 +58,30 @@ pub fn network(n: &Network) -> String {
     s += "source /etc/network/interfaces.d/*\n";
     s
 }
-fn strv<'a>(m: &'a Mapping, k: &str) -> Option<&'a str> {
-    m.get(Value::String(k.into())).and_then(Value::as_str)
-}
-fn boolv(m: &Mapping, k: &str, d: bool) -> bool {
-    m.get(Value::String(k.into()))
-        .and_then(Value::as_bool)
-        .unwrap_or(d)
-}
-pub fn firewall_policy(v: &Value) -> String {
-    let m = v.as_mapping().expect("firewall policy mapping");
+pub fn firewall_policy(policy: &FirewallPolicy) -> String {
     let mut s = String::from("[OPTIONS]\n\n");
-    s += &format!("enable: {}\n", u8::from(boolv(m, "enabled", false)));
-    if let Some(x) = strv(m, "log_level_in") {
+    s += &format!("enable: {}\n", u8::from(policy.enabled));
+    if let Some(x) = &policy.log_level_in {
         s += &format!("log_level_in: {x}\n")
     }
-    let rules = m
-        .get(Value::String("rules".into()))
-        .and_then(Value::as_sequence)
-        .cloned()
-        .unwrap_or_default();
-    if !rules.is_empty() {
+    if !policy.rules.is_empty() {
         s += "\n[RULES]\n\n";
-        for r in rules {
-            let x = r.as_mapping().unwrap();
-            if !boolv(x, "enabled", true) {
+        for rule in &policy.rules {
+            if !rule.enabled {
                 s.push('|')
             }
-            s += &format!(
-                "{} {}",
-                strv(x, "direction").unwrap(),
-                strv(x, "action").unwrap()
-            );
-            if let Some(v) = strv(x, "interface") {
+            s += &format!("{} {}", rule.direction, rule.action);
+            if let Some(v) = &rule.interface {
                 s += &format!(" -i {v}")
             }
-            if let Some(v) = strv(x, "protocol") {
+            if let Some(v) = &rule.protocol {
                 s += &format!(" -p {v}")
             }
-            if let Some(v) = strv(x, "destination_port") {
+            if let Some(v) = &rule.destination_port {
                 s += &format!(" -dport {v}")
             }
-            s += &format!(" -log {}", strv(x, "log").unwrap_or("nolog"));
-            if let Some(v) = strv(x, "comment") {
+            s += &format!(" -log {}", rule.log);
+            if let Some(v) = &rule.comment {
                 s += &format!(" # {v}")
             }
             s.push('\n')

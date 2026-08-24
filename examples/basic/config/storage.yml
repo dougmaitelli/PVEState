@@ -1,0 +1,7 @@
+host_mounts: []
+pools: []
+storages:
+  - name: local
+    type: dir
+    path: /var/lib/vz
+    content: [vztmpl, iso, backup]

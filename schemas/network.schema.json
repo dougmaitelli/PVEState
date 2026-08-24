@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Network",
+  "type": "object",
+  "properties": {
+    "bridges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Bridge"
+      }
+    },
+    "dns": {
+      "$ref": "#/$defs/Dns"
+    },
+    "host": {
+      "type": "string"
+    },
+    "interfaces": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Interface"
+      }
+    },
+    "management_address": {
+      "type": "string"
+    },
+    "management_gateway": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "host",
+    "management_address",
+    "management_gateway",
+    "dns",
+    "interfaces",
+    "bridges"
+  ],
+  "$defs": {
+    "Bridge": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "forward_delay": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "gateway": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "method": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "ports": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "stp": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "method",
+        "stp",
+        "forward_delay"
+      ]
+    },
+    "Dns": {
+      "type": "object",
+      "properties": {
+        "search": {
+          "type": "string"
+        },
+        "servers": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "search"
+      ]
+    },
+    "Interface": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "method"
+      ]
+    }
+  }
+}

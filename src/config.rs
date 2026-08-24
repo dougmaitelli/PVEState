@@ -1,3 +1,4 @@
+use crate::model::*;
 use anyhow::{Context, Result};
 use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
@@ -8,6 +9,7 @@ use std::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Guests {
     pub node: String,
     #[serde(default)]
@@ -16,8 +18,11 @@ pub struct Guests {
     pub vms: BTreeMap<u32, Vm>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Lxc {
     pub hostname: String,
+    pub os: String,
+    pub unprivileged: bool,
     pub cores: u16,
     pub memory_mb: u32,
     pub swap_mb: u32,
@@ -30,6 +35,7 @@ pub struct Lxc {
     pub bind_mounts: Vec<BindMount>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Vm {
     pub name: String,
     pub machine: String,
@@ -37,6 +43,7 @@ pub struct Vm {
     pub cpu: Cpu,
     pub memory_mb: u32,
     pub disk: VmDisk,
+    pub efi: Efi,
     pub networks: Vec<VmNic>,
     #[serde(default)]
     pub usb_passthrough: Vec<Usb>,
@@ -44,17 +51,20 @@ pub struct Vm {
     pub start: Start,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Cpu {
     pub r#type: String,
     pub sockets: u16,
     pub cores: u16,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Disk {
     pub storage: String,
     pub size_gb: u64,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct VmDisk {
     pub storage: String,
     pub interface: String,
@@ -63,6 +73,13 @@ pub struct VmDisk {
     pub discard: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Efi {
+    pub storage: String,
+    pub pre_enrolled_keys: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Nic {
     pub name: String,
     pub mac: String,
@@ -75,6 +92,7 @@ pub struct Nic {
     pub gateway6: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct VmNic {
     pub model: String,
     pub mac: String,
@@ -84,22 +102,27 @@ pub struct VmNic {
     pub vlan: Option<u16>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Usb {
     pub slot: String,
     pub host: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Start {
     pub onboot: bool,
     pub order: u16,
     pub delay_seconds: Option<u32>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct BindMount {
     pub source: String,
     pub target: String,
+    pub backed_up_by_pve: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Network {
     pub host: String,
     pub management_address: String,
@@ -109,17 +132,20 @@ pub struct Network {
     pub bridges: Vec<Bridge>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Dns {
     pub search: String,
     #[serde(default)]
     pub servers: Vec<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Interface {
     pub name: String,
     pub method: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Bridge {
     pub name: String,
     pub method: String,
@@ -135,8 +161,16 @@ pub struct Repository {
     pub root: PathBuf,
     pub guests: Guests,
     pub network: Network,
-    pub firewall: serde_yaml::Value,
+    pub firewall: FirewallConfig,
     pub recovery_checks: RecoveryChecks,
+    pub manifest: RepositoryManifest,
+    pub site: SiteConfig,
+    pub host: HostConfig,
+    pub storage: StorageConfig,
+    pub backup: BackupConfig,
+    pub restore: RestoreConfig,
+    pub services: ServicesConfig,
+    pub required_secrets: RequiredSecretsConfig,
 }
 impl Repository {
     pub fn open(root: &Path) -> Result<Self> {
@@ -147,6 +181,14 @@ impl Repository {
             network: read(root, "network.yml")?,
             firewall: read(root, "firewall.yml")?,
             recovery_checks: read(root, "recovery-checks.yml")?,
+            manifest: serde_yaml::from_str(&fs::read_to_string(root.join("iac.yml"))?)?,
+            site: read(root, "site.yml")?,
+            host: read(root, "host.yml")?,
+            storage: read(root, "storage.yml")?,
+            backup: read(root, "backup.yml")?,
+            restore: read(root, "restore.yml")?,
+            services: read(root, "services.yml")?,
+            required_secrets: read(root, "required-secrets.yml")?,
         })
     }
     pub fn runtime(&self) -> PathBuf {
@@ -181,6 +223,30 @@ impl Repository {
                 "restore.yml",
                 include_str!("../examples/basic/config/restore.yml"),
             ),
+            (
+                "site.yml",
+                include_str!("../examples/basic/config/site.yml"),
+            ),
+            (
+                "host.yml",
+                include_str!("../examples/basic/config/host.yml"),
+            ),
+            (
+                "storage.yml",
+                include_str!("../examples/basic/config/storage.yml"),
+            ),
+            (
+                "backup.yml",
+                include_str!("../examples/basic/config/backup.yml"),
+            ),
+            (
+                "services.yml",
+                include_str!("../examples/basic/config/services.yml"),
+            ),
+            (
+                "required-secrets.yml",
+                include_str!("../examples/basic/config/required-secrets.yml"),
+            ),
         ] {
             fs::write(path.join("config").join(name), content)?;
         }
@@ -192,24 +258,60 @@ impl Repository {
         Ok(())
     }
     pub fn write_schema(output: Option<&Path>) -> Result<()> {
-        let text = serde_json::to_string_pretty(&schema_for!(Guests))?;
-        if let Some(p) = output {
-            fs::write(p, text + "\n")?
-        } else {
-            println!("{text}")
+        let dir = output.unwrap_or_else(|| Path::new("schemas"));
+        fs::create_dir_all(dir)?;
+        macro_rules! write {
+            ($name:literal,$ty:ty) => {
+                fs::write(
+                    dir.join($name),
+                    serde_json::to_string_pretty(&schema_for!($ty))? + "\n",
+                )?
+            };
         }
+        write!("repository.schema.json", RepositoryDocument);
+        write!("site.schema.json", SiteConfig);
+        write!("host.schema.json", HostConfig);
+        write!("guests.schema.json", Guests);
+        write!("network.schema.json", Network);
+        write!("firewall.schema.json", FirewallConfig);
+        write!("storage.schema.json", StorageConfig);
+        write!("backup.schema.json", BackupConfig);
+        write!("restore.schema.json", RestoreConfig);
+        write!("recovery-checks.schema.json", RecoveryChecks);
+        write!("services.schema.json", ServicesConfig);
+        write!("required-secrets.schema.json", RequiredSecretsConfig);
+        println!("wrote configuration schemas to {}", dir.display());
         Ok(())
     }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct RecoveryChecks {
     pub checks: Vec<RecoveryCheck>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct RecoveryCheck {
     pub id: String,
     pub description: String,
     pub command: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RepositoryDocument {
+    pub iac: RepositoryManifest,
+    pub site: SiteConfig,
+    pub host: HostConfig,
+    pub guests: Guests,
+    pub network: Network,
+    pub firewall: FirewallConfig,
+    pub storage: StorageConfig,
+    pub backup: BackupConfig,
+    pub restore: RestoreConfig,
+    pub recovery_checks: RecoveryChecks,
+    pub services: ServicesConfig,
+    pub required_secrets: RequiredSecretsConfig,
 }
 fn read<T: for<'a> Deserialize<'a>>(root: &Path, name: &str) -> Result<T> {
     let p = root.join("config").join(name);

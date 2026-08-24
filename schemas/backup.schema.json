@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BackupConfig",
+  "type": "object",
+  "properties": {
+    "pbs": {
+      "$ref": "#/$defs/PbsBackup"
+    },
+    "pve_backup_job": {
+      "$ref": "#/$defs/PveBackupJob"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "pbs",
+    "pve_backup_job"
+  ],
+  "$defs": {
+    "BackupGuest": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "vmid": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "vmid"
+      ]
+    },
+    "BackupJobs": {
+      "type": "object",
+      "properties": {
+        "prune": {
+          "$ref": "#/$defs/Schedule"
+        },
+        "verify": {
+          "$ref": "#/$defs/VerifySchedule"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "prune",
+        "verify"
+      ]
+    },
+    "Datastore": {
+      "type": "object",
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "bucket": {
+          "type": "string"
+        },
+        "garbage_collection_schedule": {
+          "type": "string"
+        },
+        "local_cache_path": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "s3_endpoint_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "backend",
+        "local_cache_path",
+        "bucket",
+        "s3_endpoint_id",
+        "garbage_collection_schedule"
+      ]
+    },
+    "PbsBackup": {
+      "type": "object",
+      "properties": {
+        "datastore": {
+          "$ref": "#/$defs/Datastore"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "guest": {
+          "$ref": "#/$defs/BackupGuest"
+        },
+        "jobs": {
+          "$ref": "#/$defs/BackupJobs"
+        },
+        "s3_endpoint": {
+          "$ref": "#/$defs/S3Endpoint"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "endpoint",
+        "version",
+        "guest",
+        "datastore",
+        "s3_endpoint",
+        "jobs"
+      ]
+    },
+    "PveBackupJob": {
+      "type": "object",
+      "properties": {
+        "datastore": {
+          "type": "string"
+        },
+        "guest_ids": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "mode": {
+          "type": "string"
+        },
+        "retention": {
+          "$ref": "#/$defs/Retention"
+        },
+        "schedule": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "datastore",
+        "schedule",
+        "mode",
+        "guest_ids",
+        "retention"
+      ]
+    },
+    "Retention": {
+      "type": "object",
+      "properties": {
+        "keep_last": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "keep_last"
+      ]
+    },
+    "S3Endpoint": {
+      "type": "object",
+      "properties": {
+        "endpoint_template": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "region": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "endpoint_template",
+        "region"
+      ]
+    },
+    "Schedule": {
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schedule"
+      ]
+    },
+    "VerifySchedule": {
+      "type": "object",
+      "properties": {
+        "ignore_verified": {
+          "type": "boolean"
+        },
+        "outdated_after_days": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "schedule": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "schedule",
+        "ignore_verified",
+        "outdated_after_days"
+      ]
+    }
+  }
+}

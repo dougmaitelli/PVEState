@@ -1,13 +1,23 @@
 schema_version: 1
 target:
+  expected_hostname: pve
   production_address: pve.example.test
   plan_max_age_minutes: 30
 pbs_bootstrap:
+  vmid: 111
+  datastore: example-backup
+  cache_path: /mnt/backup
+  s3_endpoint_id: example
+  bucket: example-backups
+  region: us-west-1
   lxc_template: null
   storage_attached_to_pve: false
 archives: {}
 restore_order: []
+protected_vmids: []
 reattach_mounts: []
 application:
+  repository: git@example.test:infra/applications.git
+  docker_guest_vmid: 105
+  configure_playbook: null
   configure_command: null
-

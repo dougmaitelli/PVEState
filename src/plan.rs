@@ -129,7 +129,7 @@ pub fn run(repo: &Repository) -> Result<Plan> {
         true,
         &mut operations,
     )?;
-    let cluster = &repo.firewall["cluster"];
+    let cluster = &repo.firewall.cluster;
     file_op(
         repo,
         ("firewall", "cluster"),
@@ -138,21 +138,19 @@ pub fn run(repo: &Repository) -> Result<Plan> {
         false,
         &mut operations,
     )?;
-    if let Some(gs) = repo.firewall["guests"].as_mapping() {
-        for (id, p) in gs {
-            let id = id.as_u64().context("firewall VMID")?.to_string();
-            file_op(
-                repo,
-                ("firewall", &id),
-                (
-                    &format!("pve/firewall/{id}.fw"),
-                    &format!("/etc/pve/firewall/{id}.fw"),
-                ),
-                render::firewall_policy(p),
-                false,
-                &mut operations,
-            )?
-        }
+    for (id, p) in &repo.firewall.guests {
+        let id = id.to_string();
+        file_op(
+            repo,
+            ("firewall", &id),
+            (
+                &format!("pve/firewall/{id}.fw"),
+                &format!("/etc/pve/firewall/{id}.fw"),
+            ),
+            render::firewall_policy(p),
+            false,
+            &mut operations,
+        )?
     }
     let mut p = Plan {
         schema_version: 1,

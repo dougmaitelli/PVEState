@@ -1,0 +1,17 @@
+site:
+  name: example
+  environment: production
+proxmox:
+  endpoint: https://pve.example.test:8006
+  existing_environment: true
+  change_policy: reviewed
+workload_profile:
+  virtual_machines: 0
+  containers: 0
+backup:
+  pbs:
+    deployment: inside_proxmox
+    endpoint: https://pbs.example.test:8007
+  s3:
+    configured_in_pbs: true
+    endpoint: managed_in_pbs
