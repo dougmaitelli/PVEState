@@ -53,7 +53,9 @@ def main():
       for vmid,d in g.get(key,{}).items():
         actual=c.get(f'/nodes/{node}/{kind}/{vmid}/config'); drift=fn(str(vmid),d,actual)
         payload=changed_payload(builder(d),actual)
-        if payload: ops.append({'domain':'guests','resource':f'{kind}/{vmid}','action':'update','endpoint':f'/nodes/{node}/{kind}/{vmid}/config','changes':payload,'before':actual,'drift':drift})
+        if payload:
+          payload['digest']=actual['digest']
+          ops.append({'domain':'guests','resource':f'{kind}/{vmid}','action':'update','endpoint':f'/nodes/{node}/{kind}/{vmid}/config','changes':payload,'before':actual,'drift':drift})
         rootfs=parse_options(actual.get('rootfs' if kind=='lxc' else 'scsi0'))
         desired_disk=d['rootfs' if kind=='lxc' else 'disk']; actual_store=rootfs.get('volume','').split(':')[0]
         if actual_store != desired_disk['storage']: blockers.append(f'{kind}/{vmid}: storage moves are not automatically applied')
@@ -63,12 +65,12 @@ def main():
     env=Environment(loader=FileSystemLoader(root/'templates'))
     rendered=env.get_template('cluster.fw.j2').render(firewall=fw)
     current=(root/'exports/production/pve/firewall/cluster.fw').read_text()
-    if firewall_semantic(rendered)!=firewall_semantic(current): ops.append({'domain':'firewall','resource':'cluster','action':'write-file','path':'/etc/pve/firewall/cluster.fw','content':rendered})
+    if firewall_semantic(rendered)!=firewall_semantic(current): ops.append({'domain':'firewall','resource':'cluster','action':'write-file','path':'/etc/pve/firewall/cluster.fw','before_sha256':hashlib.sha256(current.encode()).hexdigest(),'content':rendered})
     for vmid,p in fw['guests'].items():
       rendered=env.get_template('guest.fw.j2').render(guest_firewall=p); path=root/f'exports/production/pve/firewall/{vmid}.fw'; current=path.read_text() if path.exists() else ''
-      if firewall_semantic(rendered)!=firewall_semantic(current): ops.append({'domain':'firewall','resource':str(vmid),'action':'write-file','path':f'/etc/pve/firewall/{vmid}.fw','content':rendered})
+      if firewall_semantic(rendered)!=firewall_semantic(current): ops.append({'domain':'firewall','resource':str(vmid),'action':'write-file','path':f'/etc/pve/firewall/{vmid}.fw','before_sha256':hashlib.sha256(current.encode()).hexdigest(),'content':rendered})
     rendered=env.get_template('network-interfaces.j2').render(network=net); current=(root/'exports/production/network/interfaces').read_text()
-    if semantic(rendered)!=semantic(current): ops.append({'domain':'network','resource':node,'action':'write-network','path':'/etc/network/interfaces','content':rendered})
+    if semantic(rendered)!=semantic(current): ops.append({'domain':'network','resource':node,'action':'write-network','path':'/etc/network/interfaces','before_sha256':hashlib.sha256(current.encode()).hexdigest(),'content':rendered})
     dns=net.get('dns',{}); actual_dns=c.get(f'/nodes/{node}/dns'); desired_dns={**({'search':dns['search']} if dns.get('search') else {}),**{f'dns{i+1}':v for i,v in enumerate(dns.get('servers',[]))}}
     dns_changes={k:str(v) for k,v in desired_dns.items() if str(actual_dns.get(k,''))!=str(v)}
     if dns_changes: ops.append({'domain':'dns','resource':node,'action':'api-update','endpoint':f'/nodes/{node}/dns','changes':dns_changes})
