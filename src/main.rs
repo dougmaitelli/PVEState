@@ -1,11 +1,11 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use pve_iac::{apply, capture, config::Repository, plan, recovery};
+use pvestate::{apply, capture, config::Repository, plan, recovery};
 use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
-    name = "pve-iac",
+    name = "pves",
     version,
     about = "Safe desired-state tooling for Proxmox VE"
 )]
