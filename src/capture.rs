@@ -84,7 +84,7 @@ pub fn run(repo: &Repository) -> Result<()> {
                 if local.exists() {
                     fs::remove_file(local)?
                 }
-            }
+            },
         }
     }
     let manifest = json!({"schema_version":1,"exported_at":Utc::now(),"source":api.endpoint(),"scope":"network and PVE cluster/managed-guest firewalls"});
@@ -178,7 +178,7 @@ pub fn validate(repo: &Repository) -> Result<()> {
                 failures.push(format!("{}: {error}", check.id));
                 report
                     .push(json!({"id":check.id,"description":check.description,"status":"failed"}));
-            }
+            },
         }
     }
     fs::create_dir_all(repo.runtime())?;
