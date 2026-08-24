@@ -18,37 +18,15 @@ Usage: ./bin/iac <command>
 
 Commands:
   setup      Create/update the project-local Python environment
-  doctor     Validate local tooling and discovery credentials
-  check      Validate desired configuration and cross-file references
-  discover   Collect a read-only snapshot from the PVE API
   capture    Refresh all read-only production observations and exports
-  pbs-doctor Validate local PBS discovery credentials
-  pbs-discover
-             Collect a read-only snapshot from the PBS API
-  host-discover
-             Collect approved read-only PVE host and PBS guest metadata over SSH
-  guest-discover
-             Collect approved read-only service metadata from existing guests
-  audit      Build an offline recovery-readiness report from latest snapshots
-  export-config
-             Export allowlisted, sanitized PVE/PBS configuration over SSH
   plan       Compare all managed desired configuration with production
   save MESSAGE
              Commit reviewed desired configuration and sanitized exports locally
   apply      Apply an exact, fresh plan with separate mutation credentials
-  rebuild-plan TARGET
-             Validate recovery inputs and create a confirmation-ready plan
-  bootstrap-pve TARGET
-             Configure a replacement PVE host (guarded mutation)
-  bootstrap-pbs TARGET
-             Create the replacement PBS LXC (guarded mutation)
-  restore-guests TARGET
-             Restore reviewed guest archives (guarded mutation)
-  configure TARGET
-             Run the reviewed application configuration handoff
-  rebuild TARGET
-             Run all guarded recovery stages in order
   validate   Run read-only service recovery checks
+  recover ACTION TARGET
+             Disaster recovery: plan, bootstrap-pve, bootstrap-pbs,
+             restore, configure, or all
   help       Show this message
 
 Delete, guest replacement, disk shrinking, and implicit storage moves are forbidden.
@@ -197,6 +175,7 @@ capture_production() {
   guest_discover
   export_config
   pbs_discover
+  audit
 }
 
 save_config() {
@@ -250,25 +229,29 @@ run_rebuild_stage() {
     -e "iac_commit_network=${IAC_COMMIT_NETWORK:-false}"
 }
 
+recover() {
+  local action="${1:?usage: ./bin/iac recover ACTION TARGET}"
+  local target="${2:?usage: ./bin/iac recover ACTION TARGET}"
+  case "${action}" in
+    plan) rebuild_plan "${target}" ;;
+    bootstrap-pve|bootstrap-pbs|configure) run_rebuild_stage "${action}" "${target}" ;;
+    restore) run_rebuild_stage restore-guests "${target}" ;;
+    all) run_rebuild_stage rebuild "${target}" ;;
+    *)
+      echo "unknown recovery action: ${action}" >&2
+      echo "valid actions: plan, bootstrap-pve, bootstrap-pbs, restore, configure, all" >&2
+      exit 2
+      ;;
+  esac
+}
+
 case "${1:-help}" in
   setup) setup ;;
-  doctor) doctor ;;
-  check) require_project_python; "${repo_dir}/.venv/bin/python" "${repo_dir}/scripts/validate_config.py" --config-dir "${repo_dir}/config" ;;
-  discover) load_env; discover ;;
   capture) capture_production ;;
-  pbs-doctor) pbs_doctor ;;
-  pbs-discover) load_env; pbs_discover ;;
-  host-discover) load_env; host_discover ;;
-  guest-discover) load_env; guest_discover ;;
-  audit) audit ;;
-  export-config) load_env; export_config ;;
   plan) plan_infrastructure ;;
   save) save_config "${2:-}" ;;
   apply) apply_infrastructure ;;
-  rebuild-plan) rebuild_plan "${2:-}" ;;
-  bootstrap-pve|bootstrap-pbs|restore-guests|configure|rebuild)
-    run_rebuild_stage "$1" "${2:-}"
-    ;;
+  recover) recover "${2:-}" "${3:-}" ;;
   validate) load_env; validate_services ;;
   help|-h|--help) usage ;;
   *) echo "unknown command: $1" >&2; usage >&2; exit 2 ;;

@@ -1,7 +1,7 @@
 # PBS bootstrap and S3 recovery
 
 This procedure breaks the dependency loop created by running PBS as LXC 111 on
-the same PVE host it protects. `./bin/iac bootstrap-pbs` automates creation of
+the same PVE host it protects. `./bin/iac recover bootstrap-pbs` automates creation of
 the replacement container once a template volume is selected. Commands that
 claim the existing S3 datastore remain an explicit operator checkpoint because
 running two PBS instances against it can corrupt the recovery source.

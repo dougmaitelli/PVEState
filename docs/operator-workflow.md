@@ -18,19 +18,8 @@ through `./bin/iac`, and there is nothing to deactivate afterward.
 ## Refresh evidence
 
 ```bash
-./bin/iac discover
-./bin/iac pbs-discover
-./bin/iac host-discover
-./bin/iac guest-discover
-./bin/iac export-config
-./bin/iac audit
-./bin/iac validate
-```
-
-For the routine desired-state workflow, the single command is:
-
-```bash
 ./bin/iac capture
+./bin/iac validate
 ```
 
 It refreshes timestamped ignored observations and the sanitized native exports.
@@ -52,7 +41,6 @@ The plan sends only PVE API `GET` requests and compares desired YAML plus render
 native configuration with the fresh production capture:
 
 ```bash
-./bin/iac check
 ./bin/iac plan
 ```
 
@@ -135,7 +123,7 @@ off-host secrets are never inferred.
 Create a plan for the replacement host:
 
 ```bash
-./bin/iac rebuild-plan RECOVERY_HOST
+./bin/iac recover plan RECOVERY_HOST
 ```
 
 Review `artifacts/rebuild-plan.json`. It lists all blockers and emits a SHA-256
@@ -146,10 +134,10 @@ export IAC_ENABLE_MUTATION=YES
 export IAC_CONFIRM_PLAN_SHA='<sha256 from the plan>'
 export IAC_TARGET_SSH_KEY='/path/to/recovery-key'
 
-./bin/iac bootstrap-pve RECOVERY_HOST
-./bin/iac bootstrap-pbs RECOVERY_HOST
-./bin/iac restore-guests RECOVERY_HOST
-./bin/iac configure RECOVERY_HOST
+./bin/iac recover bootstrap-pve RECOVERY_HOST
+./bin/iac recover bootstrap-pbs RECOVERY_HOST
+./bin/iac recover restore RECOVERY_HOST
+./bin/iac recover configure RECOVERY_HOST
 ./bin/iac validate
 ```
 
@@ -161,7 +149,7 @@ The commands refuse to target `pve.h4des.dev` unless
 `IAC_ALLOW_PRODUCTION_TARGET=YES` is also set. Guest restoration refuses any
 VMID that already exists and never uses a force/overwrite option.
 
-The convenience command `./bin/iac rebuild RECOVERY_HOST` runs the Ansible
+The convenience command `./bin/iac recover all RECOVERY_HOST` runs the Ansible
 stages in order, but only after every plan blocker is resolved. Running stages
 individually is preferred during a real disaster because PBS S3 attachment and
 secret recovery require deliberate operator checkpoints.

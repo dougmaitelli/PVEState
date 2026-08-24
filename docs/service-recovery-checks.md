@@ -5,7 +5,6 @@ a full disaster recovery:
 
 ```bash
 ./bin/iac validate
-./bin/iac audit
 ```
 
 `validate` executes the allowlisted commands in `config/recovery-checks.yml` over
@@ -41,5 +40,5 @@ correctness. They do not currently prove:
 - application-consistent database exports
 
 Those require isolated restore drills and application-specific acceptance tests.
-PBS recovery-point recency and verification are assessed separately by
-`./bin/iac audit`.
+PBS recovery-point recency and verification are assessed by the recovery audit
+generated as part of `./bin/iac capture`.
