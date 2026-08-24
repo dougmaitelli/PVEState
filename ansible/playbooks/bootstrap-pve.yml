@@ -1,0 +1,90 @@
+---
+- name: Bootstrap a replacement Proxmox VE host
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    repo_root: "{{ playbook_dir }}/../.."
+    network: "{{ lookup('file', repo_root + '/config/network.yml') | from_yaml }}"
+    firewall: "{{ lookup('file', repo_root + '/config/firewall.yml') | from_yaml }}"
+    storage: "{{ lookup('file', repo_root + '/config/storage.yml') | from_yaml }}"
+  tasks:
+    - name: Require Proxmox VE tooling
+      ansible.builtin.command: pveversion
+      changed_when: false
+
+    - name: Verify required ZFS pools already exist
+      ansible.builtin.command: "zpool list -H -o name {{ item.zpool }}"
+      loop: "{{ storage.pools }}"
+      changed_when: false
+
+    - name: Verify required host bind-mount paths
+      ansible.builtin.stat:
+        path: "{{ item.path }}"
+      register: bind_mount_paths
+      loop: "{{ storage.host_mounts }}"
+
+    - name: Refuse to continue without required data mounts
+      ansible.builtin.assert:
+        that: item.stat.exists and item.stat.isdir
+        fail_msg: "Required recovered mount is absent: {{ item.item.path }}"
+      loop: "{{ bind_mount_paths.results }}"
+
+    - name: Back up current network configuration
+      ansible.builtin.copy:
+        src: /etc/network/interfaces
+        dest: "/root/interfaces.pre-iac-{{ ansible_date_time.epoch }}"
+        remote_src: true
+        mode: preserve
+
+    - name: Stage replacement network configuration
+      ansible.builtin.template:
+        src: "{{ repo_root }}/templates/network-interfaces.j2"
+        dest: /etc/network/interfaces.new
+        owner: root
+        group: root
+        mode: "0644"
+      register: staged_network
+
+    - name: Validate staged network configuration
+      ansible.builtin.command: ifreload --syntax-check -i /etc/network/interfaces.new
+      changed_when: false
+
+    - name: Install validated network configuration
+      ansible.builtin.copy:
+        src: /etc/network/interfaces.new
+        dest: /etc/network/interfaces
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      when: iac_commit_network | default(false) | bool
+      notify: Apply network configuration
+
+    - name: Install cluster firewall definition
+      ansible.builtin.template:
+        src: "{{ repo_root }}/templates/cluster.fw.j2"
+        dest: /etc/pve/firewall/cluster.fw
+        owner: root
+        group: www-data
+        mode: "0640"
+
+    - name: Register ZFS storage definitions idempotently
+      ansible.builtin.command:
+        argv:
+          - pvesm
+          - add
+          - zfspool
+          - "{{ item.name }}"
+          - --pool
+          - "{{ item.zpool }}"
+          - --content
+          - "{{ item.content | join(',') }}"
+      loop: "{{ storage.pools }}"
+      register: add_storage
+      failed_when: add_storage.rc != 0 and 'already exists' not in add_storage.stderr
+      changed_when: add_storage.rc == 0
+
+  handlers:
+    - name: Apply network configuration
+      ansible.builtin.command: ifreload -a

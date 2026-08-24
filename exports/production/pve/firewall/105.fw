@@ -1,0 +1,12 @@
+[OPTIONS]
+
+enable: 1
+
+[RULES]
+
+IN ACCEPT -p tcp -dport 80 -log nolog # HTTP
+IN ACCEPT -p tcp -dport 443 -log nolog # HTTPS
+IN ACCEPT -p tcp -dport 1883 -log nolog # MQTT
+|IN ACCEPT -p tcp -dport 3923 -log nolog # Copyparty
+IN ACCEPT -i net0 -p tcp -dport 59125 -log nolog # ?
+

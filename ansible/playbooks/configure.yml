@@ -1,0 +1,24 @@
+---
+- name: Hand off application configuration after guest restoration
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    repo_root: "{{ playbook_dir }}/../.."
+    restore: "{{ lookup('file', repo_root + '/config/restore.yml') | from_yaml }}"
+  tasks:
+    - name: Require an explicitly reviewed application playbook
+      ansible.builtin.assert:
+        that:
+          - restore.application.configure_playbook is not none
+        fail_msg: >-
+          Set application.configure_playbook in config/restore.yml after adding
+          and reviewing the application configuration playbook. Guest disk
+          restoration is complete, but ignored .env secrets cannot be reconstructed.
+
+    - name: Run reviewed application configuration
+      ansible.builtin.command:
+        argv:
+          - "{{ repo_root }}/.venv/bin/ansible-playbook"
+          - "{{ restore.application.configure_playbook }}"
+      changed_when: true

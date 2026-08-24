@@ -1,0 +1,9 @@
+[OPTIONS]
+
+enable: 1
+
+[RULES]
+
+IN ACCEPT -p tcp -dport 45876 -log nolog # Beszel
+IN ACCEPT -p tcp -dport 61208 -log nolog # Glances
+

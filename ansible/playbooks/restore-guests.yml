@@ -1,0 +1,62 @@
+---
+- name: Restore guests from reviewed PBS archives
+  hosts: all
+  become: true
+  gather_facts: false
+  serial: 1
+  vars:
+    repo_root: "{{ playbook_dir }}/../.."
+    restore: "{{ lookup('file', repo_root + '/config/restore.yml') | from_yaml }}"
+    guests: "{{ lookup('file', repo_root + '/config/guests.yml') | from_yaml }}"
+    firewall: "{{ lookup('file', repo_root + '/config/firewall.yml') | from_yaml }}"
+  tasks:
+    - name: Require the recovered PBS datastore to be available in PVE
+      ansible.builtin.command: pvesm status --storage pbs
+      changed_when: false
+
+    - name: Check every target ID is absent
+      ansible.builtin.shell: "set -o pipefail; qm status {{ item }} 2>/dev/null || pct status {{ item }} 2>/dev/null"
+      args:
+        executable: /bin/bash
+      loop: "{{ restore.restore_order }}"
+      register: target_status
+      failed_when: target_status.rc == 0
+      changed_when: false
+
+    - name: Restore LXC archives without replacement
+      ansible.builtin.command:
+        argv: [pct, restore, "{{ item }}", "{{ restore.archives[item] }}", --storage, "{{ guests.lxcs[item].rootfs.storage }}"]
+      loop: "{{ restore.restore_order }}"
+      when: item in guests.lxcs
+
+    - name: Restore QEMU archives without replacement
+      ansible.builtin.command:
+        argv: [qmrestore, "{{ restore.archives[item] }}", "{{ item }}", --storage, "{{ guests.vms[item].disk.storage }}"]
+      loop: "{{ restore.restore_order }}"
+      when: item in guests.vms
+
+    - name: Reattach LXC bind mounts excluded from PVE backup
+      ansible.builtin.command:
+        argv:
+          - pct
+          - set
+          - "{{ item.vmid }}"
+          - "-mp{{ item.index }}"
+          - "{{ item.source }},mp={{ item.target }}"
+      loop: "{{ restore.reattach_mounts }}"
+
+    - name: Restore guest-level PVE firewall policy
+      ansible.builtin.template:
+        src: "{{ repo_root }}/templates/guest.fw.j2"
+        dest: "/etc/pve/firewall/{{ item.key }}.fw"
+        owner: root
+        group: www-data
+        mode: "0640"
+      vars:
+        guest_firewall: "{{ item.value }}"
+      loop: "{{ firewall.guests | dict2items }}"
+
+    - name: Start restored guests in declared recovery order
+      ansible.builtin.shell: "qm start {{ item }} 2>/dev/null || pct start {{ item }}"
+      loop: "{{ restore.restore_order }}"
+      changed_when: true

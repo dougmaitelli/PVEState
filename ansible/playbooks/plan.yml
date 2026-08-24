@@ -1,0 +1,23 @@
+---
+- name: Build a read-only Proxmox infrastructure plan
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    repo_root: "{{ playbook_dir }}/../.."
+  tasks:
+    - name: Compare managed guest fields with live PVE
+      ansible.builtin.command:
+        argv:
+          - "{{ repo_root }}/.venv/bin/python"
+          - "{{ repo_root }}/scripts/guest_plan.py"
+          - --desired
+          - "{{ repo_root }}/config/guests.yml"
+          - --output
+          - "{{ repo_root }}/artifacts/plan.json"
+      register: infrastructure_plan
+      changed_when: (infrastructure_plan.stdout | from_json).drift_count > 0
+
+    - name: Display infrastructure plan
+      ansible.builtin.debug:
+        var: infrastructure_plan.stdout_lines
