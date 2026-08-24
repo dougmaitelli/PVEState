@@ -1,0 +1,17 @@
+host: pve
+management_address: 192.0.2.10/24
+management_gateway: 192.0.2.1
+dns:
+  search: example.test
+  servers: [192.0.2.53]
+interfaces:
+  - {name: eno1, method: manual}
+bridges:
+  - name: vmbr0
+    method: static
+    address: 192.0.2.10/24
+    gateway: 192.0.2.1
+    ports: [eno1]
+    stp: false
+    forward_delay: 0
+

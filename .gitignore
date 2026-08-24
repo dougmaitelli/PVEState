@@ -1,30 +1,3 @@
-.env
-.secrets/
-vendor/
-.venv/
-__pycache__/
-*.pyc
-
-# Generated production inventory may contain sensitive topology details.
-artifacts/discovery/*
-!artifacts/discovery/.gitkeep
-artifacts/recovery-audit.md
-artifacts/plan.json
-artifacts/production-plan.json
-artifacts/apply-*.json
-artifacts/rebuild-plan.json
-artifacts/service-validation.json
-artifacts/service-validation.md
-artifacts/drift/
-
-# Ansible runtime artifacts and secrets.
-*.retry
-ansible/inventory/production/host_vars/
-ansible/inventory/production/group_vars/vault.yml
-ansible/collections/
-
-# OpenTofu/Terraform state is not introduced until the import strategy is agreed.
-*.tfstate
-*.tfstate.*
-.terraform/
-.terraform.lock.hcl
+/target/
+.DS_Store
+*.swp

@@ -1,0 +1,8 @@
+schema_version: 1
+cluster:
+  enabled: true
+  rules: []
+nodes: {}
+guests: {}
+absent_guest_files: []
+
