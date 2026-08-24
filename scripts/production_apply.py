@@ -12,14 +12,19 @@ def required(n):
     return v
 def ssh_base():
     return ['ssh','-p',os.getenv('IAC_APPLY_SSH_PORT','22'),'-o','BatchMode=yes','-o','IdentitiesOnly=yes','-o','StrictHostKeyChecking=yes','-o',f"UserKnownHostsFile={required('IAC_APPLY_KNOWN_HOSTS')}",'-i',required('IAC_APPLY_SSH_KEY'),f"{os.getenv('IAC_APPLY_SSH_USER','root')}@{required('IAC_APPLY_SSH_HOST')}"]
-def ssh(command, stdin=None): subprocess.run(ssh_base()+[command],input=stdin,text=True,check=True,timeout=90)
-def write_file(path, content, stamp):
+def ssh(command, stdin=None, capture=False): return subprocess.run(ssh_base()+[command],input=stdin,text=True,check=True,timeout=90,capture_output=capture)
+def write_file(path, content, expected_sha, stamp):
+    current=ssh(f"sha256sum {shlex.quote(path)}",capture=True).stdout.split()[0]
+    if current != expected_sha: raise SystemExit(f'remote file changed after plan: {path}')
     encoded=base64.b64encode(content.encode()).decode(); backup=f'/root/iac-preapply/{stamp}{path}'
     mode='0644' if path=='/etc/network/interfaces' else '0640'
     cmd=f"install -d {shlex.quote(str(Path(backup).parent))} && (test ! -e {shlex.quote(path)} || cp -a {shlex.quote(path)} {shlex.quote(backup)}) && base64 -d > {shlex.quote(path+'.iac-new')} && install -m {mode} {shlex.quote(path+'.iac-new')} {shlex.quote(path)} && rm {shlex.quote(path+'.iac-new')}"
     ssh(cmd, encoded)
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument('--plan',type=Path,required=True); a=ap.parse_args(); plan=json.loads(a.plan.read_text())
+    claimed_hash=plan['plan_sha256']; unsigned={k:v for k,v in plan.items() if k!='plan_sha256'}
+    actual_hash=hashlib.sha256(json.dumps(unsigned,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    if claimed_hash != actual_hash: raise SystemExit('plan file integrity check failed')
     if required('IAC_ENABLE_PRODUCTION_APPLY')!='YES': raise SystemExit('IAC_ENABLE_PRODUCTION_APPLY must equal YES')
     if required('IAC_CONFIRM_PLAN_SHA')!=plan['plan_sha256']: raise SystemExit('plan SHA confirmation mismatch')
     if required('IAC_APPLY_TARGET')!=plan['target']: raise SystemExit('apply target does not match plan target')
@@ -38,9 +43,9 @@ def main():
       if op['action'] in {'update','api-update'}: client.put(op['endpoint'],op['changes'])
       elif op['action']=='grow-disk':
         kind,vmid,_=op['resource'].split('/'); client.put(f"/nodes/pve/{kind}/{vmid}/resize",{'disk':op['disk'],'size':f"{op['size_gb']}G"})
-      elif op['action']=='write-file': write_file(op['path'],op['content'],stamp)
+      elif op['action']=='write-file': write_file(op['path'],op['content'],op['before_sha256'],stamp)
       elif op['action']=='write-network':
-        write_file(op['path'],op['content'],stamp)
+        write_file(op['path'],op['content'],op['before_sha256'],stamp)
         if os.getenv('IAC_APPLY_NETWORK_NOW')=='YES': ssh('ifreload -a')
         else: results.append({'resource':op['resource'],'status':'written-not-activated'}); continue
       else: raise SystemExit(f"unsupported action: {op['action']}")

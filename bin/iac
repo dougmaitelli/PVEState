@@ -206,7 +206,7 @@ save_config() {
     git -C "${repo_dir}" config user.name "h4des IaC operator"
     git -C "${repo_dir}" config user.email "iac@h4des.local"
   fi
-  git -C "${repo_dir}" add .gitignore .env.example README.md requirements.txt bin config docs exports scripts templates ansible
+  git -C "${repo_dir}" add .gitignore .env.example README.md requirements.txt bin config docs exports scripts templates ansible artifacts/discovery/.gitkeep
   git -C "${repo_dir}" diff --cached --check -- . ':(exclude)exports/**'
   git -C "${repo_dir}" commit -m "${message}"
 }
