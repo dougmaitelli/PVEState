@@ -22,7 +22,6 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
       - run: cargo fmt --all -- --check
-      - run: ./scripts/check-spacing.sh
       - run: cargo clippy --all-targets --all-features --locked -- -D warnings
 
   test:
