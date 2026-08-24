@@ -10,24 +10,24 @@ pub struct Pve {
 
 impl Pve {
     pub fn discovery() -> Result<Self> {
-        Self::from_env("PVE_ENDPOINT", "PVE_API_TOKEN_ID", "PVE_API_TOKEN_SECRET")
+        Self::from_env("PVE_API_TOKEN_ID", "PVE_API_TOKEN_SECRET")
     }
+
     pub fn mutation() -> Result<Self> {
-        Self::from_env(
-            "PVE_APPLY_ENDPOINT",
-            "PVE_APPLY_API_TOKEN_ID",
-            "PVE_APPLY_API_TOKEN_SECRET",
-        )
+        Self::from_env("PVE_APPLY_API_TOKEN_ID", "PVE_APPLY_API_TOKEN_SECRET")
     }
-    fn from_env(e: &str, i: &str, s: &str) -> Result<Self> {
-        let base = std::env::var(e).with_context(|| e.to_string())?;
+
+    fn from_env(i: &str, s: &str) -> Result<Self> {
+        let host = env("PVE_HOST", None)?;
+        let scheme = env("PVE_API_SCHEME", Some("https"))?;
+        let port = env("PVE_API_PORT", Some("8006"))?;
         let id = std::env::var(i).with_context(|| i.to_string())?;
         let secret = std::env::var(s).with_context(|| s.to_string())?;
         let http = Client::builder()
             .danger_accept_invalid_certs(std::env::var("PVE_VERIFY_TLS").as_deref() == Ok("false"))
             .build()?;
         Ok(Self {
-            base: format!("{}/api2/json", base.trim_end_matches('/')),
+            base: format!("{scheme}://{host}:{port}/api2/json"),
             token: format!("PVEAPIToken={id}={secret}"),
             http,
         })
@@ -54,4 +54,14 @@ impl Pve {
             .error_for_status()?;
         Ok(())
     }
+}
+
+fn env(name: &str, default: Option<&str>) -> Result<String> {
+    std::env::var(name)
+        .or_else(|_| {
+            default
+                .map(str::to_owned)
+                .ok_or(std::env::VarError::NotPresent)
+        })
+        .with_context(|| format!("missing {name}"))
 }

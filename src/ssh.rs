@@ -15,18 +15,18 @@ pub struct Ssh {
 impl Ssh {
     pub fn discovery(root: &Path) -> Result<Self> {
         Ok(Self {
-            host: std::env::var("PVE_SSH_HOST").unwrap_or_else(|_| "pve.h4des.dev".into()),
+            host: req("PVE_HOST")?,
             port: std::env::var("PVE_SSH_PORT").unwrap_or_else(|_| "22".into()),
-            user: "root".into(),
+            user: std::env::var("PVE_SSH_USER").unwrap_or_else(|_| "root".into()),
             key: root.join(".secrets/pve_discovery").display().to_string(),
             known: root.join(".secrets/known_hosts").display().to_string(),
         })
     }
     pub fn mutation() -> Result<Self> {
         Ok(Self {
-            host: req("IAC_APPLY_SSH_HOST")?,
-            port: std::env::var("IAC_APPLY_SSH_PORT").unwrap_or_else(|_| "22".into()),
-            user: std::env::var("IAC_APPLY_SSH_USER").unwrap_or_else(|_| "root".into()),
+            host: req("PVE_HOST")?,
+            port: std::env::var("PVE_SSH_PORT").unwrap_or_else(|_| "22".into()),
+            user: std::env::var("PVE_SSH_USER").unwrap_or_else(|_| "root".into()),
             key: req("IAC_APPLY_SSH_KEY")?,
             known: req("IAC_APPLY_KNOWN_HOSTS")?,
         })
