@@ -63,7 +63,7 @@ pub fn run(repo: &Repository) -> Result<()> {
                     x.insert("digest".into(), d.clone());
                 }
                 api.put(endpoint, &x)?
-            }
+            },
             Operation::GrowDisk {
                 endpoint,
                 disk,
@@ -88,7 +88,7 @@ pub fn run(repo: &Repository) -> Result<()> {
                     None => {
                         ssh = Some(Ssh::mutation()?);
                         ssh.as_ref().unwrap()
-                    }
+                    },
                 };
                 let current = s
                     .run(&format!("sha256sum {}", quote(path)))?
@@ -127,7 +127,7 @@ pub fn run(repo: &Repository) -> Result<()> {
                 if *activate && std::env::var("IAC_APPLY_NETWORK_NOW").as_deref() == Ok("YES") {
                     s.run("ifreload -a")?;
                 }
-            }
+            },
         }
         results.push(serde_json::json!({"resource":resource(op),"status":"applied"}));
     }

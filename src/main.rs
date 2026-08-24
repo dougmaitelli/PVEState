@@ -54,7 +54,7 @@ fn main() -> Result<()> {
             let p = plan::run(&Repository::open(&cli.config_dir)?)?;
             println!("{}", serde_json::to_string_pretty(&p)?);
             Ok(())
-        }
+        },
         Command::Apply => apply::run(&Repository::open(&cli.config_dir)?),
         Command::Validate => capture::validate(&Repository::open(&cli.config_dir)?),
         Command::Recover { action } => {
@@ -67,7 +67,7 @@ fn main() -> Result<()> {
                 Recovery::All { target } => (recovery::Stage::All, target),
             };
             recovery::run(&Repository::open(&cli.config_dir)?, stage, &target)
-        }
+        },
         Command::Schema { output } => Repository::write_schema(output.as_deref()),
     }
 }

@@ -64,7 +64,7 @@ pub fn run(repo: &Repository, stage: Stage, target: &str) -> Result<()> {
             bootstrap_pbs(repo, &ssh)?;
             restore(repo, &ssh)?;
             configure(repo, &ssh)
-        }
+        },
         Stage::Plan => unreachable!(),
     }
 }
