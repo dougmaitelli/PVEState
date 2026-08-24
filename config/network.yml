@@ -3,7 +3,7 @@ management_address: 192.168.0.10/24
 management_gateway: 192.168.0.1
 dns:
   search: h4des.dev
-  servers: []  # populate from reviewed PVE node DNS settings before managing
+  servers: [192.168.0.3]
 interfaces:
   - {name: enp4s0, method: manual}
   - {name: enp3s0, method: manual}
