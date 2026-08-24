@@ -58,23 +58,13 @@ cp .env.example .env
 chmod 600 .env
 # edit .env locally
 
-./bin/iac doctor
-./bin/iac discover
-
-./bin/iac pbs-doctor
-./bin/iac pbs-discover
-
-./bin/iac host-discover
-./bin/iac guest-discover
-./bin/iac audit
-./bin/iac export-config
+./bin/iac capture
 ./bin/iac plan
-./bin/iac apply  # intentionally refuses to mutate production
 ./bin/iac validate
 ```
 
 For a disaster rebuild, fill the deliberately unresolved values in
-`config/restore.yml`, generate `./bin/iac rebuild-plan RECOVERY_HOST`, and follow
+`config/restore.yml`, generate `./bin/iac recover plan RECOVERY_HOST`, and follow
 the hash-confirmed staged procedure in
 [docs/operator-workflow.md](docs/operator-workflow.md). Rebuild commands are
 fail-closed and cannot overwrite existing guest IDs.
