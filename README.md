@@ -62,6 +62,18 @@ pves validate
 
 Every command also accepts `--config-dir PATH`.
 
+PVE State uses one canonical host for both API and SSH access:
+
+```bash
+PVE_HOST=pve.example.test
+PVE_API_PORT=8006       # optional; default 8006
+PVE_API_SCHEME=https    # optional; default https
+PVE_SSH_PORT=22         # optional; default 22
+PVE_SSH_USER=root       # optional; default root
+```
+
+Discovery and mutation use separate credentials, but both address `PVE_HOST`.
+
 ### Safety model
 
 `apply` requires a plan less than 30 minutes old, an exact plan SHA, an exact
