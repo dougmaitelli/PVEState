@@ -43,17 +43,17 @@ jobs:
         if: matrix.archive == 'tar.gz'
         shell: bash
         run: |
-          asset="pve-iac-${{ matrix.target }}.tar.gz"
-          tar -C "target/${{ matrix.target }}/release" -czf "$asset" pve-iac
+          asset="pves-${{ matrix.target }}.tar.gz"
+          tar -C "target/${{ matrix.target }}/release" -czf "$asset" pves
           shasum -a 256 "$asset" > "$asset.sha256"
       - name: Package Windows binary
         if: matrix.archive == 'zip'
         shell: pwsh
         run: |
-          $asset = "pve-iac-${{ matrix.target }}.zip"
-          Compress-Archive "target/${{ matrix.target }}/release/pve-iac.exe" $asset
+          $asset = "pves-${{ matrix.target }}.zip"
+          Compress-Archive "target/${{ matrix.target }}/release/pves.exe" $asset
           (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower() + "  " + $asset | Out-File "$asset.sha256" -Encoding ascii
       - env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
-        run: gh release upload "${GITHUB_REF_NAME}" pve-iac-${{ matrix.target }}.* --clobber
+        run: gh release upload "${GITHUB_REF_NAME}" pves-${{ matrix.target }}.* --clobber

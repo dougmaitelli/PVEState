@@ -35,7 +35,7 @@ pub fn vm_nic(n: &VmNic) -> String {
 }
 
 pub fn network(n: &Network) -> String {
-    let mut s = String::from("# Managed by pve-iac\nauto lo\niface lo inet loopback\n\n");
+    let mut s = String::from("# Managed by PVE State\nauto lo\niface lo inet loopback\n\n");
     for i in &n.interfaces {
         s += &format!("iface {} inet {}\n\n", i.name, i.method)
     }

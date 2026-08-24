@@ -1,11 +1,11 @@
 use std::fs;
 use std::process::Command;
 
-use pve_iac::config::Repository;
+use pvestate::config::Repository;
 
 #[test]
 fn help_lists_compact_interface() {
-    let output = Command::new(env!("CARGO_BIN_EXE_pve-iac"))
+    let output = Command::new(env!("CARGO_BIN_EXE_pves"))
         .arg("--help")
         .output()
         .unwrap();
@@ -20,7 +20,7 @@ fn help_lists_compact_interface() {
 fn init_creates_a_configuration_repository() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("environment");
-    let status = Command::new(env!("CARGO_BIN_EXE_pve-iac"))
+    let status = Command::new(env!("CARGO_BIN_EXE_pves"))
         .args(["init", root.to_str().unwrap()])
         .status()
         .unwrap();

@@ -1,14 +1,14 @@
 [package]
-name = "pve-iac"
+name = "pvestate"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
 description = "Safe desired-state, drift, and recovery tooling for Proxmox VE"
-repository = "https://github.com/dougmaitelli/pve-iac"
+repository = "https://github.com/dougmaitelli/pvestate"
 rust-version = "1.88"
 
 [[bin]]
-name = "pve-iac"
+name = "pves"
 path = "src/main.rs"
 
 [dependencies]

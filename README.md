@@ -1,6 +1,6 @@
-# pve-iac
+# PVE State
 
-`pve-iac` is a safety-focused, standalone Rust CLI for capturing, planning, and
+`pves` is a safety-focused, standalone Rust CLI for capturing, planning, and
 applying explicitly owned Proxmox VE configuration. Environment configuration
 lives in a separate repository; the binary contains no site-specific state.
 
@@ -9,17 +9,17 @@ lives in a separate repository; the binary contains no site-specific state.
 Linux x86_64 and macOS:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/dougmaitelli/pve-iac/main/install.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/dougmaitelli/pvestate/main/install.sh | sh
 ```
 
 The installer downloads the latest GitHub Release, verifies its SHA-256 file,
-and installs `pve-iac` under `${HOME}/.local/bin` by default. Override the
-destination with `PVE_IAC_INSTALL_DIR`.
+and installs `pves` under `${HOME}/.local/bin` by default. Override the
+destination with `PVESTATE_INSTALL_DIR`.
 
 Rust users may also build from source:
 
 ```bash
-cargo install --git https://github.com/dougmaitelli/pve-iac
+cargo install --git https://github.com/dougmaitelli/pvestate
 ```
 
 ## Configuration repository
@@ -27,7 +27,7 @@ cargo install --git https://github.com/dougmaitelli/pve-iac
 Create or select a separate environment repository:
 
 ```bash
-pve-iac init ./my-proxmox
+pves init ./my-proxmox
 export IAC_CONFIG_DIR="$PWD/my-proxmox"
 ```
 
@@ -45,19 +45,19 @@ my-proxmox/
 ## Workflow
 
 ```bash
-pve-iac capture
-pve-iac plan
+pves capture
+pves plan
 
 # Edit config/*.yml and review the plan again.
-pve-iac plan
+pves plan
 
 # Commit changes with normal Git commands in the configuration repository.
 git diff
 git add config observed
 git commit -m "Describe the infrastructure change"
 
-pve-iac apply
-pve-iac validate
+pves apply
+pves validate
 ```
 
 Every command also accepts `--config-dir PATH`.
@@ -75,7 +75,7 @@ export IAC_ENABLE_PRODUCTION_APPLY=YES
 export IAC_CONFIRM_PLAN_SHA='<sha from .runtime/production-plan.json>'
 export IAC_APPLY_TARGET='https://pve.example:8006'
 export IAC_APPLY_DOMAINS='guests,firewall,dns'
-pve-iac apply
+pves apply
 ```
 
 ## Commands
