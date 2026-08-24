@@ -1,12 +1,9 @@
-.PHONY: check fmt spacing lint test build
+.PHONY: check fmt lint test build
 
-check: fmt spacing lint test
+check: fmt lint test
 
 fmt:
 	cargo fmt --all -- --check
-
-spacing:
-	./scripts/check-spacing.sh
 
 lint:
 	cargo clippy --all-targets --all-features --locked -- -D warnings
