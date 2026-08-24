@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RecoveryChecks",
+  "type": "object",
+  "properties": {
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RecoveryCheck"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "checks"
+  ],
+  "$defs": {
+    "RecoveryCheck": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "description",
+        "command"
+      ]
+    }
+  }
+}

@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StorageConfig",
+  "type": "object",
+  "properties": {
+    "host_mounts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/HostMount"
+      }
+    },
+    "pools": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Pool"
+      }
+    },
+    "storages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Storage"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "host_mounts",
+    "pools",
+    "storages"
+  ],
+  "$defs": {
+    "HostMount": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "required",
+        "purpose"
+      ]
+    },
+    "Pool": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mountpoint": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "sparse": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string"
+        },
+        "zpool": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "zpool",
+        "mountpoint",
+        "content"
+      ]
+    },
+    "Storage": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "datastore": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mountpoint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pool": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "server": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sparse": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "thinpool": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string"
+        },
+        "username": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vgname": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "content"
+      ]
+    }
+  }
+}

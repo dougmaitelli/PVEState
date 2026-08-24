@@ -3,7 +3,6 @@ use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_yaml::Value;
 use sha2::{Digest, Sha256};
 use std::fs;
 
@@ -49,8 +48,7 @@ pub fn run(repo: &Repository, stage: Stage, target: &str) -> Result<()> {
         &fs::read(repo.runtime().join("recovery-plan.json")).context("run recover plan first")?,
     )?;
     authorize(&plan, target)?;
-    let restore_config = restore_config(repo)?;
-    if get(&restore_config, "target.production_address").and_then(Value::as_str) == Some(target)
+    if repo.restore.target.production_address == target
         && std::env::var("IAC_ALLOW_PRODUCTION_TARGET").as_deref() != Ok("YES")
     {
         bail!("recovery target is production; IAC_ALLOW_PRODUCTION_TARGET must equal YES")
@@ -72,25 +70,19 @@ pub fn run(repo: &Repository, stage: Stage, target: &str) -> Result<()> {
 }
 
 fn create_plan(repo: &Repository, target: &str) -> Result<()> {
-    let config = restore_config(repo)?;
     let mut blockers = Vec::new();
-    if get(&config, "pbs_bootstrap.lxc_template").is_none_or(Value::is_null) {
+    if repo.restore.pbs_bootstrap.lxc_template.is_none() {
         blockers.push("pbs_bootstrap.lxc_template".into());
     }
-    if get(&config, "pbs_bootstrap.storage_attached_to_pve").and_then(Value::as_bool) != Some(true)
-    {
+    if !repo.restore.pbs_bootstrap.storage_attached_to_pve {
         blockers.push("pbs_bootstrap.storage_attached_to_pve".into());
     }
-    for id in config["restore_order"]
-        .as_sequence()
-        .context("restore_order")?
-    {
-        let id = id.as_u64().context("restore VMID")?;
-        if yaml_id(&config["archives"], id).is_none_or(Value::is_null) {
+    for id in &repo.restore.restore_order {
+        if repo.restore.archives.get(id).is_none_or(Option::is_none) {
             blockers.push(format!("archives.{id}"));
         }
     }
-    if get(&config, "application.configure_command").is_none_or(Value::is_null) {
+    if repo.restore.application.configure_command.is_none() {
         blockers.push("application.configure_command".into());
     }
     let mut plan = RecoveryPlan {
@@ -142,7 +134,7 @@ fn bootstrap_pve(repo: &Repository, ssh: &Ssh) -> Result<()> {
     write(
         ssh,
         "/etc/pve/firewall/cluster.fw",
-        &render::firewall_policy(&repo.firewall["cluster"]),
+        &render::firewall_policy(&repo.firewall.cluster),
         "0640",
     )?;
     println!("replacement PVE configuration staged; activate networking only with console access");
@@ -150,9 +142,11 @@ fn bootstrap_pve(repo: &Repository, ssh: &Ssh) -> Result<()> {
 }
 
 fn bootstrap_pbs(repo: &Repository, ssh: &Ssh) -> Result<()> {
-    let config = restore_config(repo)?;
-    let template = get(&config, "pbs_bootstrap.lxc_template")
-        .and_then(Value::as_str)
+    let template = repo
+        .restore
+        .pbs_bootstrap
+        .lxc_template
+        .as_deref()
         .context("PBS template")?;
     let guest = repo.guests.lxcs.get(&111).context("LXC 111")?;
     let create = format!(
@@ -172,14 +166,13 @@ fn bootstrap_pbs(repo: &Repository, ssh: &Ssh) -> Result<()> {
 }
 
 fn restore(repo: &Repository, ssh: &Ssh) -> Result<()> {
-    let config = restore_config(repo)?;
-    for value in config["restore_order"]
-        .as_sequence()
-        .context("restore_order")?
-    {
-        let id = value.as_u64().context("restore VMID")? as u32;
-        let archive = yaml_id(&config["archives"], u64::from(id))
-            .and_then(Value::as_str)
+    for id in &repo.restore.restore_order {
+        let id = *id;
+        let archive = repo
+            .restore
+            .archives
+            .get(&id)
+            .and_then(Option::as_deref)
             .context("archive")?;
         if ssh
             .run(&format!(
@@ -203,44 +196,37 @@ fn restore(repo: &Repository, ssh: &Ssh) -> Result<()> {
             ))?;
         }
     }
-    if let Some(mounts) = config["reattach_mounts"].as_sequence() {
-        for mount in mounts {
-            let id = mount["vmid"].as_u64().context("mount VMID")?;
-            let index = mount["index"].as_u64().context("mount index")?;
-            let source = mount["source"].as_str().context("mount source")?;
-            let target = mount["target"].as_str().context("mount target")?;
-            ssh.run(&format!(
-                "pct set {id} -mp{index} {},mp={}",
-                quote(source),
-                quote(target)
-            ))?;
-        }
+    for mount in &repo.restore.reattach_mounts {
+        let id = mount.vmid;
+        let index = mount.index;
+        let source = &mount.source;
+        let target = &mount.target;
+        ssh.run(&format!(
+            "pct set {id} -mp{index} {},mp={}",
+            quote(source),
+            quote(target)
+        ))?;
     }
-    if let Some(policies) = repo.firewall["guests"].as_mapping() {
-        for (id, policy) in policies {
-            let id = id.as_u64().context("firewall VMID")?;
-            write(
-                ssh,
-                &format!("/etc/pve/firewall/{id}.fw"),
-                &render::firewall_policy(policy),
-                "0640",
-            )?;
-        }
+    for (id, policy) in &repo.firewall.guests {
+        write(
+            ssh,
+            &format!("/etc/pve/firewall/{id}.fw"),
+            &render::firewall_policy(policy),
+            "0640",
+        )?;
     }
-    for value in config["restore_order"]
-        .as_sequence()
-        .context("restore_order")?
-    {
-        let id = value.as_u64().context("restore VMID")?;
+    for id in &repo.restore.restore_order {
         ssh.run(&format!("qm start {id} 2>/dev/null || pct start {id}"))?;
     }
     Ok(())
 }
 
 fn configure(repo: &Repository, ssh: &Ssh) -> Result<()> {
-    let config = restore_config(repo)?;
-    let command = get(&config, "application.configure_command")
-        .and_then(Value::as_str)
+    let command = repo
+        .restore
+        .application
+        .configure_command
+        .as_deref()
         .context("application.configure_command")?;
     ssh.run(command)?;
     Ok(())
@@ -258,20 +244,6 @@ fn write(ssh: &Ssh, path: &str, content: &str, mode: &str) -> Result<()> {
         ),
         encoded.as_bytes(),
     )
-}
-
-fn restore_config(repo: &Repository) -> Result<Value> {
-    Ok(serde_yaml::from_str(&fs::read_to_string(
-        repo.root.join("config/restore.yml"),
-    )?)?)
-}
-
-fn get<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
-    path.split('.').try_fold(value, |item, key| item.get(key))
-}
-
-fn yaml_id(value: &Value, id: u64) -> Option<&Value> {
-    value.as_mapping()?.get(Value::Number(id.into()))
 }
 
 fn quote(value: &str) -> String {

@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HostConfig",
+  "type": "object",
+  "properties": {
+    "host": {
+      "$ref": "#/$defs/HostIdentity"
+    },
+    "storage_topology": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/StorageTopology"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "host",
+    "storage_topology"
+  ],
+  "$defs": {
+    "HostIdentity": {
+      "type": "object",
+      "properties": {
+        "kernel": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "pve_version": {
+          "type": "string"
+        },
+        "standalone": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "standalone",
+        "pve_version",
+        "kernel"
+      ]
+    },
+    "StorageTopology": {
+      "type": "object",
+      "properties": {
+        "consumers": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "device_class": {
+          "type": "string"
+        },
+        "devices": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "filesystem": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "layout": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mount": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provides": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "redundancy": {
+          "type": "string"
+        },
+        "size_tb": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "redundancy",
+        "device_class"
+      ]
+    }
+  }
+}

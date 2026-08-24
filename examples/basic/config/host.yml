@@ -1,0 +1,11 @@
+host:
+  name: pve
+  standalone: true
+  pve_version: "9.0"
+  kernel: example-pve
+storage_topology:
+  system:
+    layout: lvmthin
+    redundancy: none
+    device_class: nvme
+    provides: [local, local-lvm]

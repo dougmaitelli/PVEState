@@ -27,6 +27,7 @@
       }
     }
   },
+  "additionalProperties": false,
   "required": [
     "node"
   ],
@@ -34,6 +35,9 @@
     "BindMount": {
       "type": "object",
       "properties": {
+        "backed_up_by_pve": {
+          "type": "boolean"
+        },
         "source": {
           "type": "string"
         },
@@ -41,9 +45,11 @@
           "type": "string"
         }
       },
+      "additionalProperties": false,
       "required": [
         "source",
-        "target"
+        "target",
+        "backed_up_by_pve"
       ]
     },
     "Cpu": {
@@ -65,6 +71,7 @@
           "type": "string"
         }
       },
+      "additionalProperties": false,
       "required": [
         "type",
         "sockets",
@@ -83,9 +90,26 @@
           "type": "string"
         }
       },
+      "additionalProperties": false,
       "required": [
         "storage",
         "size_gb"
+      ]
+    },
+    "Efi": {
+      "type": "object",
+      "properties": {
+        "pre_enrolled_keys": {
+          "type": "boolean"
+        },
+        "storage": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "storage",
+        "pre_enrolled_keys"
       ]
     },
     "Lxc": {
@@ -122,6 +146,9 @@
         "network": {
           "$ref": "#/$defs/Nic"
         },
+        "os": {
+          "type": "string"
+        },
         "rootfs": {
           "$ref": "#/$defs/Disk"
         },
@@ -132,10 +159,16 @@
           "type": "integer",
           "format": "uint32",
           "minimum": 0
+        },
+        "unprivileged": {
+          "type": "boolean"
         }
       },
+      "additionalProperties": false,
       "required": [
         "hostname",
+        "os",
+        "unprivileged",
         "cores",
         "memory_mb",
         "swap_mb",
@@ -182,6 +215,7 @@
           "type": "string"
         }
       },
+      "additionalProperties": false,
       "required": [
         "name",
         "mac",
@@ -210,6 +244,7 @@
           "minimum": 0
         }
       },
+      "additionalProperties": false,
       "required": [
         "onboot",
         "order"
@@ -225,6 +260,7 @@
           "type": "string"
         }
       },
+      "additionalProperties": false,
       "required": [
         "slot",
         "host"
@@ -241,6 +277,9 @@
         },
         "disk": {
           "$ref": "#/$defs/VmDisk"
+        },
+        "efi": {
+          "$ref": "#/$defs/Efi"
         },
         "machine": {
           "type": "string"
@@ -273,6 +312,7 @@
           }
         }
       },
+      "additionalProperties": false,
       "required": [
         "name",
         "machine",
@@ -280,6 +320,7 @@
         "cpu",
         "memory_mb",
         "disk",
+        "efi",
         "networks",
         "qemu_guest_agent",
         "start"
@@ -304,6 +345,7 @@
           "type": "string"
         }
       },
+      "additionalProperties": false,
       "required": [
         "storage",
         "interface",
@@ -336,6 +378,7 @@
           "minimum": 0
         }
       },
+      "additionalProperties": false,
       "required": [
         "model",
         "mac",

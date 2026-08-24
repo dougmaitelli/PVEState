@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServicesConfig",
+  "type": "object",
+  "properties": {
+    "services": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^\\d+$": {
+          "$ref": "#/$defs/Service"
+        }
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "services"
+  ],
+  "$defs": {
+    "Persistence": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "Service": {
+      "type": "object",
+      "properties": {
+        "anonymous_volumes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "compose_roots": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "containers": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "guest": {
+          "type": "string"
+        },
+        "named_volumes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "os": {
+          "type": "string"
+        },
+        "persistence": {
+          "$ref": "#/$defs/Persistence"
+        },
+        "primary_services": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "qemu_guest_agent": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "risks": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "guest",
+        "type",
+        "os",
+        "persistence"
+      ]
+    }
+  }
+}

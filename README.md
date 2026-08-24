@@ -86,7 +86,7 @@ pve-iac apply
 - `apply`: execute exactly the confirmed non-destructive plan.
 - `validate`: verify all managed guests are running.
 - `recover ACTION TARGET`: grouped disaster-recovery interface.
-- `schema`: emit the generated JSON Schema for guest configuration.
+- `schema`: emit JSON Schemas for the repository manifest and every configuration document.
 
 ## Development
 
@@ -110,4 +110,3 @@ identity and a distinct, narrowly scoped mutation identity.
 ## License
 
 MIT
-
