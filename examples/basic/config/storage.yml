@@ -1,4 +1,5 @@
-host_mounts: []
+host_mounts:
+  - {path: /mnt/data, required: true, purpose: application_bind_mounts}
 pools: []
 storages:
   - name: local

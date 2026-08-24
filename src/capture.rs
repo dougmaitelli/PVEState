@@ -122,9 +122,11 @@ pub fn run(repo: &Repository) -> Result<()> {
     println!("captured production into {}", repo.root.display());
     Ok(())
 }
+
 fn export(ssh: &Ssh, remote: &str, local: &std::path::Path) -> Result<()> {
     export_command(ssh, &format!("cat {remote}"), local).with_context(|| remote.to_string())
 }
+
 fn export_command(ssh: &Ssh, command: &str, local: &std::path::Path) -> Result<()> {
     let data = sanitize(&ssh.run(command)?);
     if let Some(p) = local.parent() {
@@ -133,6 +135,7 @@ fn export_command(ssh: &Ssh, command: &str, local: &std::path::Path) -> Result<(
     fs::write(local, data)?;
     Ok(())
 }
+
 fn sanitize(input: &str) -> String {
     input
         .lines()
@@ -162,6 +165,7 @@ fn sanitize(input: &str) -> String {
         .join("\n")
         + "\n"
 }
+
 pub fn validate(repo: &Repository) -> Result<()> {
     let ssh = Ssh::discovery(&repo.root)?;
     let mut failures = Vec::new();

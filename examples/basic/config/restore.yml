@@ -12,12 +12,15 @@ pbs_bootstrap:
   region: us-west-1
   lxc_template: null
   storage_attached_to_pve: false
-archives: {}
-restore_order: []
-protected_vmids: []
-reattach_mounts: []
+archives:
+  101: null
+  201: null
+restore_order: [101, 201]
+protected_vmids: [111]
+reattach_mounts:
+  - {vmid: 101, index: 0, source: /mnt/data/apps, target: /srv/data}
 application:
   repository: git@example.test:infra/applications.git
-  docker_guest_vmid: 105
+  docker_guest_vmid: 101
   configure_playbook: null
   configure_command: null

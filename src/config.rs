@@ -17,6 +17,7 @@ pub struct Guests {
     #[serde(default)]
     pub vms: BTreeMap<u32, Vm>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Lxc {
@@ -34,6 +35,7 @@ pub struct Lxc {
     #[serde(default)]
     pub bind_mounts: Vec<BindMount>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Vm {
@@ -50,6 +52,7 @@ pub struct Vm {
     pub qemu_guest_agent: bool,
     pub start: Start,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Cpu {
@@ -57,12 +60,14 @@ pub struct Cpu {
     pub sockets: u16,
     pub cores: u16,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Disk {
     pub storage: String,
     pub size_gb: u64,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct VmDisk {
@@ -72,12 +77,14 @@ pub struct VmDisk {
     #[serde(default)]
     pub discard: bool,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Efi {
     pub storage: String,
     pub pre_enrolled_keys: bool,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Nic {
@@ -91,6 +98,7 @@ pub struct Nic {
     pub ipv6: Option<String>,
     pub gateway6: Option<String>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct VmNic {
@@ -101,12 +109,14 @@ pub struct VmNic {
     pub firewall: bool,
     pub vlan: Option<u16>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Usb {
     pub slot: String,
     pub host: String,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Start {
@@ -114,6 +124,7 @@ pub struct Start {
     pub order: u16,
     pub delay_seconds: Option<u32>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BindMount {
@@ -121,6 +132,7 @@ pub struct BindMount {
     pub target: String,
     pub backed_up_by_pve: bool,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Network {
@@ -131,6 +143,7 @@ pub struct Network {
     pub interfaces: Vec<Interface>,
     pub bridges: Vec<Bridge>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Dns {
@@ -138,12 +151,14 @@ pub struct Dns {
     #[serde(default)]
     pub servers: Vec<String>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Interface {
     pub name: String,
     pub method: String,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Bridge {
@@ -172,6 +187,7 @@ pub struct Repository {
     pub services: ServicesConfig,
     pub required_secrets: RequiredSecretsConfig,
 }
+
 impl Repository {
     pub fn open(root: &Path) -> Result<Self> {
         dotenvy::from_path(root.join(".env")).ok();
@@ -284,11 +300,13 @@ impl Repository {
         Ok(())
     }
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RecoveryChecks {
     pub checks: Vec<RecoveryCheck>,
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RecoveryCheck {
@@ -313,6 +331,7 @@ pub struct RepositoryDocument {
     pub services: ServicesConfig,
     pub required_secrets: RequiredSecretsConfig,
 }
+
 fn read<T: for<'a> Deserialize<'a>>(root: &Path, name: &str) -> Result<T> {
     let p = root.join("config").join(name);
     serde_yaml::from_str(&fs::read_to_string(&p).with_context(|| format!("read {}", p.display()))?)

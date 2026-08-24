@@ -10,6 +10,7 @@ pub fn options(items: Vec<(&str, Option<String>)>) -> String {
         .collect::<Vec<_>>()
         .join(",")
 }
+
 pub fn lxc_nic(n: &Nic) -> String {
     options(vec![
         ("name", Some(n.name.clone())),
@@ -23,6 +24,7 @@ pub fn lxc_nic(n: &Nic) -> String {
         ("type", Some("veth".into())),
     ])
 }
+
 pub fn vm_nic(n: &VmNic) -> String {
     options(vec![
         (n.model.as_str(), Some(n.mac.clone())),
@@ -31,6 +33,7 @@ pub fn vm_nic(n: &VmNic) -> String {
         ("tag", n.vlan.map(|x| x.to_string())),
     ])
 }
+
 pub fn network(n: &Network) -> String {
     let mut s = String::from("# Managed by pve-iac\nauto lo\niface lo inet loopback\n\n");
     for i in &n.interfaces {
@@ -58,6 +61,7 @@ pub fn network(n: &Network) -> String {
     s += "source /etc/network/interfaces.d/*\n";
     s
 }
+
 pub fn firewall_policy(policy: &FirewallPolicy) -> String {
     let mut s = String::from("[OPTIONS]\n\n");
     s += &format!("enable: {}\n", u8::from(policy.enabled));
@@ -89,6 +93,7 @@ pub fn firewall_policy(policy: &FirewallPolicy) -> String {
     }
     s
 }
+
 pub fn semantic_lines(s: &str) -> Vec<String> {
     s.lines()
         .map(str::trim)

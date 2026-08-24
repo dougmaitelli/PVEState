@@ -7,6 +7,7 @@ pub struct Pve {
     token: String,
     http: Client,
 }
+
 impl Pve {
     pub fn discovery() -> Result<Self> {
         Self::from_env("PVE_ENDPOINT", "PVE_API_TOKEN_ID", "PVE_API_TOKEN_SECRET")
