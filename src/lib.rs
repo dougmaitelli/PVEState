@@ -3,6 +3,7 @@ pub mod apply;
 pub mod capture;
 pub mod config;
 pub mod model;
+pub mod pbs;
 pub mod plan;
 pub mod recovery;
 pub mod render;
