@@ -1,5 +1,6 @@
 use crate::config::env;
 use anyhow::{Context, Result, bail};
+use serde::Serialize;
 use std::{
     io::Write,
     path::Path,
@@ -11,6 +12,14 @@ pub struct Ssh {
     user: String,
     key: String,
     known: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SshOutput {
+    pub ok: bool,
+    pub return_code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
 }
 
 impl Ssh {
@@ -62,11 +71,21 @@ impl Ssh {
         c
     }
     pub fn run(&self, remote: &str) -> Result<String> {
-        let o = self.command(remote).output().context("start ssh")?;
-        if !o.status.success() {
-            bail!("ssh failed: {}", String::from_utf8_lossy(&o.stderr))
+        let output = self.probe(remote)?;
+        if !output.ok {
+            bail!("ssh failed: {}", output.stderr)
         }
-        Ok(String::from_utf8(o.stdout)?)
+        Ok(output.stdout)
+    }
+
+    pub fn probe(&self, remote: &str) -> Result<SshOutput> {
+        let output = self.command(remote).output().context("start ssh")?;
+        Ok(SshOutput {
+            ok: output.status.success(),
+            return_code: output.status.code(),
+            stdout: String::from_utf8(output.stdout)?,
+            stderr: String::from_utf8(output.stderr)?,
+        })
     }
     pub fn stdin(&self, remote: &str, input: &[u8]) -> Result<()> {
         let mut c = self.command(remote);

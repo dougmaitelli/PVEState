@@ -1,7 +1,4 @@
-use crate::{
-    config::{Network, Nic, VmNic},
-    model::FirewallPolicy,
-};
+use crate::model::{FirewallPolicy, Network, Nic, VmNic};
 
 pub fn options(items: Vec<(&str, Option<String>)>) -> String {
     items

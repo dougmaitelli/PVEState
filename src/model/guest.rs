@@ -1,0 +1,128 @@
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Guests {
+    pub node: String,
+    #[serde(default)]
+    pub lxcs: BTreeMap<u32, Lxc>,
+    #[serde(default)]
+    pub vms: BTreeMap<u32, Vm>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Lxc {
+    pub hostname: String,
+    pub os: String,
+    pub unprivileged: bool,
+    pub cores: u16,
+    pub memory_mb: u32,
+    pub swap_mb: u32,
+    pub rootfs: Disk,
+    pub network: Nic,
+    #[serde(default)]
+    pub additional_networks: Vec<Nic>,
+    pub start: Start,
+    #[serde(default)]
+    pub bind_mounts: Vec<BindMount>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Vm {
+    pub name: String,
+    pub machine: String,
+    pub bios: String,
+    pub cpu: Cpu,
+    pub memory_mb: u32,
+    pub disk: VmDisk,
+    pub efi: Efi,
+    pub networks: Vec<VmNic>,
+    #[serde(default)]
+    pub usb_passthrough: Vec<Usb>,
+    pub qemu_guest_agent: bool,
+    pub start: Start,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Cpu {
+    pub r#type: String,
+    pub sockets: u16,
+    pub cores: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Disk {
+    pub storage: String,
+    pub size_gb: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct VmDisk {
+    pub storage: String,
+    pub interface: String,
+    pub size_gb: u64,
+    #[serde(default)]
+    pub discard: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Efi {
+    pub storage: String,
+    pub pre_enrolled_keys: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Nic {
+    pub name: String,
+    pub mac: String,
+    pub bridge: String,
+    #[serde(default)]
+    pub firewall: bool,
+    pub ipv4: String,
+    pub gateway4: Option<String>,
+    pub ipv6: Option<String>,
+    pub gateway6: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct VmNic {
+    pub model: String,
+    pub mac: String,
+    pub bridge: String,
+    #[serde(default)]
+    pub firewall: bool,
+    pub vlan: Option<u16>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Usb {
+    pub slot: String,
+    pub host: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Start {
+    pub onboot: bool,
+    pub order: u16,
+    pub delay_seconds: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BindMount {
+    pub source: String,
+    pub target: String,
+    pub backed_up_by_pve: bool,
+}

@@ -1,8 +1,8 @@
 use crate::config::env;
 use anyhow::{Context, Result};
-use reqwest::blocking::Client;
+use reqwest::{Certificate, blocking::Client};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fs, time::Duration};
 pub struct Pve {
     base: String,
     token: String,
@@ -24,9 +24,14 @@ impl Pve {
         let port = env("PVE_API_PORT", Some("8006"))?;
         let id = std::env::var(i).with_context(|| i.to_string())?;
         let secret = std::env::var(s).with_context(|| s.to_string())?;
-        let http = Client::builder()
-            .danger_accept_invalid_certs(std::env::var("PVE_VERIFY_TLS").as_deref() == Ok("false"))
-            .build()?;
+        let mut builder = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .danger_accept_invalid_certs(std::env::var("PVE_VERIFY_TLS").as_deref() == Ok("false"));
+        if let Ok(path) = std::env::var("PVE_CA_FILE") {
+            let pem = fs::read(&path).with_context(|| format!("read PVE CA file {path}"))?;
+            builder = builder.add_root_certificate(Certificate::from_pem(&pem)?);
+        }
+        let http = builder.build()?;
         Ok(Self {
             base: format!("{scheme}://{host}:{port}/api2/json"),
             token: format!("PVEAPIToken={id}={secret}"),
@@ -43,6 +48,11 @@ impl Pve {
             .http
             .get(format!("{}{}", self.base, path))
             .header("Authorization", &self.token)
+            .header("Accept", "application/json")
+            .header(
+                "User-Agent",
+                concat!("pvestate/", env!("CARGO_PKG_VERSION")),
+            )
             .send()?
             .error_for_status()?
             .json()?;

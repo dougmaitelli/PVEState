@@ -36,7 +36,7 @@ The current Hades environment is stored separately at `/root/pveconf`.
 ```text
 my-proxmox/
 ├── config/                 desired YAML
-├── observed/production/    sanitized, reviewable native exports
+├── observed/production/    sanitized, reviewable API snapshots and native exports
 ├── .runtime/               ignored raw observations and plans
 ├── .env                    ignored API credentials
 └── .secrets/               ignored SSH material
@@ -83,6 +83,19 @@ PBS_API_TOKEN_SECRET=secret
 PBS_VERIFY_TLS=true
 # PBS_CA_FILE=/absolute/path/to/private-ca.pem
 ```
+
+`pves capture` dynamically enumerates every PVE node, VM, and LXC. The captured
+PVE snapshot includes each guest's full API configuration and native config,
+including allocated CPU and memory, disks, NICs, mount points, passthrough
+devices, snapshots, and guest firewall options/rules. It also records host and
+cluster firewall configuration, DNS, storage, pools, HA state, and PVE backup
+jobs (including guest selection).
+
+The PBS snapshot includes datastore configuration and usage, S3 endpoint and
+bucket settings, remotes, sync jobs, prune jobs, verification jobs, backup
+groups, and snapshots. Sanitized stable snapshots are written to
+`observed/production/api/`; detailed timestamped snapshots are written beneath
+ignored `.runtime/`.
 
 ### Safety model
 

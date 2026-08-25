@@ -1,8 +1,7 @@
 use crate::{
-    api::Pve,
+    client::{Pve, Ssh},
+    command::plan::{Operation, Plan},
     config::Repository,
-    plan::{Operation, Plan},
-    ssh::Ssh,
 };
 use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD};
