@@ -1,3 +1,4 @@
+use crate::config::env;
 use anyhow::{Context, Result};
 use reqwest::blocking::Client;
 use serde_json::Value;
@@ -32,9 +33,11 @@ impl Pve {
             http,
         })
     }
+
     pub fn endpoint(&self) -> &str {
         self.base.trim_end_matches("/api2/json")
     }
+
     pub fn get(&self, path: &str) -> Result<Value> {
         let v: Value = self
             .http
@@ -45,6 +48,7 @@ impl Pve {
             .json()?;
         Ok(v["data"].clone())
     }
+
     pub fn put(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
         self.http
             .put(format!("{}{}", self.base, path))
@@ -54,14 +58,4 @@ impl Pve {
             .error_for_status()?;
         Ok(())
     }
-}
-
-fn env(name: &str, default: Option<&str>) -> Result<String> {
-    std::env::var(name)
-        .or_else(|_| {
-            default
-                .map(str::to_owned)
-                .ok_or(std::env::VarError::NotPresent)
-        })
-        .with_context(|| format!("missing {name}"))
 }

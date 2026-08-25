@@ -1,3 +1,4 @@
+use crate::config::env;
 use anyhow::{Context, Result, bail};
 use std::{
     io::Write,
@@ -15,20 +16,20 @@ pub struct Ssh {
 impl Ssh {
     pub fn discovery(root: &Path) -> Result<Self> {
         Ok(Self {
-            host: req("PVE_HOST")?,
-            port: std::env::var("PVE_SSH_PORT").unwrap_or_else(|_| "22".into()),
-            user: std::env::var("PVE_SSH_USER").unwrap_or_else(|_| "root".into()),
+            host: env("PVE_HOST", None)?,
+            port: env("PVE_SSH_PORT", Some("22"))?,
+            user: env("PVE_SSH_USER", Some("root"))?,
             key: root.join(".secrets/pve_discovery").display().to_string(),
             known: root.join(".secrets/known_hosts").display().to_string(),
         })
     }
     pub fn mutation() -> Result<Self> {
         Ok(Self {
-            host: req("PVE_HOST")?,
-            port: std::env::var("PVE_SSH_PORT").unwrap_or_else(|_| "22".into()),
-            user: std::env::var("PVE_SSH_USER").unwrap_or_else(|_| "root".into()),
-            key: req("IAC_APPLY_SSH_KEY")?,
-            known: req("IAC_APPLY_KNOWN_HOSTS")?,
+            host: env("PVE_HOST", None)?,
+            port: env("PVE_SSH_PORT", Some("22"))?,
+            user: env("PVE_SSH_USER", Some("root"))?,
+            key: env("IAC_APPLY_SSH_KEY", None)?,
+            known: env("IAC_APPLY_KNOWN_HOSTS", None)?,
         })
     }
     pub fn recovery(target: &str) -> Result<Self> {
@@ -36,8 +37,8 @@ impl Ssh {
             host: target.into(),
             port: std::env::var("IAC_TARGET_SSH_PORT").unwrap_or_else(|_| "22".into()),
             user: std::env::var("IAC_TARGET_SSH_USER").unwrap_or_else(|_| "root".into()),
-            key: req("IAC_TARGET_SSH_KEY")?,
-            known: req("IAC_TARGET_KNOWN_HOSTS")?,
+            key: env("IAC_TARGET_SSH_KEY", None)?,
+            known: env("IAC_TARGET_KNOWN_HOSTS", None)?,
         })
     }
     fn command(&self, remote: &str) -> Command {
@@ -76,8 +77,4 @@ impl Ssh {
         }
         Ok(())
     }
-}
-
-fn req(n: &str) -> Result<String> {
-    std::env::var(n).with_context(|| format!("missing {n}"))
 }

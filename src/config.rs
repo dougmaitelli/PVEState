@@ -337,3 +337,13 @@ fn read<T: for<'a> Deserialize<'a>>(root: &Path, name: &str) -> Result<T> {
     serde_yaml::from_str(&fs::read_to_string(&p).with_context(|| format!("read {}", p.display()))?)
         .with_context(|| format!("parse {}", p.display()))
 }
+
+pub(crate) fn env(name: &str, default: Option<&str>) -> Result<String> {
+    std::env::var(name)
+        .or_else(|_| {
+            default
+                .map(str::to_owned)
+                .ok_or(std::env::VarError::NotPresent)
+        })
+        .with_context(|| format!("missing {name}"))
+}
