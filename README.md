@@ -74,6 +74,16 @@ PVE_SSH_USER=root       # optional; default root
 
 Discovery and mutation use separate credentials, but both address `PVE_HOST`.
 
+PBS API discovery runs as part of every capture and requires:
+
+```bash
+PBS_ENDPOINT=https://pbs.example.test:8007
+PBS_API_TOKEN_ID=iac-auditor@pbs!discovery
+PBS_API_TOKEN_SECRET=secret
+PBS_VERIFY_TLS=true
+# PBS_CA_FILE=/absolute/path/to/private-ca.pem
+```
+
 ### Safety model
 
 `apply` requires a plan less than 30 minutes old, an exact plan SHA, an exact

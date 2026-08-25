@@ -1011,6 +1011,7 @@ dependencies = [
  "clap",
  "dotenvy",
  "hex",
+ "percent-encoding",
  "predicates",
  "reqwest",
  "schemars",

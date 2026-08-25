@@ -1,4 +1,4 @@
-use crate::{api::Pve, config::Repository, ssh::Ssh};
+use crate::{api::Pve, config::Repository, pbs::Pbs, ssh::Ssh};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use serde_json::json;
@@ -9,6 +9,14 @@ pub fn run(repo: &Repository) -> Result<()> {
     fs::create_dir_all(repo.runtime())?;
     fs::create_dir_all(repo.observed().join("pve/firewall"))?;
     fs::create_dir_all(repo.observed().join("network"))?;
+    let pbs = Pbs::discovery()?;
+    let pbs_failures = pbs.write_snapshot(&repo.runtime())?;
+    if !pbs_failures.is_empty() {
+        eprintln!("some PBS API endpoints were unavailable to the discovery token:");
+        for failure in pbs_failures {
+            eprintln!("  - {failure}");
+        }
+    }
     let mut guests = BTreeMap::new();
     for id in repo.guests.lxcs.keys() {
         guests.insert(
