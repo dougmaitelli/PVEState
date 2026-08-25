@@ -4,7 +4,7 @@ use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use reqwest::{Certificate, blocking::Client};
 use serde::Serialize;
 use serde_json::Value;
-use std::{collections::BTreeMap, fs, path::Path, time::Duration};
+use std::{collections::BTreeMap, fs, time::Duration};
 
 const ENDPOINTS: [(&str, &str); 9] = [
     ("version", "/version"),
@@ -119,15 +119,6 @@ impl Pbs {
         }
     }
 
-    pub fn write_snapshot(&self, runtime: &Path) -> Result<Vec<String>> {
-        let snapshot = self.discover();
-        let bytes = serde_json::to_vec_pretty(&snapshot)?;
-        let stamp = snapshot.collected_at.format("%Y%m%dT%H%M%SZ");
-        fs::write(runtime.join(format!("pbs-{stamp}.json")), &bytes)?;
-        fs::write(runtime.join("pbs-latest.json"), &bytes)?;
-        Ok(snapshot.failures())
-    }
-
     fn get(&self, path: &str) -> Result<Value> {
         let payload: Value = self
             .http
@@ -163,7 +154,7 @@ impl Pbs {
 }
 
 impl Snapshot {
-    fn failures(&self) -> Vec<String> {
+    pub fn failures(&self) -> Vec<String> {
         let mut failures = Vec::new();
         for (name, response) in &self.requests {
             if let Some(error) = &response.error {

@@ -1,7 +1,10 @@
 mod backup;
 mod firewall;
+mod guest;
 mod host;
 mod manifest;
+mod network;
+mod recovery_check;
 mod restore;
 mod secrets;
 mod services;
@@ -10,8 +13,11 @@ mod storage;
 
 pub use backup::*;
 pub use firewall::*;
+pub use guest::*;
 pub use host::*;
 pub use manifest::*;
+pub use network::*;
+pub use recovery_check::*;
 pub use restore::*;
 pub use secrets::*;
 pub use services::*;

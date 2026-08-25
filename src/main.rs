@@ -1,6 +1,9 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use pvestate::{apply, capture, config::Repository, plan, recovery};
+use pvestate::{
+    command::{apply, capture, plan, recovery},
+    config::Repository,
+};
 use std::path::PathBuf;
 
 #[derive(Parser)]

@@ -1,4 +1,4 @@
-use crate::{config::Repository, render, ssh::Ssh};
+use crate::{client::Ssh, config::Repository, render};
 use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{DateTime, Utc};
