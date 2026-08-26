@@ -22,8 +22,34 @@ pub fn write(path: &Path, content: &[u8]) -> Result<()> {
         file.write_all(b"\n")?;
     }
     file.sync_all()?;
-    fs::rename(&temporary, path).with_context(|| format!("publish {}", path.display()))?;
+    publish(&temporary, path)?;
+    sync_parent(parent)?;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn publish(temporary: &Path, path: &Path) -> Result<()> {
+    fs::rename(temporary, path).with_context(|| format!("publish {}", path.display()))
+}
+
+#[cfg(windows)]
+fn publish(temporary: &Path, path: &Path) -> Result<()> {
+    if path.exists() {
+        fs::remove_file(path).with_context(|| format!("replace {}", path.display()))?;
+    }
+    fs::rename(temporary, path).with_context(|| format!("publish {}", path.display()))
+}
+
+#[cfg(not(windows))]
+fn sync_parent(parent: &Path) -> Result<()> {
     File::open(parent)?.sync_all()?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn sync_parent(_: &Path) -> Result<()> {
+    // Windows does not allow opening a directory as a regular File. The
+    // temporary file itself is flushed before publication above.
     Ok(())
 }
 
