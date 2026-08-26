@@ -1,3 +1,5 @@
+mod yaml;
+
 use crate::{
     command::plan::{ApiTarget, Operation, Plan},
     config::Repository,
@@ -49,7 +51,8 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
         bail!("unknown adoption IDs: {unknown:?}")
     }
 
-    let mut guests = repo.guests.clone();
+    let path = repo.root.join("config/guests.yml");
+    let mut content = fs::read_to_string(&path)?;
     for candidate in candidates
         .iter()
         .filter(|candidate| selected.contains(&candidate.id))
@@ -61,12 +64,11 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
                 candidate.reason.as_deref().unwrap_or("unsupported")
             )
         }
-        apply_candidate(&mut guests, candidate)?;
+        content = apply_candidate(&content, candidate)?;
     }
-    atomic_file::write(
-        &repo.root.join("config/guests.yml"),
-        serde_yaml::to_string(&guests)?.as_bytes(),
-    )?;
+    serde_yaml::from_str::<crate::model::Guests>(&content)
+        .context("validate adopted config/guests.yml")?;
+    atomic_file::write(&path, content.as_bytes())?;
     println!(
         "adopted {} production value(s) into config/guests.yml",
         selected.len()
@@ -248,50 +250,159 @@ fn adoption_field(kind: GuestKind, field: &str, production: &str) -> Option<Gues
     }
 }
 
-fn apply_candidate(guests: &mut crate::model::Guests, candidate: &Candidate) -> Result<()> {
+fn apply_candidate(content: &str, candidate: &Candidate) -> Result<String> {
     let reference: GuestRef = candidate.resource.parse()?;
     let field = candidate_field(&candidate.field)?;
-    match reference.kind {
-        GuestKind::Lxc => {
-            let guest = guests
-                .lxcs
-                .get_mut(&reference.vmid)
-                .context("desired LXC")?;
-            match field {
-                GuestField::Hostname => guest.hostname = candidate.production.clone(),
-                GuestField::Cores => guest.cores = candidate.production.parse()?,
-                GuestField::Memory => guest.memory_mb = candidate.production.parse()?,
-                GuestField::Swap => guest.swap_mb = candidate.production.parse()?,
-                GuestField::OnBoot => guest.start.onboot = bool_value(&candidate.production)?,
-                GuestField::DiskSize => guest.rootfs.size_gb = candidate.production.parse()?,
-                GuestField::BindMountBackup(index) => {
-                    guest
-                        .bind_mounts
-                        .get_mut(usize::from(index))
-                        .context("desired bind mount")?
-                        .backed_up_by_pve = bool_value(&candidate.production)?;
-                },
-                _ => bail!("unsupported adoption field {}", candidate.field),
-            }
-        },
-        GuestKind::Qemu => {
-            let guest = guests.vms.get_mut(&reference.vmid).context("desired VM")?;
-            match field {
-                GuestField::Name => guest.name = candidate.production.clone(),
-                GuestField::Machine => guest.machine = candidate.production.clone(),
-                GuestField::Bios => guest.bios = candidate.production.clone(),
-                GuestField::Cores => guest.cpu.cores = candidate.production.parse()?,
-                GuestField::Sockets => guest.cpu.sockets = candidate.production.parse()?,
-                GuestField::Memory => guest.memory_mb = candidate.production.parse()?,
-                GuestField::Cpu => guest.cpu.r#type = candidate.production.clone(),
-                GuestField::Agent => guest.qemu_guest_agent = bool_value(&candidate.production)?,
-                GuestField::OnBoot => guest.start.onboot = bool_value(&candidate.production)?,
-                GuestField::DiskSize => guest.disk.size_gb = candidate.production.parse()?,
-                _ => bail!("unsupported adoption field {}", candidate.field),
-            }
-        },
+    let mut prefix = vec![
+        yaml::Segment::Key(reference.kind.collection_name().into()),
+        yaml::Segment::Key(reference.vmid.to_string()),
+    ];
+    let yaml::Patch::Set(mut path, value) =
+        adoption_patch(reference.kind, field, &candidate.production)?
+    else {
+        unreachable!("guest field adoption only creates set patches")
+    };
+    prefix.append(&mut path);
+    yaml::apply_patches(content, &[yaml::Patch::Set(prefix, value)])
+}
+
+#[derive(Clone, Copy)]
+enum FieldValue {
+    String,
+    Integer,
+    Boolean,
+}
+
+struct FieldMapping {
+    guest: GuestKind,
+    api: &'static str,
+    yaml: &'static [&'static str],
+    value: FieldValue,
+}
+
+const FIELD_MAPPINGS: &[FieldMapping] = &[
+    FieldMapping {
+        guest: GuestKind::Lxc,
+        api: "hostname",
+        yaml: &["hostname"],
+        value: FieldValue::String,
+    },
+    FieldMapping {
+        guest: GuestKind::Lxc,
+        api: "cores",
+        yaml: &["cores"],
+        value: FieldValue::Integer,
+    },
+    FieldMapping {
+        guest: GuestKind::Lxc,
+        api: "memory",
+        yaml: &["memory_mb"],
+        value: FieldValue::Integer,
+    },
+    FieldMapping {
+        guest: GuestKind::Lxc,
+        api: "swap",
+        yaml: &["swap_mb"],
+        value: FieldValue::Integer,
+    },
+    FieldMapping {
+        guest: GuestKind::Lxc,
+        api: "onboot",
+        yaml: &["start", "onboot"],
+        value: FieldValue::Boolean,
+    },
+    FieldMapping {
+        guest: GuestKind::Lxc,
+        api: "size_gb",
+        yaml: &["rootfs", "size_gb"],
+        value: FieldValue::Integer,
+    },
+    FieldMapping {
+        guest: GuestKind::Qemu,
+        api: "name",
+        yaml: &["name"],
+        value: FieldValue::String,
+    },
+    FieldMapping {
+        guest: GuestKind::Qemu,
+        api: "machine",
+        yaml: &["machine"],
+        value: FieldValue::String,
+    },
+    FieldMapping {
+        guest: GuestKind::Qemu,
+        api: "bios",
+        yaml: &["bios"],
+        value: FieldValue::String,
+    },
+    FieldMapping {
+        guest: GuestKind::Qemu,
+        api: "cores",
+        yaml: &["cpu", "cores"],
+        value: FieldValue::Integer,
+    },
+    FieldMapping {
+        guest: GuestKind::Qemu,
+        api: "sockets",
+        yaml: &["cpu", "sockets"],
+        value: FieldValue::Integer,
+    },
+    FieldMapping {
+        guest: GuestKind::Qemu,
+        api: "memory",
+        yaml: &["memory_mb"],
+        value: FieldValue::Integer,
+    },
+    FieldMapping {
+        guest: GuestKind::Qemu,
+        api: "cpu",
+        yaml: &["cpu", "type"],
+        value: FieldValue::String,
+    },
+    FieldMapping {
+        guest: GuestKind::Qemu,
+        api: "agent",
+        yaml: &["qemu_guest_agent"],
+        value: FieldValue::Boolean,
+    },
+    FieldMapping {
+        guest: GuestKind::Qemu,
+        api: "onboot",
+        yaml: &["start", "onboot"],
+        value: FieldValue::Boolean,
+    },
+    FieldMapping {
+        guest: GuestKind::Qemu,
+        api: "size_gb",
+        yaml: &["disk", "size_gb"],
+        value: FieldValue::Integer,
+    },
+];
+
+fn adoption_patch(kind: GuestKind, field: GuestField, production: &str) -> Result<yaml::Patch> {
+    use yaml::Segment::{Index, Key};
+    if let (GuestKind::Lxc, GuestField::BindMountBackup(index)) = (kind, field) {
+        return Ok(yaml::Patch::Set(
+            vec![
+                Key("bind_mounts".into()),
+                Index(index.into()),
+                Key("backed_up_by_pve".into()),
+            ],
+            serde_yaml::Value::Bool(bool_value(production)?),
+        ));
     }
-    Ok(())
+    let api = field.api_name();
+    let mapping = FIELD_MAPPINGS
+        .iter()
+        .find(|mapping| mapping.guest == kind && mapping.api == api)
+        .with_context(|| format!("unsupported adoption field {api}"))?;
+    let path = mapping.yaml.iter().map(|key| Key((*key).into())).collect();
+    let value = match mapping.value {
+        FieldValue::String => serde_yaml::Value::String(production.into()),
+        FieldValue::Integer => serde_yaml::from_str(production)?,
+        FieldValue::Boolean => serde_yaml::Value::Bool(bool_value(production)?),
+    };
+    Ok(yaml::Patch::Set(path, value))
 }
 
 fn guest_config<'a>(observed: &'a Value, node: &str, guest: GuestRef) -> Result<&'a Value> {
@@ -343,10 +454,7 @@ mod tests {
 
     #[test]
     fn adopts_lxc_mount_backup_flag() {
-        let temp = tempfile::tempdir().unwrap();
-        Repository::initialize(temp.path()).unwrap();
-        let repo = Repository::open(temp.path()).unwrap();
-        let mut guests = repo.guests.clone();
+        let before = include_str!("../../examples/basic/config/guests.yml");
         let candidate = Candidate {
             id: "lxc/101:mp0.backed_up_by_pve".into(),
             resource: "lxc/101".into(),
@@ -357,9 +465,14 @@ mod tests {
             reason: None,
         };
 
-        apply_candidate(&mut guests, &candidate).unwrap();
+        let after = apply_candidate(before, &candidate).unwrap();
+        let guests: crate::model::Guests = serde_yaml::from_str(&after).unwrap();
 
         assert!(guests.lxcs[&101].bind_mounts[0].backed_up_by_pve);
+        assert_eq!(
+            before.replace("backed_up_by_pve: false", "backed_up_by_pve: true"),
+            after
+        );
     }
 
     #[test]
