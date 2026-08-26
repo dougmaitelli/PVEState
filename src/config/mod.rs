@@ -1,4 +1,4 @@
-use crate::model::*;
+use crate::{model::*, scope};
 use anyhow::{Context, Result};
 use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
@@ -25,14 +25,13 @@ pub struct Repository {
 
 impl Repository {
     pub fn open(root: &Path) -> Result<Self> {
-        dotenvy::from_path(root.join(".env")).ok();
         Ok(Self {
             root: root.to_path_buf(),
             guests: read(root, "guests.yml")?,
             network: read(root, "network.yml")?,
             firewall: read(root, "firewall.yml")?,
             recovery_checks: read(root, "recovery-checks.yml")?,
-            manifest: serde_yaml::from_str(&fs::read_to_string(root.join("iac.yml"))?)?,
+            manifest: serde_yaml::from_str(&fs::read_to_string(root.join("pves.yml"))?)?,
             site: read(root, "site.yml")?,
             host: read(root, "host.yml")?,
             storage: read(root, "storage.yml")?,
@@ -54,8 +53,8 @@ impl Repository {
     pub fn initialize(path: &Path) -> Result<()> {
         fs::create_dir_all(path.join("config"))?;
         fs::create_dir_all(path.join("observed/production"))?;
-        fs::write(path.join("iac.yml"), "schema_version: 1\n")?;
-        fs::write(path.join(".gitignore"), ".env\n.secrets/\n.runtime/\n")?;
+        fs::write(path.join("pves.yml"), "schema_version: 1\n")?;
+        fs::write(path.join(".gitignore"), ".pves.env\n.secrets/\n.runtime/\n")?;
         for (name, content) in [
             (
                 "guests.yml",
@@ -105,8 +104,8 @@ impl Repository {
             fs::write(path.join("config").join(name), content)?;
         }
         fs::write(
-            path.join(".env.example"),
-            include_str!("../../examples/basic/.env.example"),
+            path.join(".pves.env.example"),
+            include_str!("../../examples/basic/.pves.env.example"),
         )?;
         println!("initialized configuration repository: {}", path.display());
         Ok(())
@@ -135,6 +134,10 @@ impl Repository {
         write!("recovery-checks.schema.json", RecoveryChecks);
         write!("services.schema.json", ServicesConfig);
         write!("required-secrets.schema.json", RequiredSecretsConfig);
+        fs::write(
+            dir.join("management-scope.json"),
+            serde_json::to_string_pretty(scope::entries())? + "\n",
+        )?;
         println!("wrote configuration schemas to {}", dir.display());
         Ok(())
     }
@@ -143,7 +146,7 @@ impl Repository {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RepositoryDocument {
-    pub iac: RepositoryManifest,
+    pub pves: RepositoryManifest,
     pub site: SiteConfig,
     pub host: HostConfig,
     pub guests: Guests,
@@ -163,14 +166,4 @@ fn read<T: for<'a> Deserialize<'a>>(root: &Path, name: &str) -> Result<T> {
         &fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?,
     )
     .with_context(|| format!("parse {}", path.display()))
-}
-
-pub(crate) fn env(name: &str, default: Option<&str>) -> Result<String> {
-    std::env::var(name)
-        .or_else(|_| {
-            default
-                .map(str::to_owned)
-                .ok_or(std::env::VarError::NotPresent)
-        })
-        .with_context(|| format!("missing {name}"))
 }

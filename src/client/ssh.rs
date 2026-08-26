@@ -1,9 +1,9 @@
-use crate::config::env;
+use super::RemoteHost;
+use crate::settings::SshTarget;
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
 use std::{
     io::Write,
-    path::Path,
     process::{Command, Stdio},
 };
 pub struct Ssh {
@@ -23,32 +23,14 @@ pub struct SshOutput {
 }
 
 impl Ssh {
-    pub fn discovery(root: &Path) -> Result<Self> {
-        Ok(Self {
-            host: env("PVE_HOST", None)?,
-            port: env("PVE_SSH_PORT", Some("22"))?,
-            user: env("PVE_SSH_USER", Some("root"))?,
-            key: root.join(".secrets/pve_discovery").display().to_string(),
-            known: root.join(".secrets/known_hosts").display().to_string(),
-        })
-    }
-    pub fn mutation() -> Result<Self> {
-        Ok(Self {
-            host: env("PVE_HOST", None)?,
-            port: env("PVE_SSH_PORT", Some("22"))?,
-            user: env("PVE_SSH_USER", Some("root"))?,
-            key: env("IAC_APPLY_SSH_KEY", None)?,
-            known: env("IAC_APPLY_KNOWN_HOSTS", None)?,
-        })
-    }
-    pub fn recovery(target: &str) -> Result<Self> {
-        Ok(Self {
-            host: target.into(),
-            port: std::env::var("IAC_TARGET_SSH_PORT").unwrap_or_else(|_| "22".into()),
-            user: std::env::var("IAC_TARGET_SSH_USER").unwrap_or_else(|_| "root".into()),
-            key: env("IAC_TARGET_SSH_KEY", None)?,
-            known: env("IAC_TARGET_KNOWN_HOSTS", None)?,
-        })
+    pub fn new(settings: &SshTarget) -> Self {
+        Self {
+            host: settings.host.clone(),
+            port: settings.port.to_string(),
+            user: settings.user.clone(),
+            key: settings.key.display().to_string(),
+            known: settings.known_hosts.display().to_string(),
+        }
     }
     fn command(&self, remote: &str) -> Command {
         let mut c = Command::new("ssh");
@@ -95,5 +77,17 @@ impl Ssh {
             bail!("ssh operation failed")
         }
         Ok(())
+    }
+}
+
+impl RemoteHost for Ssh {
+    fn run(&self, remote: &str) -> Result<String> {
+        self.run(remote)
+    }
+    fn probe(&self, remote: &str) -> Result<SshOutput> {
+        self.probe(remote)
+    }
+    fn stdin(&self, remote: &str, input: &[u8]) -> Result<()> {
+        self.stdin(remote, input)
     }
 }

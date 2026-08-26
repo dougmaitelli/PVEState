@@ -28,7 +28,7 @@ Create or select a separate environment repository:
 
 ```bash
 pves init ./my-proxmox
-export IAC_CONFIG_DIR="$PWD/my-proxmox"
+export PVES_CONFIG_DIR="$PWD/my-proxmox"
 ```
 
 The current Hades environment is stored separately at `/root/pveconf`.
@@ -38,7 +38,7 @@ my-proxmox/
 ├── config/                 desired YAML
 ├── observed/production/    sanitized, reviewable API snapshots and native exports
 ├── .runtime/               ignored raw observations and plans
-├── .env                    ignored API credentials
+├── .pves.env               ignored PVE State credentials and connection settings
 └── .secrets/               ignored SSH material
 ```
 
@@ -74,6 +74,11 @@ PVE_SSH_USER=root       # optional; default root
 
 Discovery and mutation use separate credentials, but both address `PVE_HOST`.
 
+Environment values are loaded once into typed settings before a command runs.
+Ports are parsed as integers, endpoints as URLs, TLS flags as booleans, domains
+as a set, and file locations as paths. Credential pairs are validated together;
+read-only roles do not require mutation credentials.
+
 PBS API discovery runs as part of every capture and requires:
 
 ```bash
@@ -83,6 +88,12 @@ PBS_API_TOKEN_SECRET=secret
 PBS_VERIFY_TLS=true
 # PBS_CA_FILE=/absolute/path/to/private-ca.pem
 ```
+
+PBS mutations use a separate narrowly scoped identity through
+`PBS_APPLY_API_TOKEN_ID` and `PBS_APPLY_API_TOKEN_SECRET`. Creating a missing S3
+endpoint additionally resolves `PBS_APPLY_S3_ACCESS_KEY` and
+`PBS_APPLY_S3_SECRET_KEY` at apply time; those values are never written to YAML
+or plan files.
 
 `pves capture` dynamically enumerates every PVE node, VM, and LXC. The captured
 PVE snapshot includes each guest's full API configuration and native config,
@@ -97,19 +108,50 @@ groups, and snapshots. Sanitized stable snapshots are written to
 `observed/production/api/`; detailed timestamped snapshots are written beneath
 ignored `.runtime/`.
 
+Every capture writes a typed evidence manifest. A capture is `complete` only
+when all required PVE API, PBS API, native SSH, and host SSH requests succeed.
+The manifest records the exact sanitized artifact set, SHA-256 hashes, sizes,
+source endpoints, and failures. Partial captures remain available for diagnosis,
+but `plan` rejects partial, stale, missing, unexpected, or modified evidence.
+
+### Configuration scope
+
+Loading and validating a configuration file does not by itself mean every field
+is changed by `apply`. PVE State classifies configuration as:
+
+- `production-managed`: compared with production and emitted into a guarded plan;
+- `recovery-only`: consumed only by replacement-host recovery or validation;
+- `declared-only`: represented in desired state but not yet reconciled;
+- `metadata`: descriptive repository or environment information.
+
+The field-level source of truth is `scope::entries()` in the tool. `pves schema`
+publishes it as `management-scope.json`; the checked-in copy lives alongside the
+JSON Schemas. PVE/PBS backup jobs, node firewalls, absent guest firewall files,
+LXC bind mounts, and guest device removals are production-managed. Remaining
+gaps, such as privileged/unprivileged LXC conversion, are explicitly marked
+`declared-only`.
+
 ### Safety model
 
 `apply` requires a plan less than 30 minutes old, an exact plan SHA, an exact
 target, explicitly approved domains, and separate mutation credentials. Guest
 deletion/replacement, disk shrinking, and implicit storage moves are not modeled.
 Proxmox config digests and remote file hashes reject concurrent changes.
-Network files are not activated unless `IAC_APPLY_NETWORK_NOW=YES`.
+Network files are not activated unless `PVES_APPLY_NETWORK_NOW=YES`.
+
+Every authorized apply attempt creates `.runtime/apply-<id>.json` and updates
+`.runtime/apply-latest.json` before initializing mutation clients. Operations
+are durably journaled as `pending`, `running`, `applied`, or `failed` after each
+transition. A partial failure preserves earlier successes, the current error,
+later pending work, timestamps, targets, and the confirmed plan digest. Journal
+files are published with write, flush, filesystem sync, and rename; apply errors
+always report the attempt-specific journal path.
 
 ```bash
-export IAC_ENABLE_PRODUCTION_APPLY=YES
-export IAC_CONFIRM_PLAN_SHA='<sha from .runtime/production-plan.json>'
-export IAC_APPLY_TARGET='https://pve.example:8006'
-export IAC_APPLY_DOMAINS='guests,firewall,dns'
+export PVES_ENABLE_PRODUCTION_APPLY=YES
+export PVES_CONFIRM_PLAN_SHA='<sha from .runtime/production-plan.json>'
+export PVES_APPLY_TARGET='https://pve.example:8006'
+export PVES_APPLY_DOMAINS='guests,firewall,dns,backup,pbs'
 pves apply
 ```
 
@@ -118,10 +160,23 @@ pves apply
 - `init PATH`: scaffold an environment repository.
 - `capture`: refresh API observations and sanitized host/firewall exports.
 - `plan`: validate desired state and create a deterministic guarded plan.
-- `apply`: execute exactly the confirmed non-destructive plan.
+- `adopt`: preview production values that can be copied into desired state;
+  `--write` requires one or more explicit `--id` selections.
+- `apply`: execute exactly the confirmed plan; removals are generated only from
+  explicit desired-state absence or `absent_*` identifiers.
 - `validate`: verify all managed guests are running.
 - `recover ACTION TARGET`: grouped disaster-recovery interface.
 - `schema`: emit JSON Schemas for the repository manifest and every configuration document.
+
+Preview values that can be adopted from the latest verified capture and plan:
+
+```bash
+pves --config-dir ./environment adopt
+pves --config-dir ./environment adopt --write --id lxc/106:mp0.backed_up_by_pve
+```
+
+Preview is read-only. Writing requires explicit candidate IDs; unsupported or
+ambiguous fields are reported but cannot be selected.
 
 ## Development
 
@@ -136,9 +191,20 @@ CI runs `rustfmt`, Clippy with warnings denied, tests, and release builds on
 Linux, macOS, and Windows. Pushing a `v*` tag creates checksummed GitHub Release
 archives consumed by `install.sh`.
 
+Command logic depends on `PveClient`, `PbsClient`, and `RemoteHost` capabilities,
+not concrete HTTP or SSH implementations. `main` is the composition root that
+constructs real clients from typed settings. Tests inject in-memory clients to
+exercise request generation, discovery, and partial failures without network or
+production access.
+
+Safety-critical plumbing is shared across commands: plan envelopes use one
+signing and integrity-verification implementation, apply and recovery use one
+authorization policy engine, remote commands use one shell-quoting and file
+verification module, and plans and execution journals use durable atomic writes.
+
 ## Security
 
-Never commit `.env`, `.secrets`, raw runtime observations, API tokens, private
+Never commit `.pves.env`, `.secrets`, raw runtime observations, API tokens, private
 keys, application secrets, or PBS S3 credentials. Use a read-only discovery
 identity and a distinct, narrowly scoped mutation identity.
 

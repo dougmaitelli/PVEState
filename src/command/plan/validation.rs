@@ -49,10 +49,50 @@ pub(super) fn validate(repo: &Repository) -> Result<()> {
     if let Some(id) = repo.firewall.guests.keys().find(|id| !managed.contains(id)) {
         bail!("firewall policy references unmanaged VMID {id}");
     }
+    if let Some(id) = repo
+        .firewall
+        .absent_guest_files
+        .iter()
+        .find(|id| repo.firewall.guests.contains_key(id))
+    {
+        bail!("guest firewall {id} is both managed and explicitly absent");
+    }
+    validate_present_absent(
+        "PVE backup job",
+        repo.backup.pve_backup_jobs.keys(),
+        &repo.backup.absent_pve_backup_jobs,
+    )?;
+    validate_present_absent(
+        "PBS prune job",
+        repo.backup.pbs.jobs.prune.keys(),
+        &repo.backup.pbs.jobs.absent_prune,
+    )?;
+    validate_present_absent(
+        "PBS verify job",
+        repo.backup.pbs.jobs.verify.keys(),
+        &repo.backup.pbs.jobs.absent_verify,
+    )?;
+    validate_present_absent(
+        "PBS sync job",
+        repo.backup.pbs.jobs.sync.keys(),
+        &repo.backup.pbs.jobs.absent_sync,
+    )?;
     println!(
-        "configuration valid: {} guests, {} NICs",
+        "configuration structurally valid: {} guests, {} NICs; management scope is documented in management-scope.json",
         managed.len(),
         macs.len()
     );
+    Ok(())
+}
+
+fn validate_present_absent<'a>(
+    kind: &str,
+    present: impl IntoIterator<Item = &'a String>,
+    absent: &[String],
+) -> Result<()> {
+    let present: BTreeSet<_> = present.into_iter().collect();
+    if let Some(id) = absent.iter().find(|id| present.contains(id)) {
+        bail!("{kind} {id} is both managed and explicitly absent");
+    }
     Ok(())
 }

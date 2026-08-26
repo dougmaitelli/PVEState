@@ -14,11 +14,19 @@ pbs:
     endpoint_template: "{{bucket}}.s3.example.test"
     region: us-west-1
   jobs:
-    prune: {schedule: daily}
-    verify: {schedule: weekly, ignore_verified: true, outdated_after_days: 30}
-pve_backup_job:
-  datastore: example-backup
-  schedule: weekly
-  mode: snapshot
-  guest_ids: [101, 201]
-  retention: {keep_last: 3}
+    prune:
+      prune-example: {store: example-backup, schedule: daily}
+    verify:
+      verify-example: {store: example-backup, schedule: weekly, ignore_verified: true, outdated_after_days: 30}
+    sync: {}
+    absent_prune: []
+    absent_verify: []
+    absent_sync: []
+pve_backup_jobs:
+  backup-example:
+    storage: pbs
+    schedule: weekly
+    mode: snapshot
+    guest_ids: [101, 201]
+    retention: {keep_last: 3}
+absent_pve_backup_jobs: []

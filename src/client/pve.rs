@@ -1,6 +1,7 @@
-use crate::config::env;
+use super::PveClient;
+use crate::settings::{ApiCredential, PveSettings};
 use anyhow::{Context, Result};
-use reqwest::{Certificate, blocking::Client};
+use reqwest::{Certificate, Method, blocking::Client};
 use serde_json::Value;
 use std::{collections::BTreeMap, fs, time::Duration};
 pub struct Pve {
@@ -10,31 +11,30 @@ pub struct Pve {
 }
 
 impl Pve {
-    pub fn discovery() -> Result<Self> {
-        Self::from_env("PVE_API_TOKEN_ID", "PVE_API_TOKEN_SECRET")
+    pub fn discovery(settings: &PveSettings) -> Result<Self> {
+        Self::new(settings, settings.discovery_credential()?)
     }
 
-    pub fn mutation() -> Result<Self> {
-        Self::from_env("PVE_APPLY_API_TOKEN_ID", "PVE_APPLY_API_TOKEN_SECRET")
+    pub fn mutation(settings: &PveSettings) -> Result<Self> {
+        Self::new(settings, settings.mutation_credential()?)
     }
 
-    fn from_env(i: &str, s: &str) -> Result<Self> {
-        let host = env("PVE_HOST", None)?;
-        let scheme = env("PVE_API_SCHEME", Some("https"))?;
-        let port = env("PVE_API_PORT", Some("8006"))?;
-        let id = std::env::var(i).with_context(|| i.to_string())?;
-        let secret = std::env::var(s).with_context(|| s.to_string())?;
+    fn new(settings: &PveSettings, credential: &ApiCredential) -> Result<Self> {
         let mut builder = Client::builder()
             .timeout(Duration::from_secs(30))
-            .danger_accept_invalid_certs(std::env::var("PVE_VERIFY_TLS").as_deref() == Ok("false"));
-        if let Ok(path) = std::env::var("PVE_CA_FILE") {
-            let pem = fs::read(&path).with_context(|| format!("read PVE CA file {path}"))?;
+            .danger_accept_invalid_certs(!settings.verify_tls);
+        if let Some(path) = &settings.ca_file {
+            let pem =
+                fs::read(path).with_context(|| format!("read PVE CA file {}", path.display()))?;
             builder = builder.add_root_certificate(Certificate::from_pem(&pem)?);
         }
         let http = builder.build()?;
         Ok(Self {
-            base: format!("{scheme}://{host}:{port}/api2/json"),
-            token: format!("PVEAPIToken={id}={secret}"),
+            base: format!(
+                "{}/api2/json",
+                settings.endpoint.as_str().trim_end_matches('/')
+            ),
+            token: format!("PVEAPIToken={}={}", credential.id, credential.secret),
             http,
         })
     }
@@ -60,12 +60,42 @@ impl Pve {
     }
 
     pub fn put(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+        self.mutate(Method::PUT, path, data)
+    }
+
+    pub fn post(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+        self.mutate(Method::POST, path, data)
+    }
+
+    pub fn delete(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+        self.mutate(Method::DELETE, path, data)
+    }
+
+    fn mutate(&self, method: Method, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
         self.http
-            .put(format!("{}{}", self.base, path))
+            .request(method, format!("{}{}", self.base, path))
             .header("Authorization", &self.token)
             .form(data)
             .send()?
             .error_for_status()?;
         Ok(())
+    }
+}
+
+impl PveClient for Pve {
+    fn endpoint(&self) -> &str {
+        self.endpoint()
+    }
+    fn get(&self, path: &str) -> Result<Value> {
+        self.get(path)
+    }
+    fn put(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+        self.put(path, data)
+    }
+    fn post(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+        self.post(path, data)
+    }
+    fn delete(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+        self.delete(path, data)
     }
 }

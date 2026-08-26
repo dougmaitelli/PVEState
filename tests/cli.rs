@@ -25,7 +25,8 @@ fn init_creates_a_configuration_repository() {
         .status()
         .unwrap();
     assert!(status.success());
-    assert!(root.join("iac.yml").is_file());
+    assert!(root.join("pves.yml").is_file());
+    assert!(root.join(".pves.env.example").is_file());
     assert!(root.join("config").is_dir());
     assert!(root.join("observed/production").is_dir());
     Repository::open(&root).expect("generated repository must satisfy every typed contract");
@@ -73,4 +74,5 @@ fn schema_command_writes_every_document_schema() {
             "{name}"
         );
     }
+    assert!(temp.path().join("management-scope.json").is_file());
 }

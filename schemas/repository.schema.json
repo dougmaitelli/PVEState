@@ -15,11 +15,11 @@
     "host": {
       "$ref": "#/$defs/HostConfig"
     },
-    "iac": {
-      "$ref": "#/$defs/RepositoryManifest"
-    },
     "network": {
       "$ref": "#/$defs/Network"
+    },
+    "pves": {
+      "$ref": "#/$defs/RepositoryManifest"
     },
     "recovery_checks": {
       "$ref": "#/$defs/RecoveryChecks"
@@ -42,7 +42,7 @@
   },
   "additionalProperties": false,
   "required": [
-    "iac",
+    "pves",
     "site",
     "host",
     "guests",
@@ -59,17 +59,27 @@
     "BackupConfig": {
       "type": "object",
       "properties": {
+        "absent_pve_backup_jobs": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
         "pbs": {
           "$ref": "#/$defs/PbsBackup"
         },
-        "pve_backup_job": {
-          "$ref": "#/$defs/PveBackupJob"
+        "pve_backup_jobs": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/PveBackupJob"
+          },
+          "default": {}
         }
       },
       "additionalProperties": false,
       "required": [
-        "pbs",
-        "pve_backup_job"
+        "pbs"
       ]
     },
     "BackupGuest": {
@@ -93,18 +103,50 @@
     "BackupJobs": {
       "type": "object",
       "properties": {
+        "absent_prune": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "absent_sync": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "absent_verify": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
         "prune": {
-          "$ref": "#/$defs/Schedule"
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/PruneJob"
+          },
+          "default": {}
+        },
+        "sync": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/SyncJob"
+          },
+          "default": {}
         },
         "verify": {
-          "$ref": "#/$defs/VerifySchedule"
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/VerifyJob"
+          },
+          "default": {}
         }
       },
-      "additionalProperties": false,
-      "required": [
-        "prune",
-        "verify"
-      ]
+      "additionalProperties": false
     },
     "BindMount": {
       "type": "object",
@@ -676,6 +718,16 @@
     "NodeFirewall": {
       "type": "object",
       "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "log_level_in": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "present": {
           "type": "boolean"
         },
@@ -838,12 +890,34 @@
         "change_policy"
       ]
     },
+    "PruneJob": {
+      "type": "object",
+      "properties": {
+        "keep_last": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "store": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "store",
+        "schedule"
+      ]
+    },
     "PveBackupJob": {
       "type": "object",
       "properties": {
-        "datastore": {
-          "type": "string"
-        },
         "guest_ids": {
           "type": "array",
           "items": {
@@ -860,11 +934,14 @@
         },
         "schedule": {
           "type": "string"
+        },
+        "storage": {
+          "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
-        "datastore",
+        "storage",
         "schedule",
         "mode",
         "guest_ids",
@@ -1134,18 +1211,6 @@
         "id",
         "endpoint_template",
         "region"
-      ]
-    },
-    "Schedule": {
-      "type": "object",
-      "properties": {
-        "schedule": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "schedule"
       ]
     },
     "SecretGroups": {
@@ -1574,6 +1639,44 @@
         "device_class"
       ]
     },
+    "SyncJob": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "type": "string",
+          "default": "pull"
+        },
+        "remote": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "remote_store": {
+          "type": "string"
+        },
+        "remove_vanished": {
+          "type": "boolean",
+          "default": false
+        },
+        "schedule": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "store": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "store",
+        "remote_store"
+      ]
+    },
     "ToolRequirement": {
       "type": "object",
       "properties": {
@@ -1602,7 +1705,7 @@
         "host"
       ]
     },
-    "VerifySchedule": {
+    "VerifyJob": {
       "type": "object",
       "properties": {
         "ignore_verified": {
@@ -1615,10 +1718,14 @@
         },
         "schedule": {
           "type": "string"
+        },
+        "store": {
+          "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
+        "store",
         "schedule",
         "ignore_verified",
         "outdated_after_days"

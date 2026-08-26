@@ -1,9 +1,18 @@
-use crate::{client::Ssh, config::Repository, render};
+use crate::{
+    client::RemoteHost,
+    config::Repository,
+    render,
+    settings::RecoverySettings,
+    utility::{
+        atomic_file, authorization,
+        plan_envelope::{self, PlanEnvelope},
+        shell,
+    },
+};
 use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::fs;
 
 #[derive(Clone, Copy)]
@@ -26,44 +35,48 @@ struct RecoveryPlan {
 }
 
 impl RecoveryPlan {
-    fn hash(&self) -> Result<String> {
-        let mut unsigned = self.clone();
-        unsigned.plan_sha256.clear();
-        Ok(hex::encode(Sha256::digest(serde_json::to_vec(&unsigned)?)))
-    }
-
     fn verify(&self) -> Result<()> {
-        if self.hash()? != self.plan_sha256 {
-            bail!("recovery plan integrity check failed")
-        }
-        Ok(())
+        plan_envelope::verify(self, "recovery plan integrity check failed")
     }
 }
 
-pub fn run(repo: &Repository, stage: Stage, target: &str) -> Result<()> {
+impl PlanEnvelope for RecoveryPlan {
+    fn integrity(&self) -> &str {
+        &self.plan_sha256
+    }
+    fn set_integrity(&mut self, value: String) {
+        self.plan_sha256 = value;
+    }
+}
+
+pub fn run(
+    repo: &Repository,
+    stage: Stage,
+    target: &str,
+    settings: &RecoverySettings,
+    ssh: Option<&dyn RemoteHost>,
+) -> Result<()> {
     if matches!(stage, Stage::Plan) {
         return create_plan(repo, target);
     }
     let plan: RecoveryPlan = serde_json::from_slice(
         &fs::read(repo.runtime().join("recovery-plan.json")).context("run recover plan first")?,
     )?;
-    authorize(&plan, target)?;
-    if repo.restore.target.production_address == target
-        && std::env::var("IAC_ALLOW_PRODUCTION_TARGET").as_deref() != Ok("YES")
-    {
-        bail!("recovery target is production; IAC_ALLOW_PRODUCTION_TARGET must equal YES")
+    authorize(&plan, target, settings)?;
+    if repo.restore.target.production_address == target && !settings.allow_production_target {
+        bail!("recovery target is production; PVES_ALLOW_PRODUCTION_TARGET must equal YES")
     }
-    let ssh = Ssh::recovery(target)?;
+    let ssh = ssh.context("recovery SSH settings are required")?;
     match stage {
-        Stage::BootstrapPve => bootstrap_pve(repo, &ssh),
-        Stage::BootstrapPbs => bootstrap_pbs(repo, &ssh),
-        Stage::Restore => restore(repo, &ssh),
-        Stage::Configure => configure(repo, &ssh),
+        Stage::BootstrapPve => bootstrap_pve(repo, ssh),
+        Stage::BootstrapPbs => bootstrap_pbs(repo, ssh),
+        Stage::Restore => restore(repo, ssh),
+        Stage::Configure => configure(repo, ssh),
         Stage::All => {
-            bootstrap_pve(repo, &ssh)?;
-            bootstrap_pbs(repo, &ssh)?;
-            restore(repo, &ssh)?;
-            configure(repo, &ssh)
+            bootstrap_pve(repo, ssh)?;
+            bootstrap_pbs(repo, ssh)?;
+            restore(repo, ssh)?;
+            configure(repo, ssh)
         },
         Stage::Plan => unreachable!(),
     }
@@ -92,37 +105,35 @@ fn create_plan(repo: &Repository, target: &str) -> Result<()> {
         blockers,
         plan_sha256: String::new(),
     };
-    plan.plan_sha256 = plan.hash()?;
-    fs::create_dir_all(repo.runtime())?;
-    fs::write(
-        repo.runtime().join("recovery-plan.json"),
-        serde_json::to_vec_pretty(&plan)?,
-    )?;
+    plan_envelope::sign(&mut plan)?;
+    atomic_file::write_json(&repo.runtime().join("recovery-plan.json"), &plan)?;
     println!("{}", serde_json::to_string_pretty(&plan)?);
     Ok(())
 }
 
-fn authorize(plan: &RecoveryPlan, target: &str) -> Result<()> {
+fn authorize(plan: &RecoveryPlan, target: &str, settings: &RecoverySettings) -> Result<()> {
     plan.verify()?;
-    if std::env::var("IAC_ENABLE_RECOVERY").as_deref() != Ok("YES") {
-        bail!("IAC_ENABLE_RECOVERY must equal YES")
-    }
-    if std::env::var("IAC_CONFIRM_PLAN_SHA").as_deref() != Ok(&plan.plan_sha256) {
-        bail!("recovery plan SHA mismatch")
-    }
-    if plan.target != target {
-        bail!("recovery target mismatch")
-    }
-    if Utc::now() - plan.created_at > chrono::Duration::minutes(30) {
-        bail!("recovery plan is stale")
-    }
-    if !plan.blockers.is_empty() {
-        bail!("recovery blockers: {}", plan.blockers.join(", "))
-    }
-    Ok(())
+    authorization::authorize(
+        &plan.plan_sha256,
+        &plan.target,
+        plan.created_at,
+        &plan.blockers,
+        authorization::Policy {
+            enabled: settings.enabled,
+            enabled_error: "PVES_ENABLE_RECOVERY must equal YES",
+            confirmation: settings.confirm_plan_sha.as_deref(),
+            confirmation_error: "recovery plan SHA mismatch",
+            requested_target: target,
+            target_error: "recovery target mismatch",
+            max_age: chrono::Duration::minutes(30),
+            stale_error: "recovery plan is stale",
+            blocker_prefix: "recovery blockers: ",
+            blocker_separator: ", ",
+        },
+    )
 }
 
-fn bootstrap_pve(repo: &Repository, ssh: &Ssh) -> Result<()> {
+fn bootstrap_pve(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
     ssh.run("pveversion")?;
     ssh.run("zpool list -H -o name VMs; zpool list -H -o name Data; test -d /mnt/pve/backup; test -d /mnt/pve/security")?;
     write(
@@ -141,7 +152,7 @@ fn bootstrap_pve(repo: &Repository, ssh: &Ssh) -> Result<()> {
     Ok(())
 }
 
-fn bootstrap_pbs(repo: &Repository, ssh: &Ssh) -> Result<()> {
+fn bootstrap_pbs(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
     let template = repo
         .restore
         .pbs_bootstrap
@@ -151,21 +162,21 @@ fn bootstrap_pbs(repo: &Repository, ssh: &Ssh) -> Result<()> {
     let guest = repo.guests.lxcs.get(&111).context("LXC 111")?;
     let create = format!(
         "pct status 111 >/dev/null 2>&1 || pct create 111 {} --hostname {} --cores {} --memory {} --swap {} --rootfs {}:{} --net0 {} --unprivileged 0 --onboot 1",
-        quote(template),
-        quote(&guest.hostname),
+        shell::quote(template),
+        shell::quote(&guest.hostname),
         guest.cores,
         guest.memory_mb,
         guest.swap_mb,
-        quote(&guest.rootfs.storage),
+        shell::quote(&guest.rootfs.storage),
         guest.rootfs.size_gb,
-        quote(&render::lxc_nic(&guest.network))
+        shell::quote(&render::lxc_nic(&guest.network))
     );
     ssh.run(&create)?;
     ssh.run("pct set 111 -mp0 /mnt/pve/backup,mp=/mnt/backup; pct start 111 2>/dev/null || true; pct exec 111 -- sh -c 'apt-get update && apt-get install -y proxmox-backup-server'")?;
     Ok(())
 }
 
-fn restore(repo: &Repository, ssh: &Ssh) -> Result<()> {
+fn restore(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
     for id in &repo.restore.restore_order {
         let id = *id;
         let archive = repo
@@ -185,14 +196,14 @@ fn restore(repo: &Repository, ssh: &Ssh) -> Result<()> {
         if let Some(guest) = repo.guests.lxcs.get(&id) {
             ssh.run(&format!(
                 "pct restore {id} {} --storage {}",
-                quote(archive),
-                quote(&guest.rootfs.storage)
+                shell::quote(archive),
+                shell::quote(&guest.rootfs.storage)
             ))?;
         } else if let Some(guest) = repo.guests.vms.get(&id) {
             ssh.run(&format!(
                 "qmrestore {} {id} --storage {}",
-                quote(archive),
-                quote(&guest.disk.storage)
+                shell::quote(archive),
+                shell::quote(&guest.disk.storage)
             ))?;
         }
     }
@@ -203,8 +214,8 @@ fn restore(repo: &Repository, ssh: &Ssh) -> Result<()> {
         let target = &mount.target;
         ssh.run(&format!(
             "pct set {id} -mp{index} {},mp={}",
-            quote(source),
-            quote(target)
+            shell::quote(source),
+            shell::quote(target)
         ))?;
     }
     for (id, policy) in &repo.firewall.guests {
@@ -221,7 +232,7 @@ fn restore(repo: &Repository, ssh: &Ssh) -> Result<()> {
     Ok(())
 }
 
-fn configure(repo: &Repository, ssh: &Ssh) -> Result<()> {
+fn configure(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
     let command = repo
         .restore
         .application
@@ -232,22 +243,18 @@ fn configure(repo: &Repository, ssh: &Ssh) -> Result<()> {
     Ok(())
 }
 
-fn write(ssh: &Ssh, path: &str, content: &str, mode: &str) -> Result<()> {
+fn write(ssh: &dyn RemoteHost, path: &str, content: &str, mode: &str) -> Result<()> {
     let encoded = STANDARD.encode(content);
     ssh.stdin(
         &format!(
-            "base64 -d > {}.iac-new && install -m {} {}.iac-new {}",
-            quote(path),
+            "base64 -d > {}.pves-new && install -m {} {}.pves-new {}",
+            shell::quote(path),
             mode,
-            quote(path),
-            quote(path)
+            shell::quote(path),
+            shell::quote(path)
         ),
         encoded.as_bytes(),
     )
-}
-
-fn quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 #[cfg(test)]
@@ -263,7 +270,7 @@ mod tests {
             blockers: Vec::new(),
             plan_sha256: String::new(),
         };
-        plan.plan_sha256 = plan.hash().unwrap();
+        plan_envelope::sign(&mut plan).unwrap();
         assert!(plan.verify().is_ok());
         plan.target = "other".into();
         assert!(plan.verify().is_err());

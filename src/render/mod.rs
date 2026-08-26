@@ -1,4 +1,4 @@
-use crate::model::{FirewallPolicy, Network, Nic, VmNic};
+use crate::model::{BindMount, FirewallPolicy, FirewallRule, Network, Nic, NodeFirewall, VmNic};
 
 pub fn options(items: Vec<(&str, Option<String>)>) -> String {
     items
@@ -29,6 +29,15 @@ pub fn vm_nic(n: &VmNic) -> String {
         ("firewall", Some(u8::from(n.firewall).to_string())),
         ("tag", n.vlan.map(|x| x.to_string())),
     ])
+}
+
+pub fn bind_mount(mount: &BindMount) -> String {
+    format!(
+        "{},mp={},backup={}",
+        mount.source,
+        mount.target,
+        u8::from(mount.backed_up_by_pve)
+    )
 }
 
 pub fn network(n: &Network) -> String {
@@ -67,28 +76,44 @@ pub fn firewall_policy(policy: &FirewallPolicy) -> String {
     }
     if !policy.rules.is_empty() {
         s += "\n[RULES]\n\n";
-        for rule in &policy.rules {
-            if !rule.enabled {
-                s.push('|')
-            }
-            s += &format!("{} {}", rule.direction, rule.action);
-            if let Some(v) = &rule.interface {
-                s += &format!(" -i {v}")
-            }
-            if let Some(v) = &rule.protocol {
-                s += &format!(" -p {v}")
-            }
-            if let Some(v) = &rule.destination_port {
-                s += &format!(" -dport {v}")
-            }
-            s += &format!(" -log {}", rule.log);
-            if let Some(v) = &rule.comment {
-                s += &format!(" # {v}")
-            }
-            s.push('\n')
-        }
+        render_firewall_rules(&mut s, &policy.rules);
     }
     s
+}
+
+pub fn node_firewall(firewall: &NodeFirewall) -> String {
+    let mut output = format!("[OPTIONS]\n\nenable: {}\n", u8::from(firewall.enabled));
+    if let Some(value) = &firewall.log_level_in {
+        output += &format!("log_level_in: {value}\n");
+    }
+    if !firewall.rules.is_empty() {
+        output += "\n[RULES]\n\n";
+        render_firewall_rules(&mut output, &firewall.rules);
+    }
+    output
+}
+
+fn render_firewall_rules(output: &mut String, rules: &[FirewallRule]) {
+    for rule in rules {
+        if !rule.enabled {
+            output.push('|')
+        }
+        *output += &format!("{} {}", rule.direction, rule.action);
+        if let Some(value) = &rule.interface {
+            *output += &format!(" -i {value}")
+        }
+        if let Some(value) = &rule.protocol {
+            *output += &format!(" -p {value}")
+        }
+        if let Some(value) = &rule.destination_port {
+            *output += &format!(" -dport {value}")
+        }
+        *output += &format!(" -log {}", rule.log);
+        if let Some(value) = &rule.comment {
+            *output += &format!(" # {value}")
+        }
+        output.push('\n')
+    }
 }
 
 pub fn semantic_lines(s: &str) -> Vec<String> {

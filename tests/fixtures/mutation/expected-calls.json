@@ -1,0 +1,6 @@
+[
+  {"client":"pve","method":"put","path":"/nodes/pve/lxc/101/config","data":{"cores":"4","digest":"abc"}},
+  {"client":"pbs","method":"post","path":"/config/s3","data":{"access-key":"fixture-access-key","id":"archive"}},
+  {"client":"pve","method":"put","path":"/nodes/pve/qemu/201/resize","data":{"disk":"scsi0","size":"64G"}},
+  {"client":"pbs","method":"delete","path":"/config/prune/old","data":{}}
+]

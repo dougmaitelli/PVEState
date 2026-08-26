@@ -1,8 +1,12 @@
-use crate::{client::Ssh, config::Repository, discovery::PveSnapshot};
+use crate::{client::RemoteHost, config::Repository, discovery::PveSnapshot};
 use anyhow::{Context, Result};
 use std::{collections::BTreeSet, fs, path::Path};
 
-pub(super) fn export(repo: &Repository, ssh: &Ssh, snapshot: &PveSnapshot) -> Result<()> {
+pub(super) fn export(
+    repo: &Repository,
+    ssh: &dyn RemoteHost,
+    snapshot: &PveSnapshot,
+) -> Result<()> {
     for (local, remote) in [
         ("network/interfaces", "/etc/network/interfaces"),
         ("network/hosts", "/etc/hosts"),
@@ -81,13 +85,13 @@ pub(super) fn export(repo: &Repository, ssh: &Ssh, snapshot: &PveSnapshot) -> Re
     Ok(())
 }
 
-fn required(ssh: &Ssh, remote: &str, local: &Path) -> Result<()> {
+fn required(ssh: &dyn RemoteHost, remote: &str, local: &Path) -> Result<()> {
     let command = format!("cat {remote}");
     let data = ssh.run(&command).with_context(|| remote.to_string())?;
     write(local, &data)
 }
 
-fn optional(ssh: &Ssh, command: &str, local: &Path) -> Result<()> {
+fn optional(ssh: &dyn RemoteHost, command: &str, local: &Path) -> Result<()> {
     match ssh.run(command) {
         Ok(data) => write(local, &data)?,
         Err(_) if local.exists() => fs::remove_file(local)?,

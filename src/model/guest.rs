@@ -1,3 +1,4 @@
+use super::{DiskInterface, UsbSlot};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -66,7 +67,8 @@ pub struct Disk {
 #[serde(deny_unknown_fields)]
 pub struct VmDisk {
     pub storage: String,
-    pub interface: String,
+    #[schemars(with = "String")]
+    pub interface: DiskInterface,
     pub size_gb: u64,
     #[serde(default)]
     pub discard: bool,
@@ -107,7 +109,8 @@ pub struct VmNic {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Usb {
-    pub slot: String,
+    #[schemars(with = "String")]
+    pub slot: UsbSlot,
     pub host: String,
 }
 
