@@ -1,0 +1,60 @@
+{
+  "pve": {
+    "/nodes/pve/lxc/101/config": {
+      "hostname": "old-apps",
+      "ostype": "debian-13",
+      "cores": 1,
+      "memory": 2048,
+      "swap": 512,
+      "onboot": 1,
+      "startup": "order=20,up=10",
+      "unprivileged": 1,
+      "net0": "name=eth0,bridge=vmbr0,firewall=1,gw=192.0.2.1,hwaddr=02:00:00:00:01:01,ip=192.0.2.101/24",
+      "net1": "name=stale,bridge=vmbr0",
+      "mp0": "/mnt/data/apps,mp=/srv/data,backup=1",
+      "mp1": "/mnt/stale,mp=/stale",
+      "rootfs": "local-lvm:subvol-101-disk-0,size=8G",
+      "digest": "lxc-digest"
+    },
+    "/nodes/pve/qemu/201/config": {
+      "name": "home-automation",
+      "machine": "q35",
+      "bios": "ovmf",
+      "cores": 2,
+      "sockets": 1,
+      "memory": 2048,
+      "cpu": "host",
+      "onboot": 1,
+      "agent": 1,
+      "startup": "order=30",
+      "net0": "virtio=02:00:00:00:02:01,bridge=vmbr0,firewall=1",
+      "net1": "virtio=02:00:00:00:02:02,bridge=vmbr0",
+      "usb0": "host=1a86:7523",
+      "usb1": "host=dead:beef",
+      "scsi0": "local-lvm:vm-201-disk-0,size=16G",
+      "efidisk0": "local-lvm:vm-201-disk-1,efitype=4m,pre-enrolled-keys=1",
+      "digest": "vm-digest"
+    },
+    "/nodes/pve/dns": {
+      "search": "old.example.test",
+      "dns1": "192.0.2.53",
+      "dns2": "8.8.8.8"
+    },
+    "/cluster/backup": [
+      {"id":"backup-example","storage":"pbs","schedule":"daily","mode":"snapshot","vmid":"201,101","prune-backups":{"keep-last":3}}
+    ]
+  },
+  "pbs": {
+    "/config/datastore": [
+      {"name":"example-backup","path":"/mnt/backup","backend":"bucket=example-backups,client=example,type=s3","gc-schedule":"weekly"}
+    ],
+    "/config/s3": [],
+    "/config/prune": [
+      {"id":"prune-example","store":"example-backup","schedule":"weekly"}
+    ],
+    "/config/verify": [
+      {"id":"verify-example","store":"example-backup","schedule":"weekly","ignore-verified":true,"outdated-after":30}
+    ],
+    "/config/sync": []
+  }
+}

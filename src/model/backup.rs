@@ -1,11 +1,15 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BackupConfig {
     pub pbs: PbsBackup,
-    pub pve_backup_job: PveBackupJob,
+    #[serde(default)]
+    pub pve_backup_jobs: BTreeMap<String, PveBackupJob>,
+    #[serde(default)]
+    pub absent_pve_backup_jobs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -46,22 +50,36 @@ pub struct S3Endpoint {
     pub region: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BackupJobs {
-    pub prune: Schedule,
-    pub verify: VerifySchedule,
+    #[serde(default)]
+    pub prune: BTreeMap<String, PruneJob>,
+    #[serde(default)]
+    pub verify: BTreeMap<String, VerifyJob>,
+    #[serde(default)]
+    pub sync: BTreeMap<String, SyncJob>,
+    #[serde(default)]
+    pub absent_prune: Vec<String>,
+    #[serde(default)]
+    pub absent_verify: Vec<String>,
+    #[serde(default)]
+    pub absent_sync: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Schedule {
+pub struct PruneJob {
+    pub store: String,
     pub schedule: String,
+    #[serde(default)]
+    pub keep_last: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct VerifySchedule {
+pub struct VerifyJob {
+    pub store: String,
     pub schedule: String,
     pub ignore_verified: bool,
     pub outdated_after_days: u32,
@@ -69,8 +87,27 @@ pub struct VerifySchedule {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct SyncJob {
+    pub store: String,
+    pub remote_store: String,
+    #[serde(default)]
+    pub remote: Option<String>,
+    #[serde(default)]
+    pub schedule: Option<String>,
+    #[serde(default)]
+    pub remove_vanished: bool,
+    #[serde(default = "pull")]
+    pub direction: String,
+}
+
+fn pull() -> String {
+    "pull".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct PveBackupJob {
-    pub datastore: String,
+    pub storage: String,
     pub schedule: String,
     pub mode: String,
     pub guest_ids: Vec<u32>,

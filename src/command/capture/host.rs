@@ -1,9 +1,14 @@
-use crate::{client::Ssh, config::Repository};
+use crate::{client::RemoteHost, config::Repository};
 use anyhow::Result;
 use std::{collections::BTreeMap, fs};
 
-pub(super) fn capture(repo: &Repository, ssh: &Ssh) -> Result<()> {
+pub(super) fn capture(repo: &Repository, ssh: &dyn RemoteHost) -> Result<Vec<String>> {
     let pbs_vmid = repo.backup.pbs.guest.vmid;
+    let cluster_command = if repo.host.host.standalone {
+        "pvecm status 2>&1 || true"
+    } else {
+        "pvecm status 2>&1"
+    };
     let mut host = BTreeMap::new();
     for (name, command) in [
         ("identity", "id; hostname; uname -a; pveversion -v".into()),
@@ -25,7 +30,7 @@ pub(super) fn capture(repo: &Repository, ssh: &Ssh) -> Result<()> {
             "zfs list -Hp -o name,used,available,referenced,mountpoint 2>&1".into(),
         ),
         ("pve_storage", "pvesm status".into()),
-        ("pve_cluster", "pvecm status 2>&1".into()),
+        ("pve_cluster", cluster_command.into()),
         (
             "services",
             "systemctl --no-pager --plain --state=failed 2>&1; systemctl is-enabled pveproxy pvedaemon pvestatd pve-cluster".into(),
@@ -45,9 +50,59 @@ pub(super) fn capture(repo: &Repository, ssh: &Ssh) -> Result<()> {
     ] {
         host.insert(name, ssh.probe(&command)?);
     }
+    let failures = host
+        .iter()
+        .filter(|(_, output)| !output.ok)
+        .map(|(name, output)| {
+            format!(
+                "{name}: exit {:?}: {}",
+                output.return_code,
+                output.stderr.trim()
+            )
+        })
+        .collect();
     fs::write(
         repo.runtime().join("host-latest.json"),
         serde_json::to_vec_pretty(&host)?,
     )?;
-    Ok(())
+    Ok(failures)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::client::SshOutput;
+
+    struct FakeSsh;
+
+    impl RemoteHost for FakeSsh {
+        fn run(&self, _: &str) -> Result<String> {
+            Ok(String::new())
+        }
+
+        fn probe(&self, command: &str) -> Result<SshOutput> {
+            Ok(SshOutput {
+                ok: true,
+                return_code: Some(0),
+                stdout: format!("fixture for {command}"),
+                stderr: String::new(),
+            })
+        }
+
+        fn stdin(&self, _: &str, _: &[u8]) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn host_capture_accepts_an_injected_ssh_client() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("environment");
+        Repository::initialize(&root).unwrap();
+        let repo = Repository::open(&root).unwrap();
+        fs::create_dir_all(repo.runtime()).unwrap();
+
+        assert!(capture(&repo, &FakeSsh).unwrap().is_empty());
+        assert!(repo.runtime().join("host-latest.json").is_file());
+    }
 }

@@ -1,4 +1,4 @@
-use crate::client::Pve;
+use crate::{client::PveClient, model::GuestKind};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
@@ -59,7 +59,7 @@ pub struct Guest {
     pub firewall_rules: Response,
 }
 
-pub fn capture_pve(client: &Pve) -> PveSnapshot {
+pub fn capture_pve(client: &dyn PveClient) -> PveSnapshot {
     let mut requests = BTreeMap::new();
     for (name, path) in CLUSTER_ENDPOINTS {
         requests.insert(name.into(), safe_get(client, path));
@@ -89,8 +89,8 @@ pub fn capture_pve(client: &Pve) -> PveSnapshot {
                 storage: safe_get(client, &format!("/nodes/{node}/storage")),
                 firewall_options: safe_get(client, &format!("/nodes/{node}/firewall/options")),
                 firewall_rules: safe_get(client, &format!("/nodes/{node}/firewall/rules")),
-                lxcs: capture_guests(client, &node, "lxc", &lxc_list),
-                vms: capture_guests(client, &node, "qemu", &qemu_list),
+                lxcs: capture_guests(client, &node, GuestKind::Lxc, &lxc_list),
+                vms: capture_guests(client, &node, GuestKind::Qemu, &qemu_list),
             },
         );
     }
@@ -122,7 +122,7 @@ impl PveSnapshot {
                 ],
                 &mut failures,
             );
-            for (kind, guests) in [("lxc", &node.lxcs), ("qemu", &node.vms)] {
+            for (kind, guests) in [(GuestKind::Lxc, &node.lxcs), (GuestKind::Qemu, &node.vms)] {
                 for (vmid, guest) in guests {
                     collect_failures(
                         &format!("{node_name}/{kind}/{vmid}"),
@@ -142,9 +142,9 @@ impl PveSnapshot {
 }
 
 fn capture_guests(
-    client: &Pve,
+    client: &dyn PveClient,
     node: &str,
-    kind: &str,
+    kind: GuestKind,
     list: &Response,
 ) -> BTreeMap<String, Guest> {
     let mut guests = BTreeMap::new();
@@ -170,7 +170,7 @@ fn capture_guests(
     guests
 }
 
-fn safe_get(client: &Pve, path: &str) -> Response {
+fn safe_get(client: &dyn PveClient, path: &str) -> Response {
     match client.get(path) {
         Ok(data) => Response {
             ok: true,

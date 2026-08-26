@@ -16,6 +16,9 @@ pub struct FirewallConfig {
 #[serde(deny_unknown_fields)]
 pub struct NodeFirewall {
     pub present: bool,
+    #[serde(default = "yes")]
+    pub enabled: bool,
+    pub log_level_in: Option<String>,
     pub rules: Vec<FirewallRule>,
 }
 

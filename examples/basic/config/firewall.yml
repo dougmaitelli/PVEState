@@ -7,6 +7,7 @@ cluster:
 nodes:
   pve:
     present: true
+    enabled: true
     rules:
       - {direction: IN, action: ACCEPT, interface: vmbr0, protocol: tcp, destination_port: "22", log: nolog, comment: SSH administration}
 guests:

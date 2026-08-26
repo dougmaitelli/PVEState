@@ -3,17 +3,27 @@
   "title": "BackupConfig",
   "type": "object",
   "properties": {
+    "absent_pve_backup_jobs": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
     "pbs": {
       "$ref": "#/$defs/PbsBackup"
     },
-    "pve_backup_job": {
-      "$ref": "#/$defs/PveBackupJob"
+    "pve_backup_jobs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/PveBackupJob"
+      },
+      "default": {}
     }
   },
   "additionalProperties": false,
   "required": [
-    "pbs",
-    "pve_backup_job"
+    "pbs"
   ],
   "$defs": {
     "BackupGuest": {
@@ -37,18 +47,50 @@
     "BackupJobs": {
       "type": "object",
       "properties": {
+        "absent_prune": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "absent_sync": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "absent_verify": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
         "prune": {
-          "$ref": "#/$defs/Schedule"
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/PruneJob"
+          },
+          "default": {}
+        },
+        "sync": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/SyncJob"
+          },
+          "default": {}
         },
         "verify": {
-          "$ref": "#/$defs/VerifySchedule"
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/VerifyJob"
+          },
+          "default": {}
         }
       },
-      "additionalProperties": false,
-      "required": [
-        "prune",
-        "verify"
-      ]
+      "additionalProperties": false
     },
     "Datastore": {
       "type": "object",
@@ -114,12 +156,34 @@
         "jobs"
       ]
     },
+    "PruneJob": {
+      "type": "object",
+      "properties": {
+        "keep_last": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "store": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "store",
+        "schedule"
+      ]
+    },
     "PveBackupJob": {
       "type": "object",
       "properties": {
-        "datastore": {
-          "type": "string"
-        },
         "guest_ids": {
           "type": "array",
           "items": {
@@ -136,11 +200,14 @@
         },
         "schedule": {
           "type": "string"
+        },
+        "storage": {
+          "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
-        "datastore",
+        "storage",
         "schedule",
         "mode",
         "guest_ids",
@@ -181,19 +248,45 @@
         "region"
       ]
     },
-    "Schedule": {
+    "SyncJob": {
       "type": "object",
       "properties": {
+        "direction": {
+          "type": "string",
+          "default": "pull"
+        },
+        "remote": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "remote_store": {
+          "type": "string"
+        },
+        "remove_vanished": {
+          "type": "boolean",
+          "default": false
+        },
         "schedule": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "store": {
           "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
-        "schedule"
+        "store",
+        "remote_store"
       ]
     },
-    "VerifySchedule": {
+    "VerifyJob": {
       "type": "object",
       "properties": {
         "ignore_verified": {
@@ -206,10 +299,14 @@
         },
         "schedule": {
           "type": "string"
+        },
+        "store": {
+          "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
+        "store",
         "schedule",
         "ignore_verified",
         "outdated_after_days"

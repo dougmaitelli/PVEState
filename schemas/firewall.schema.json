@@ -121,6 +121,16 @@
     "NodeFirewall": {
       "type": "object",
       "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "log_level_in": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "present": {
           "type": "boolean"
         },

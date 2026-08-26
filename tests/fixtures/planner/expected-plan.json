@@ -1,0 +1,15 @@
+[
+  {"action":"api-mutation","target":"pve","method":"put","domain":"guests","resource":"lxc/101","endpoint":"/nodes/pve/lxc/101/config","changes":{"cores":"2","delete":"mp1,net1","hostname":"apps","mp0":"/mnt/data/apps,mp=/srv/data,backup=0","net0":"name=eth0,bridge=vmbr0,firewall=1,gw=192.0.2.1,hwaddr=02:00:00:00:01:01,ip=192.0.2.101/24,type=veth"},"digest":"lxc-digest"},
+  {"action":"grow-disk","domain":"guests","resource":"lxc/101/rootfs","endpoint":"/nodes/pve/lxc/101/resize","disk":"rootfs","size_gb":16},
+  {"action":"api-mutation","target":"pve","method":"put","domain":"guests","resource":"qemu/201","endpoint":"/nodes/pve/qemu/201/config","changes":{"delete":"net1,usb1","memory":"4096","scsi0":"local-lvm:vm-201-disk-0,discard=on,size=16G"},"digest":"vm-digest"},
+  {"action":"grow-disk","domain":"guests","resource":"qemu/201/scsi0","endpoint":"/nodes/pve/qemu/201/resize","disk":"scsi0","size_gb":32},
+  {"action":"api-mutation","target":"pve","method":"put","domain":"dns","resource":"pve","endpoint":"/nodes/pve/dns","changes":{"delete":"dns2","search":"example.test"},"digest":null},
+  {"action":"api-mutation","target":"pve","method":"put","domain":"backup","resource":"pve/backup-example","endpoint":"/cluster/backup/backup%2Dexample","changes":{"schedule":"weekly"},"digest":null},
+  {"action":"api-mutation","target":"pbs","method":"put","domain":"pbs","resource":"datastore/example-backup","endpoint":"/config/datastore/example%2Dbackup","changes":{"gc-schedule":"daily"},"digest":null},
+  {"action":"api-mutation","target":"pbs","method":"post","domain":"pbs","resource":"s3/example","endpoint":"/config/s3","changes":{"endpoint":"{{bucket}}.s3.example.test","id":"example","region":"us-west-1"},"environment_changes":{"access-key":"PBS_APPLY_S3_ACCESS_KEY","secret-key":"PBS_APPLY_S3_SECRET_KEY"},"digest":null},
+  {"action":"api-mutation","target":"pbs","method":"put","domain":"pbs","resource":"prune/prune-example","endpoint":"/config/prune/prune%2Dexample","changes":{"schedule":"daily"},"digest":null},
+  {"action":"write-file","domain":"network","resource":"pve","path":"/etc/network/interfaces","activate":true},
+  {"action":"write-file","domain":"firewall","resource":"cluster","path":"/etc/pve/firewall/cluster.fw","activate":false},
+  {"action":"write-file","domain":"firewall","resource":"101","path":"/etc/pve/firewall/101.fw","activate":false},
+  {"action":"write-file","domain":"firewall","resource":"node/pve","path":"/etc/pve/nodes/pve/host.fw","activate":false}
+]

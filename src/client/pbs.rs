@@ -1,7 +1,8 @@
-use crate::config::env;
+use super::PbsClient;
+use crate::settings::{ApiCredential, PbsSettings};
 use anyhow::{Context, Result};
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
-use reqwest::{Certificate, blocking::Client};
+use reqwest::{Certificate, Method, blocking::Client};
 use serde::Serialize;
 use serde_json::Value;
 use std::{collections::BTreeMap, fs, time::Duration};
@@ -53,20 +54,29 @@ pub struct Datastore {
 }
 
 impl Pbs {
-    pub fn discovery() -> Result<Self> {
-        let endpoint = env("PBS_ENDPOINT", None)?;
-        let token_id = env("PBS_API_TOKEN_ID", None)?;
-        let token_secret = env("PBS_API_TOKEN_SECRET", None)?;
+    pub fn discovery(settings: &PbsSettings) -> Result<Self> {
+        Self::new(settings, settings.discovery_credential()?)
+    }
+
+    pub fn mutation(settings: &PbsSettings) -> Result<Self> {
+        Self::new(settings, settings.mutation_credential()?)
+    }
+
+    fn new(settings: &PbsSettings, credential: &ApiCredential) -> Result<Self> {
         let mut builder = Client::builder()
             .timeout(Duration::from_secs(30))
-            .danger_accept_invalid_certs(std::env::var("PBS_VERIFY_TLS").as_deref() == Ok("false"));
-        if let Ok(path) = std::env::var("PBS_CA_FILE") {
-            let pem = fs::read(&path).with_context(|| format!("read PBS CA file {path}"))?;
+            .danger_accept_invalid_certs(!settings.verify_tls);
+        if let Some(path) = &settings.ca_file {
+            let pem =
+                fs::read(path).with_context(|| format!("read PBS CA file {}", path.display()))?;
             builder = builder.add_root_certificate(Certificate::from_pem(&pem)?);
         }
         Ok(Self {
-            base: format!("{}/api2/json", endpoint.trim_end_matches('/')),
-            authorization: format!("PBSAPIToken {token_id}:{token_secret}"),
+            base: format!(
+                "{}/api2/json",
+                settings.endpoint.as_str().trim_end_matches('/')
+            ),
+            authorization: format!("PBSAPIToken {}:{}", credential.id, credential.secret),
             http: builder.build()?,
         })
     }
@@ -75,51 +85,7 @@ impl Pbs {
         self.base.trim_end_matches("/api2/json")
     }
 
-    pub fn discover(&self) -> Snapshot {
-        let mut requests = BTreeMap::new();
-        for (name, path) in ENDPOINTS {
-            requests.insert(name.into(), self.safe_get(path));
-        }
-
-        let mut datastores = BTreeMap::new();
-        if let Some(items) = requests
-            .get("datastores")
-            .and_then(|response| response.data.as_ref())
-            .and_then(Value::as_array)
-        {
-            for config in items {
-                let Some(name) = config
-                    .get("name")
-                    .or_else(|| config.get("store"))
-                    .and_then(Value::as_str)
-                else {
-                    continue;
-                };
-                let encoded = utf8_percent_encode(name, NON_ALPHANUMERIC);
-                let root = format!("/admin/datastore/{encoded}");
-                datastores.insert(
-                    name.into(),
-                    Datastore {
-                        config: config.clone(),
-                        status: self.safe_get(&format!("{root}/status")),
-                        groups: self.safe_get(&format!("{root}/groups")),
-                        snapshots: self.safe_get(&format!("{root}/snapshots")),
-                    },
-                );
-            }
-        }
-
-        Snapshot {
-            schema_version: 1,
-            collected_at: chrono::Utc::now(),
-            mode: "read-only",
-            endpoint: self.endpoint().into(),
-            requests,
-            datastores,
-        }
-    }
-
-    fn get(&self, path: &str) -> Result<Value> {
+    pub fn get(&self, path: &str) -> Result<Value> {
         let payload: Value = self
             .http
             .get(format!("{}{}", self.base, path))
@@ -135,21 +101,105 @@ impl Pbs {
         Ok(payload.get("data").cloned().unwrap_or(Value::Null))
     }
 
-    fn safe_get(&self, path: &str) -> Response {
-        match self.get(path) {
-            Ok(data) => Response {
-                ok: true,
-                path: path.into(),
-                data: Some(data),
-                error: None,
-            },
-            Err(error) => Response {
-                ok: false,
-                path: path.into(),
-                data: None,
-                error: Some(format!("{error:#}")),
-            },
+    pub fn put(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+        self.mutate(Method::PUT, path, data)
+    }
+
+    pub fn post(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+        self.mutate(Method::POST, path, data)
+    }
+
+    pub fn delete(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+        self.mutate(Method::DELETE, path, data)
+    }
+
+    fn mutate(&self, method: Method, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+        self.http
+            .request(method, format!("{}{}", self.base, path))
+            .header("Authorization", &self.authorization)
+            .form(data)
+            .send()?
+            .error_for_status()?;
+        Ok(())
+    }
+}
+
+pub fn capture(client: &dyn PbsClient) -> Snapshot {
+    let mut requests = BTreeMap::new();
+    for (name, path) in ENDPOINTS {
+        requests.insert(name.into(), safe_get(client, path));
+    }
+
+    let mut datastores = BTreeMap::new();
+    if let Some(items) = requests
+        .get("datastores")
+        .and_then(|response| response.data.as_ref())
+        .and_then(Value::as_array)
+    {
+        for config in items {
+            let Some(name) = config
+                .get("name")
+                .or_else(|| config.get("store"))
+                .and_then(Value::as_str)
+            else {
+                continue;
+            };
+            let encoded = utf8_percent_encode(name, NON_ALPHANUMERIC);
+            let root = format!("/admin/datastore/{encoded}");
+            datastores.insert(
+                name.into(),
+                Datastore {
+                    config: config.clone(),
+                    status: safe_get(client, &format!("{root}/status")),
+                    groups: safe_get(client, &format!("{root}/groups")),
+                    snapshots: safe_get(client, &format!("{root}/snapshots")),
+                },
+            );
         }
+    }
+
+    Snapshot {
+        schema_version: 1,
+        collected_at: chrono::Utc::now(),
+        mode: "read-only",
+        endpoint: client.endpoint().into(),
+        requests,
+        datastores,
+    }
+}
+
+fn safe_get(client: &dyn PbsClient, path: &str) -> Response {
+    match client.get(path) {
+        Ok(data) => Response {
+            ok: true,
+            path: path.into(),
+            data: Some(data),
+            error: None,
+        },
+        Err(error) => Response {
+            ok: false,
+            path: path.into(),
+            data: None,
+            error: Some(format!("{error:#}")),
+        },
+    }
+}
+
+impl PbsClient for Pbs {
+    fn endpoint(&self) -> &str {
+        self.endpoint()
+    }
+    fn get(&self, path: &str) -> Result<Value> {
+        self.get(path)
+    }
+    fn put(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+        self.put(path, data)
+    }
+    fn post(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+        self.post(path, data)
+    }
+    fn delete(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+        self.delete(path, data)
     }
 }
 
@@ -179,6 +229,35 @@ impl Snapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::bail;
+
+    struct FakePbs;
+
+    impl PbsClient for FakePbs {
+        fn endpoint(&self) -> &str {
+            "https://pbs.test:8007"
+        }
+
+        fn get(&self, path: &str) -> Result<Value> {
+            if ENDPOINTS.iter().any(|(_, endpoint)| *endpoint == path) {
+                Ok(serde_json::json!([]))
+            } else {
+                bail!("unexpected fake endpoint {path}")
+            }
+        }
+
+        fn put(&self, _: &str, _: &BTreeMap<String, String>) -> Result<()> {
+            unreachable!()
+        }
+
+        fn post(&self, _: &str, _: &BTreeMap<String, String>) -> Result<()> {
+            unreachable!()
+        }
+
+        fn delete(&self, _: &str, _: &BTreeMap<String, String>) -> Result<()> {
+            unreachable!()
+        }
+    }
 
     #[test]
     fn datastore_names_are_safe_in_api_paths() {
@@ -186,6 +265,14 @@ mod tests {
             utf8_percent_encode("primary store/1", NON_ALPHANUMERIC).to_string(),
             "primary%20store%2F1"
         );
+    }
+
+    #[test]
+    fn discovery_accepts_an_injected_pbs_client() {
+        let snapshot = capture(&FakePbs);
+        assert_eq!(snapshot.endpoint, "https://pbs.test:8007");
+        assert_eq!(snapshot.requests.len(), ENDPOINTS.len());
+        assert!(snapshot.failures().is_empty());
     }
 
     #[test]
