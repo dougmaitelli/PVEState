@@ -1,5 +1,5 @@
 use anyhow::Result;
-use clap::{ArgGroup, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use pvestate::{
     client::{Pbs, Pve, Ssh},
     command::{adopt, apply, capture, plan, recovery},
@@ -28,19 +28,14 @@ enum Command {
     },
     Capture,
     Plan,
-    #[command(group(
-        ArgGroup::new("mode")
-            .required(true)
-            .multiple(false)
-            .args(["preview", "ids", "all"])
-    ))]
+    #[command(arg_required_else_help = true)]
     Adopt {
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["ids", "all"])]
         preview: bool,
-        #[arg(long = "id")]
-        ids: Vec<String>,
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["preview", "ids"])]
         all: bool,
+        #[arg(value_name = "ID", num_args = 1.., conflicts_with_all = ["preview", "all"])]
+        ids: Vec<String>,
     },
     Apply,
     Validate,
@@ -85,7 +80,7 @@ fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&p)?);
             Ok(())
         },
-        Command::Adopt { preview, ids, all } => {
+        Command::Adopt { preview, all, ids } => {
             let repo = Repository::open(&cli.config_dir)?;
             adopt::run(&repo, preview, all, &ids)
         },

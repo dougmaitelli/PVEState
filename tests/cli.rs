@@ -20,13 +20,22 @@ fn help_lists_compact_interface() {
 
 #[test]
 fn adopt_requires_exactly_one_mode() {
-    for arguments in [vec!["adopt"], vec!["adopt", "--preview", "--all"]] {
-        let output = Command::new(env!("CARGO_BIN_EXE_pves"))
-            .args(arguments)
-            .output()
-            .unwrap();
-        assert!(!output.status.success());
+    let missing = Command::new(env!("CARGO_BIN_EXE_pves"))
+        .arg("adopt")
+        .output()
+        .unwrap();
+    assert!(!missing.status.success());
+    let stderr = String::from_utf8(missing.stderr).unwrap();
+    assert!(stderr.contains("Usage: pves adopt"), "{stderr}");
+    for mode in ["--preview", "--all", "[ID]..."] {
+        assert!(stderr.contains(mode), "{stderr}");
     }
+
+    let conflicting = Command::new(env!("CARGO_BIN_EXE_pves"))
+        .args(["adopt", "--preview", "lxc/106:mp0.backed_up_by_pve"])
+        .output()
+        .unwrap();
+    assert!(!conflicting.status.success());
 }
 
 #[test]

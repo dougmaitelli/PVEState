@@ -172,13 +172,14 @@ Preview values that can be adopted from the latest verified capture and plan:
 
 ```bash
 pves --config-dir ./environment adopt --preview
-pves --config-dir ./environment adopt --id lxc/106:mp0.backed_up_by_pve
+pves --config-dir ./environment adopt lxc/106:mp0.backed_up_by_pve
 pves --config-dir ./environment adopt --all
 ```
 
-`--preview`, `--id`, and `--all` are explicit, mutually exclusive modes. Bulk
-adoption selects only candidates marked adoptable; unsupported or ambiguous fields
-are reported but skipped.
+Candidate IDs are positional arguments. `--preview`, positional IDs, and `--all`
+are mutually exclusive modes validated by the CLI parser. Bulk adoption selects
+only candidates marked adoptable; unsupported or ambiguous fields are reported
+but skipped.
 
 ## Development
 
