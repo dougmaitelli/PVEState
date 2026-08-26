@@ -23,7 +23,7 @@ pub struct Candidate {
     pub reason: Option<String>,
 }
 
-pub fn run(repo: &Repository, write: bool, all: bool, requested: &[String]) -> Result<()> {
+pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) -> Result<()> {
     let manifest: CaptureManifest = serde_json::from_slice(
         &fs::read(repo.observed().join("manifest.json")).context("run capture first")?,
     )?;
@@ -35,7 +35,7 @@ pub fn run(repo: &Repository, write: bool, all: bool, requested: &[String]) -> R
     let observed: Value = serde_json::from_slice(&fs::read(repo.observed().join("api/pve.json"))?)?;
     let candidates = candidates(repo, &plan, &observed)?;
 
-    if !write {
+    if preview {
         println!("{}", serde_json::to_string_pretty(&candidates)?);
         return Ok(());
     }
@@ -91,7 +91,7 @@ fn selection(
         return Ok(selected);
     }
     if requested.is_empty() {
-        bail!("adopt --write requires --all or at least one explicit --id from the preview")
+        bail!("adopt requires --preview, --all, or at least one --id")
     }
     Ok(requested.iter().cloned().collect())
 }

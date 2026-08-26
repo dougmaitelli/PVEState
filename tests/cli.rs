@@ -11,8 +11,21 @@ fn help_lists_compact_interface() {
         .unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
-    for command in ["init", "capture", "plan", "apply", "validate", "recover"] {
+    for command in [
+        "init", "capture", "plan", "adopt", "apply", "validate", "recover",
+    ] {
         assert!(stdout.contains(command));
+    }
+}
+
+#[test]
+fn adopt_requires_exactly_one_mode() {
+    for arguments in [vec!["adopt"], vec!["adopt", "--preview", "--all"]] {
+        let output = Command::new(env!("CARGO_BIN_EXE_pves"))
+            .args(arguments)
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
     }
 }
 

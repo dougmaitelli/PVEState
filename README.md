@@ -160,8 +160,8 @@ pves apply
 - `init PATH`: scaffold an environment repository.
 - `capture`: refresh API observations and sanitized host/firewall exports.
 - `plan`: validate desired state and create a deterministic guarded plan.
-- `adopt`: preview production values that can be copied into desired state;
-  `--write` requires one or more explicit `--id` selections.
+- `adopt`: preview production values or copy explicitly selected values into
+  desired state.
 - `apply`: execute exactly the confirmed plan; removals are generated only from
   explicit desired-state absence or `absent_*` identifiers.
 - `validate`: verify all managed guests are running.
@@ -171,14 +171,14 @@ pves apply
 Preview values that can be adopted from the latest verified capture and plan:
 
 ```bash
-pves --config-dir ./environment adopt
-pves --config-dir ./environment adopt --write --id lxc/106:mp0.backed_up_by_pve
-pves --config-dir ./environment adopt --write --all
+pves --config-dir ./environment adopt --preview
+pves --config-dir ./environment adopt --id lxc/106:mp0.backed_up_by_pve
+pves --config-dir ./environment adopt --all
 ```
 
-Preview is read-only. Writing requires explicit candidate IDs or `--all`.
-Bulk adoption selects only candidates marked adoptable; unsupported or ambiguous
-fields are reported but skipped.
+`--preview`, `--id`, and `--all` are explicit, mutually exclusive modes. Bulk
+adoption selects only candidates marked adoptable; unsupported or ambiguous fields
+are reported but skipped.
 
 ## Development
 
