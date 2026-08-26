@@ -173,10 +173,12 @@ Preview values that can be adopted from the latest verified capture and plan:
 ```bash
 pves --config-dir ./environment adopt
 pves --config-dir ./environment adopt --write --id lxc/106:mp0.backed_up_by_pve
+pves --config-dir ./environment adopt --write --all
 ```
 
-Preview is read-only. Writing requires explicit candidate IDs; unsupported or
-ambiguous fields are reported but cannot be selected.
+Preview is read-only. Writing requires explicit candidate IDs or `--all`.
+Bulk adoption selects only candidates marked adoptable; unsupported or ambiguous
+fields are reported but skipped.
 
 ## Development
 

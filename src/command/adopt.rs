@@ -23,7 +23,7 @@ pub struct Candidate {
     pub reason: Option<String>,
 }
 
-pub fn run(repo: &Repository, write: bool, selected: &[String]) -> Result<()> {
+pub fn run(repo: &Repository, write: bool, all: bool, requested: &[String]) -> Result<()> {
     let manifest: CaptureManifest = serde_json::from_slice(
         &fs::read(repo.observed().join("manifest.json")).context("run capture first")?,
     )?;
@@ -39,10 +39,7 @@ pub fn run(repo: &Repository, write: bool, selected: &[String]) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&candidates)?);
         return Ok(());
     }
-    if selected.is_empty() {
-        bail!("adopt --write requires at least one explicit --id from the preview")
-    }
-    let selected = selected.iter().cloned().collect::<BTreeSet<_>>();
+    let selected = selection(&candidates, all, requested)?;
     let known = candidates
         .iter()
         .map(|candidate| candidate.id.clone())
@@ -75,6 +72,28 @@ pub fn run(repo: &Repository, write: bool, selected: &[String]) -> Result<()> {
         selected.len()
     );
     Ok(())
+}
+
+fn selection(
+    candidates: &[Candidate],
+    all: bool,
+    requested: &[String],
+) -> Result<BTreeSet<String>> {
+    if all {
+        let selected = candidates
+            .iter()
+            .filter(|candidate| candidate.adoptable)
+            .map(|candidate| candidate.id.clone())
+            .collect::<BTreeSet<_>>();
+        if selected.is_empty() {
+            bail!("there are no adoptable production values")
+        }
+        return Ok(selected);
+    }
+    if requested.is_empty() {
+        bail!("adopt --write requires --all or at least one explicit --id from the preview")
+    }
+    Ok(requested.iter().cloned().collect())
 }
 
 fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Candidate>> {
@@ -346,5 +365,33 @@ mod tests {
     #[test]
     fn classifies_device_removals_as_unsupported() {
         assert_eq!(adoption_field(GuestKind::Lxc, "delete", "net1"), None);
+    }
+
+    #[test]
+    fn all_selects_only_adoptable_candidates() {
+        let candidates = [
+            Candidate {
+                id: "yes".into(),
+                resource: "lxc/1".into(),
+                field: "cores".into(),
+                desired: "2".into(),
+                production: "4".into(),
+                adoptable: true,
+                reason: None,
+            },
+            Candidate {
+                id: "no".into(),
+                resource: "cluster".into(),
+                field: "file".into(),
+                desired: "wanted".into(),
+                production: "live".into(),
+                adoptable: false,
+                reason: Some("unsupported".into()),
+            },
+        ];
+        assert_eq!(
+            selection(&candidates, true, &[]).unwrap(),
+            BTreeSet::from(["yes".into()])
+        );
     }
 }

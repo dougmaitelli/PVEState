@@ -31,8 +31,10 @@ enum Command {
     Adopt {
         #[arg(long)]
         write: bool,
-        #[arg(long = "id")]
+        #[arg(long = "id", conflicts_with = "all")]
         ids: Vec<String>,
+        #[arg(long, requires = "write", conflicts_with = "ids")]
+        all: bool,
     },
     Apply,
     Validate,
@@ -77,9 +79,9 @@ fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&p)?);
             Ok(())
         },
-        Command::Adopt { write, ids } => {
+        Command::Adopt { write, ids, all } => {
             let repo = Repository::open(&cli.config_dir)?;
-            adopt::run(&repo, write, &ids)
+            adopt::run(&repo, write, all, &ids)
         },
         Command::Apply => {
             let repo = Repository::open(&cli.config_dir)?;
