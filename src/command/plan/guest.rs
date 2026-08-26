@@ -37,14 +37,10 @@ pub(super) fn lxc(
                     .unwrap_or_default()
             ),
         ),
-        (
-            GuestField::Network(0).api_name(),
-            render::lxc_nic(&desired.network),
-        ),
     ]);
-    for (index, nic) in desired.additional_networks.iter().enumerate() {
+    for (index, nic) in desired.networks.iter().enumerate() {
         wanted.insert(
-            GuestField::Network((index + 1) as u8).api_name(),
+            GuestField::Network(index as u8).api_name(),
             render::lxc_nic(nic),
         );
     }
@@ -366,5 +362,15 @@ mod tests {
         let mut changes = BTreeMap::new();
         add_removed(&actual, &wanted, &["net", "usb"], &mut changes);
         assert_eq!(changes["delete"], "net1,usb2");
+    }
+
+    #[test]
+    fn guest_without_networks_removes_every_live_nic() {
+        let actual = serde_json::json!({"net0":"first", "net1":"second", "cores":2});
+        let mut changes = BTreeMap::new();
+
+        add_removed(&actual, &BTreeMap::new(), &["net"], &mut changes);
+
+        assert_eq!(changes["delete"], "net0,net1");
     }
 }

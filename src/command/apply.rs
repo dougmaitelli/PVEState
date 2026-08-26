@@ -6,7 +6,7 @@ use crate::{
     command::plan::{ApiMethod, ApiTarget, Operation, Plan},
     config::Repository,
     settings::ApplySettings,
-    utility::{authorization, shell},
+    utility::{authorization, progress, shell},
 };
 use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -22,6 +22,7 @@ pub fn run(
     pbs: Option<&dyn PbsClient>,
     ssh: Option<&dyn RemoteHost>,
 ) -> Result<()> {
+    progress::section("Applying production plan");
     let plan = authorize(repo, settings)?;
     let mut journal = ApplyJournal::new(&repo.runtime(), &plan);
     journal.persist()?;
@@ -105,6 +106,12 @@ fn execute(
         bail!("mutation API endpoint differs from plan target")
     }
     for (index, op) in plan.operations.iter().enumerate() {
+        progress::operation(format!(
+            "[{}/{}] {}",
+            index + 1,
+            plan.operations.len(),
+            op.description()
+        ));
         journal.start(index)?;
         journal.persist()?;
         let result = (|| -> Result<()> {
@@ -225,10 +232,12 @@ fn execute(
         })();
         match result {
             Ok(()) => {
+                progress::detail("completed");
                 journal.applied(index)?;
                 journal.persist()?;
             },
             Err(error) => {
+                progress::detail(format!("failed: {error:#}"));
                 journal.operation_failed(index, &error)?;
                 journal.persist()?;
                 return Err(error);

@@ -6,7 +6,7 @@ use crate::{
     utility::{
         atomic_file, authorization,
         plan_envelope::{self, PlanEnvelope},
-        shell,
+        progress, shell,
     },
 };
 use anyhow::{Context, Result, bail};
@@ -56,6 +56,7 @@ pub fn run(
     settings: &RecoverySettings,
     ssh: Option<&dyn RemoteHost>,
 ) -> Result<()> {
+    progress::section(format!("Recovery: {}", stage.name()));
     if matches!(stage, Stage::Plan) {
         return create_plan(repo, target);
     }
@@ -79,6 +80,19 @@ pub fn run(
             configure(repo, ssh)
         },
         Stage::Plan => unreachable!(),
+    }
+}
+
+impl Stage {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Plan => "plan",
+            Self::BootstrapPve => "bootstrap PVE",
+            Self::BootstrapPbs => "bootstrap PBS",
+            Self::Restore => "restore guests",
+            Self::Configure => "configure applications",
+            Self::All => "all stages",
+        }
     }
 }
 
@@ -134,6 +148,7 @@ fn authorize(plan: &RecoveryPlan, target: &str, settings: &RecoverySettings) -> 
 }
 
 fn bootstrap_pve(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
+    progress::operation("verify replacement PVE host");
     ssh.run("pveversion")?;
     ssh.run("zpool list -H -o name VMs; zpool list -H -o name Data; test -d /mnt/pve/backup; test -d /mnt/pve/security")?;
     write(
@@ -153,6 +168,7 @@ fn bootstrap_pve(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
 }
 
 fn bootstrap_pbs(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
+    progress::operation("create and provision PBS guest");
     let template = repo
         .restore
         .pbs_bootstrap
@@ -160,8 +176,13 @@ fn bootstrap_pbs(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
         .as_deref()
         .context("PBS template")?;
     let guest = repo.guests.lxcs.get(&111).context("LXC 111")?;
+    let network = guest
+        .networks
+        .first()
+        .map(|nic| format!(" --net0 {}", shell::quote(&render::lxc_nic(nic))))
+        .unwrap_or_default();
     let create = format!(
-        "pct status 111 >/dev/null 2>&1 || pct create 111 {} --hostname {} --cores {} --memory {} --swap {} --rootfs {}:{} --net0 {} --unprivileged 0 --onboot 1",
+        "pct status 111 >/dev/null 2>&1 || pct create 111 {} --hostname {} --cores {} --memory {} --swap {} --rootfs {}:{}{} --unprivileged 0 --onboot 1",
         shell::quote(template),
         shell::quote(&guest.hostname),
         guest.cores,
@@ -169,7 +190,7 @@ fn bootstrap_pbs(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
         guest.swap_mb,
         shell::quote(&guest.rootfs.storage),
         guest.rootfs.size_gb,
-        shell::quote(&render::lxc_nic(&guest.network))
+        network
     );
     ssh.run(&create)?;
     ssh.run("pct set 111 -mp0 /mnt/pve/backup,mp=/mnt/backup; pct start 111 2>/dev/null || true; pct exec 111 -- sh -c 'apt-get update && apt-get install -y proxmox-backup-server'")?;
@@ -185,6 +206,7 @@ fn restore(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
             .get(&id)
             .and_then(Option::as_deref)
             .context("archive")?;
+        progress::operation(format!("restore VMID {id} from {archive}"));
         if ssh
             .run(&format!(
                 "qm status {id} 2>/dev/null || pct status {id} 2>/dev/null"
@@ -212,6 +234,7 @@ fn restore(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
         let index = mount.index;
         let source = &mount.source;
         let target = &mount.target;
+        progress::operation(format!("reattach VMID {id} mount {index}"));
         ssh.run(&format!(
             "pct set {id} -mp{index} {},mp={}",
             shell::quote(source),

@@ -1,4 +1,4 @@
-use crate::{client::PveClient, model::GuestKind};
+use crate::{client::PveClient, model::GuestKind, utility::progress};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
@@ -171,6 +171,7 @@ fn capture_guests(
 }
 
 fn safe_get(client: &dyn PveClient, path: &str) -> Response {
+    progress::operation(format!("GET {path}"));
     match client.get(path) {
         Ok(data) => Response {
             ok: true,
@@ -178,11 +179,14 @@ fn safe_get(client: &dyn PveClient, path: &str) -> Response {
             data: Some(data),
             error: None,
         },
-        Err(error) => Response {
-            ok: false,
-            path: path.into(),
-            data: None,
-            error: Some(format!("{error:#}")),
+        Err(error) => {
+            progress::detail(format!("failed: {error:#}"));
+            Response {
+                ok: false,
+                path: path.into(),
+                data: None,
+                error: Some(format!("{error:#}")),
+            }
         },
     }
 }

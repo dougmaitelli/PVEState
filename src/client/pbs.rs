@@ -1,5 +1,8 @@
 use super::PbsClient;
-use crate::settings::{ApiCredential, PbsSettings};
+use crate::{
+    settings::{ApiCredential, PbsSettings},
+    utility::progress,
+};
 use anyhow::{Context, Result};
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use reqwest::{Certificate, Method, blocking::Client};
@@ -169,6 +172,7 @@ pub fn capture(client: &dyn PbsClient) -> Snapshot {
 }
 
 fn safe_get(client: &dyn PbsClient, path: &str) -> Response {
+    progress::operation(format!("GET {path}"));
     match client.get(path) {
         Ok(data) => Response {
             ok: true,
@@ -176,11 +180,14 @@ fn safe_get(client: &dyn PbsClient, path: &str) -> Response {
             data: Some(data),
             error: None,
         },
-        Err(error) => Response {
-            ok: false,
-            path: path.into(),
-            data: None,
-            error: Some(format!("{error:#}")),
+        Err(error) => {
+            progress::detail(format!("failed: {error:#}"));
+            Response {
+                ok: false,
+                path: path.into(),
+                data: None,
+                error: Some(format!("{error:#}")),
+            }
         },
     }
 }

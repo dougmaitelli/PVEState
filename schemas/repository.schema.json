@@ -569,13 +569,6 @@
     "Lxc": {
       "type": "object",
       "properties": {
-        "additional_networks": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/Nic"
-          }
-        },
         "bind_mounts": {
           "type": "array",
           "default": [],
@@ -597,8 +590,12 @@
           "format": "uint32",
           "minimum": 0
         },
-        "network": {
-          "$ref": "#/$defs/Nic"
+        "networks": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Nic"
+          }
         },
         "os": {
           "type": "string"
@@ -627,7 +624,6 @@
         "memory_mb",
         "swap_mb",
         "rootfs",
-        "network",
         "start"
       ]
     },

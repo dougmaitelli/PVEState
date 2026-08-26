@@ -1,4 +1,4 @@
-use crate::{client::RemoteHost, config::Repository, discovery::PveSnapshot};
+use crate::{client::RemoteHost, config::Repository, discovery::PveSnapshot, utility::progress};
 use anyhow::{Context, Result};
 use std::{collections::BTreeSet, fs, path::Path};
 
@@ -86,12 +86,14 @@ pub(super) fn export(
 }
 
 fn required(ssh: &dyn RemoteHost, remote: &str, local: &Path) -> Result<()> {
+    progress::operation(format!("read {remote}"));
     let command = format!("cat {remote}");
     let data = ssh.run(&command).with_context(|| remote.to_string())?;
     write(local, &data)
 }
 
 fn optional(ssh: &dyn RemoteHost, command: &str, local: &Path) -> Result<()> {
+    progress::operation(format!("read {}", local.display()));
     match ssh.run(command) {
         Ok(data) => write(local, &data)?,
         Err(_) if local.exists() => fs::remove_file(local)?,

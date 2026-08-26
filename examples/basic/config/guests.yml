@@ -8,9 +8,8 @@ lxcs:
     memory_mb: 2048
     swap_mb: 512
     rootfs: {storage: local-lvm, size_gb: 16}
-    network:
-      {name: eth0, mac: "02:00:00:00:01:01", bridge: vmbr0, firewall: true, ipv4: 192.0.2.101/24, gateway4: 192.0.2.1, ipv6: null, gateway6: null}
-    additional_networks: []
+    networks:
+      - {name: eth0, mac: "02:00:00:00:01:01", bridge: vmbr0, firewall: true, ipv4: 192.0.2.101/24, gateway4: 192.0.2.1, ipv6: null, gateway6: null}
     start: {onboot: true, order: 20, delay_seconds: 10}
     bind_mounts:
       - {source: /mnt/data/apps, target: /srv/data, backed_up_by_pve: false}

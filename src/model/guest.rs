@@ -23,9 +23,8 @@ pub struct Lxc {
     pub memory_mb: u32,
     pub swap_mb: u32,
     pub rootfs: Disk,
-    pub network: Nic,
     #[serde(default)]
-    pub additional_networks: Vec<Nic>,
+    pub networks: Vec<Nic>,
     pub start: Start,
     #[serde(default)]
     pub bind_mounts: Vec<BindMount>,

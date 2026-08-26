@@ -51,7 +51,7 @@ const ENTRIES: &[ScopeEntry] = &[
     ),
     entry(
         "guests.yml",
-        "lxcs.*.{hostname,os,cores,memory_mb,swap_mb,network,additional_networks,bind_mounts,start}",
+        "lxcs.*.{hostname,os,cores,memory_mb,swap_mb,networks,bind_mounts,start}",
         ManagementClass::ProductionManaged,
         "Compared with the live LXC API; listed devices are updated and removed devices are deleted.",
     ),

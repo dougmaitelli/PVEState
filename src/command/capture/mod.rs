@@ -8,6 +8,7 @@ use crate::{
         CaptureManifest, CaptureStatus, SourceEvidence, capture_pve, collect_artifacts,
         write_snapshot,
     },
+    utility::progress,
 };
 use anyhow::{Result, anyhow, bail};
 use chrono::Utc;
@@ -20,6 +21,8 @@ pub fn run(
     pbs: &dyn PbsClient,
     ssh: &dyn RemoteHost,
 ) -> Result<()> {
+    progress::section("Capturing production state");
+    progress::detail(format!("configuration: {}", repo.root.display()));
     fs::create_dir_all(repo.runtime())?;
     fs::create_dir_all(repo.observed().join("api"))?;
 
@@ -67,6 +70,7 @@ fn perform(
 ) -> Result<BTreeMap<String, SourceEvidence>> {
     let mut sources = BTreeMap::new();
 
+    progress::section("Proxmox VE API");
     let pve_snapshot = capture_pve(pve);
     write_snapshot(
         "pve",
@@ -80,6 +84,7 @@ fn perform(
         source(pve.endpoint(), pve_snapshot.failures()),
     );
 
+    progress::section("Proxmox Backup Server API");
     let pbs_snapshot = capture_pbs(pbs);
     write_snapshot(
         "pbs",
@@ -93,12 +98,14 @@ fn perform(
         source(pbs.endpoint(), pbs_snapshot.failures()),
     );
 
+    progress::section("Native configuration files");
     let native_failures = native::export(repo, ssh, &pve_snapshot)
         .err()
         .map(|error| vec![format!("{error:#}")])
         .unwrap_or_default();
     sources.insert("native-ssh".into(), source(pve.endpoint(), native_failures));
 
+    progress::section("Host and PBS diagnostics");
     let host_failures =
         host::capture(repo, ssh).map_err(|error| anyhow!("host evidence capture: {error:#}"))?;
     sources.insert("host-ssh".into(), source(pve.endpoint(), host_failures));
@@ -128,11 +135,17 @@ fn write_manifest(repo: &Repository, manifest: &CaptureManifest) -> Result<()> {
 pub fn validate(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
     let mut failures = Vec::new();
     let mut report = Vec::new();
+    progress::section("Running recovery validation checks");
     for check in &repo.recovery_checks.checks {
+        progress::operation(format!("{}: {}", check.id, check.description));
         match ssh.run(&check.command) {
-            Ok(_) => report
-                .push(json!({"id":check.id,"description":check.description,"status":"passed"})),
+            Ok(_) => {
+                progress::detail("passed");
+                report
+                    .push(json!({"id":check.id,"description":check.description,"status":"passed"}))
+            },
             Err(error) => {
+                progress::detail(format!("failed: {error:#}"));
                 failures.push(format!("{}: {error}", check.id));
                 report
                     .push(json!({"id":check.id,"description":check.description,"status":"failed"}));

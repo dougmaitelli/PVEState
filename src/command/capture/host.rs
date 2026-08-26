@@ -1,4 +1,4 @@
-use crate::{client::RemoteHost, config::Repository};
+use crate::{client::RemoteHost, config::Repository, utility::progress};
 use anyhow::Result;
 use std::{collections::BTreeMap, fs};
 
@@ -48,6 +48,7 @@ pub(super) fn capture(repo: &Repository, ssh: &dyn RemoteHost) -> Result<Vec<Str
             format!("pct exec {pbs_vmid} -- findmnt --json --bytes -o TARGET,SOURCE,FSTYPE,OPTIONS,SIZE,USED,AVAIL"),
         ),
     ] {
+        progress::operation(format!("probe {name}"));
         host.insert(name, ssh.probe(&command)?);
     }
     let failures = host

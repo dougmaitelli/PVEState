@@ -11,6 +11,7 @@ use crate::{
     utility::{
         atomic_file,
         plan_envelope::{self, PlanEnvelope},
+        progress,
     },
 };
 use anyhow::{Context, Result};
@@ -79,6 +80,28 @@ impl Operation {
             | Self::DeleteFile { domain, .. } => domain,
         }
     }
+
+    pub fn description(&self) -> String {
+        match self {
+            Self::ApiMutation {
+                target,
+                method,
+                resource,
+                changes,
+                ..
+            } => {
+                format!(
+                    "{method:?} {target:?} {resource} ({} change(s))",
+                    changes.len()
+                )
+            },
+            Self::GrowDisk {
+                resource, size_gb, ..
+            } => format!("grow {resource} to {size_gb} GiB"),
+            Self::WriteFile { path, .. } => format!("write {path}"),
+            Self::DeleteFile { path, .. } => format!("delete {path}"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +137,7 @@ impl PlanEnvelope for Plan {
 }
 
 pub fn run(repo: &Repository, api: &dyn PveClient, pbs: &dyn PbsClient) -> Result<Plan> {
+    progress::section("Planning production changes");
     validation::validate(repo)?;
     ensure_observations_are_fresh(repo)?;
     let mut operations = Vec::new();
@@ -238,6 +262,10 @@ pub fn run(repo: &Repository, api: &dyn PveClient, pbs: &dyn PbsClient) -> Resul
         plan_sha256: String::new(),
     };
     plan_envelope::sign(&mut plan)?;
+    for operation in &plan.operations {
+        progress::operation(operation.description());
+    }
+    progress::detail(format!("{} blocker(s)", plan.blockers.len()));
     atomic_file::write_json(&repo.runtime().join("production-plan.json"), &plan)?;
     Ok(plan)
 }

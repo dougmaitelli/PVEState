@@ -31,7 +31,7 @@
   },
   {
     "document": "guests.yml",
-    "fields": "lxcs.*.{hostname,os,cores,memory_mb,swap_mb,network,additional_networks,bind_mounts,start}",
+    "fields": "lxcs.*.{hostname,os,cores,memory_mb,swap_mb,networks,bind_mounts,start}",
     "class": "production-managed",
     "behavior": "Compared with the live LXC API; listed devices are updated and removed devices are deleted."
   },

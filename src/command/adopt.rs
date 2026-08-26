@@ -5,7 +5,7 @@ use crate::{
     config::Repository,
     discovery::CaptureManifest,
     model::{GuestField, GuestKind, GuestRef},
-    utility::atomic_file,
+    utility::{atomic_file, progress},
 };
 use anyhow::{Context, Result, bail};
 use chrono::Duration;
@@ -26,6 +26,11 @@ pub struct Candidate {
 }
 
 pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) -> Result<()> {
+    progress::section(if preview {
+        "Previewing adoptable drift"
+    } else {
+        "Adopting production state"
+    });
     let manifest: CaptureManifest = serde_json::from_slice(
         &fs::read(repo.observed().join("manifest.json")).context("run capture first")?,
     )?;
@@ -57,6 +62,10 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
         .iter()
         .filter(|candidate| selected.contains(&candidate.id))
     {
+        progress::operation(format!(
+            "{}: {} -> {}",
+            candidate.id, candidate.desired, candidate.production
+        ));
         if !candidate.adoptable {
             bail!(
                 "{} cannot be adopted: {}",

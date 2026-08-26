@@ -1,5 +1,5 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
 use pvestate::{
     client::{Pbs, Pve, Ssh},
     command::{adopt, apply, capture, plan, recovery},
@@ -17,6 +17,9 @@ use std::path::PathBuf;
 struct Cli {
     #[arg(long, env = "PVES_CONFIG_DIR", default_value = ".", global = true)]
     config_dir: PathBuf,
+    /// Show operation progress; repeat for additional detail
+    #[arg(short, long, action = ArgAction::Count, global = true)]
+    verbose: u8,
     #[command(subcommand)]
     command: Command,
 }
@@ -61,8 +64,12 @@ enum Recovery {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    pvestate::utility::progress::set(cli.verbose);
     match cli.command {
-        Command::Init { path } => Repository::initialize(&path),
+        Command::Init { path } => {
+            pvestate::utility::progress::section("Initializing configuration repository");
+            Repository::initialize(&path)
+        },
         Command::Capture => {
             let repo = Repository::open(&cli.config_dir)?;
             let settings = Settings::load(&cli.config_dir)?;
@@ -133,6 +140,9 @@ fn main() -> Result<()> {
                 ssh.as_ref().map(|client| client as _),
             )
         },
-        Command::Schema { output } => Repository::write_schema(output.as_deref()),
+        Command::Schema { output } => {
+            pvestate::utility::progress::section("Generating configuration schemas");
+            Repository::write_schema(output.as_deref())
+        },
     }
 }

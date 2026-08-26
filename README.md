@@ -62,6 +62,12 @@ pves validate
 
 Every command also accepts `--config-dir PATH`.
 
+High-level progress is shown by default. Use `-v` to show each operation and
+`-vv` for additional diagnostic detail. Progress is written to stderr so JSON
+output on stdout remains safe to pipe or redirect. For example, `pves capture`
+shows its major stages, while `pves capture -v` also shows every API request,
+native configuration read, and host probe.
+
 PVE State uses one canonical host for both API and SSH access:
 
 ```bash

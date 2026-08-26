@@ -12,7 +12,7 @@ pub(super) fn validate(repo: &Repository) -> Result<()> {
     let mut macs = BTreeSet::new();
     for (id, lxc) in &repo.guests.lxcs {
         let mut names = BTreeSet::new();
-        for nic in std::iter::once(&lxc.network).chain(&lxc.additional_networks) {
+        for nic in &lxc.networks {
             if !bridges.contains(&nic.bridge) {
                 bail!("lxc/{id}: unknown bridge {}", nic.bridge);
             }
