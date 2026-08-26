@@ -2,7 +2,13 @@
 set -eu
 
 repo="${PVESTATE_REPO:-dougmaitelli/pvestate}"
-install_dir="${PVESTATE_INSTALL_DIR:-${HOME}/.local/bin}"
+if [ -n "${PVESTATE_INSTALL_DIR:-}" ]; then
+  install_dir="$PVESTATE_INSTALL_DIR"
+elif [ -d /usr/local/bin ] && [ -w /usr/local/bin ]; then
+  install_dir=/usr/local/bin
+else
+  install_dir="${HOME}/.local/bin"
+fi
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64) target="x86_64-unknown-linux-gnu" ;;
   Darwin-x86_64) target="x86_64-apple-darwin" ;;
@@ -20,3 +26,10 @@ tar -C "$tmp_dir" -xzf "${tmp_dir}/${asset}"
 mkdir -p "$install_dir"
 install -m 0755 "${tmp_dir}/pves" "${install_dir}/pves"
 echo "installed PVE State to ${install_dir}/pves"
+case ":${PATH}:" in
+  *":${install_dir}:"*) ;;
+  *)
+    echo "warning: ${install_dir} is not in PATH" >&2
+    echo "add this to your shell profile: export PATH=\"${install_dir}:\$PATH\"" >&2
+    ;;
+esac
