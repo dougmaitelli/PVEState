@@ -46,17 +46,6 @@ pub(super) fn validate(repo: &Repository) -> Result<()> {
         .keys()
         .chain(repo.guests.vms.keys())
         .collect();
-    if let Some(id) = repo.firewall.guests.keys().find(|id| !managed.contains(id)) {
-        bail!("firewall policy references unmanaged VMID {id}");
-    }
-    if let Some(id) = repo
-        .firewall
-        .absent_guest_files
-        .iter()
-        .find(|id| repo.firewall.guests.contains_key(id))
-    {
-        bail!("guest firewall {id} is both managed and explicitly absent");
-    }
     validate_present_absent(
         "PVE backup job",
         repo.backup.pve_backup_jobs.keys(),

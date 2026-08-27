@@ -6,17 +6,17 @@
     "backup": {
       "$ref": "#/$defs/BackupConfig"
     },
-    "firewall": {
-      "$ref": "#/$defs/FirewallConfig"
+    "cluster": {
+      "$ref": "#/$defs/ClusterConfig"
     },
     "guests": {
       "$ref": "#/$defs/Guests"
     },
-    "host": {
-      "$ref": "#/$defs/HostConfig"
-    },
     "network": {
       "$ref": "#/$defs/Network"
+    },
+    "node": {
+      "$ref": "#/$defs/NodeConfig"
     },
     "pves": {
       "$ref": "#/$defs/RepositoryManifest"
@@ -33,9 +33,6 @@
     "services": {
       "$ref": "#/$defs/ServicesConfig"
     },
-    "site": {
-      "$ref": "#/$defs/SiteConfig"
-    },
     "storage": {
       "$ref": "#/$defs/StorageConfig"
     }
@@ -43,11 +40,10 @@
   "additionalProperties": false,
   "required": [
     "pves",
-    "site",
-    "host",
+    "cluster",
+    "node",
     "guests",
     "network",
-    "firewall",
     "storage",
     "backup",
     "restore",
@@ -214,6 +210,105 @@
         "forward_delay"
       ]
     },
+    "ClusterBackup": {
+      "type": "object",
+      "properties": {
+        "pbs": {
+          "$ref": "#/$defs/ClusterPbs"
+        },
+        "s3": {
+          "$ref": "#/$defs/ClusterS3"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "pbs",
+        "s3"
+      ]
+    },
+    "ClusterConfig": {
+      "type": "object",
+      "properties": {
+        "backup": {
+          "$ref": "#/$defs/ClusterBackup"
+        },
+        "cluster": {
+          "$ref": "#/$defs/ClusterIdentity"
+        },
+        "firewall": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirewallPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "proxmox": {
+          "$ref": "#/$defs/ProxmoxCluster"
+        },
+        "workload_profile": {
+          "$ref": "#/$defs/WorkloadProfile"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "cluster",
+        "proxmox",
+        "workload_profile",
+        "backup"
+      ]
+    },
+    "ClusterIdentity": {
+      "type": "object",
+      "properties": {
+        "environment": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "environment"
+      ]
+    },
+    "ClusterPbs": {
+      "type": "object",
+      "properties": {
+        "deployment": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "deployment",
+        "endpoint"
+      ]
+    },
+    "ClusterS3": {
+      "type": "object",
+      "properties": {
+        "configured_in_pbs": {
+          "type": "boolean"
+        },
+        "endpoint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "configured_in_pbs",
+        "endpoint"
+      ]
+    },
     "Count": {
       "anyOf": [
         {
@@ -337,51 +432,6 @@
         "pre_enrolled_keys"
       ]
     },
-    "FirewallConfig": {
-      "type": "object",
-      "properties": {
-        "absent_guest_files": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "uint32",
-            "minimum": 0
-          }
-        },
-        "cluster": {
-          "$ref": "#/$defs/FirewallPolicy"
-        },
-        "guests": {
-          "type": "object",
-          "additionalProperties": false,
-          "patternProperties": {
-            "^\\d+$": {
-              "$ref": "#/$defs/FirewallPolicy"
-            }
-          }
-        },
-        "nodes": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/NodeFirewall"
-          }
-        },
-        "schema_version": {
-          "type": "integer",
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "schema_version",
-        "cluster",
-        "nodes",
-        "guests",
-        "absent_guest_files"
-      ]
-    },
     "FirewallPolicy": {
       "type": "object",
       "properties": {
@@ -487,49 +537,6 @@
         "node"
       ]
     },
-    "HostConfig": {
-      "type": "object",
-      "properties": {
-        "host": {
-          "$ref": "#/$defs/HostIdentity"
-        },
-        "storage_topology": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/StorageTopology"
-          }
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "host",
-        "storage_topology"
-      ]
-    },
-    "HostIdentity": {
-      "type": "object",
-      "properties": {
-        "kernel": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "pve_version": {
-          "type": "string"
-        },
-        "standalone": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "standalone",
-        "pve_version",
-        "kernel"
-      ]
-    },
     "HostMount": {
       "type": "object",
       "properties": {
@@ -581,6 +588,17 @@
           "format": "uint16",
           "maximum": 65535,
           "minimum": 0
+        },
+        "firewall": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirewallPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "hostname": {
           "type": "string"
@@ -711,33 +729,58 @@
         "ipv4"
       ]
     },
-    "NodeFirewall": {
+    "NodeConfig": {
       "type": "object",
       "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": true
+        "firewall": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirewallPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
-        "log_level_in": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "node": {
+          "$ref": "#/$defs/NodeIdentity"
         },
-        "present": {
-          "type": "boolean"
-        },
-        "rules": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/FirewallRule"
+        "storage_topology": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/StorageTopology"
           }
         }
       },
       "additionalProperties": false,
       "required": [
-        "present",
-        "rules"
+        "node",
+        "storage_topology"
+      ]
+    },
+    "NodeIdentity": {
+      "type": "object",
+      "properties": {
+        "kernel": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "pve_version": {
+          "type": "string"
+        },
+        "standalone": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "standalone",
+        "pve_version",
+        "kernel"
       ]
     },
     "PbsBackup": {
@@ -866,7 +909,7 @@
         "content"
       ]
     },
-    "ProxmoxSite": {
+    "ProxmoxCluster": {
       "type": "object",
       "properties": {
         "change_policy": {
@@ -1345,94 +1388,6 @@
         "services"
       ]
     },
-    "SiteBackup": {
-      "type": "object",
-      "properties": {
-        "pbs": {
-          "$ref": "#/$defs/SitePbs"
-        },
-        "s3": {
-          "$ref": "#/$defs/SiteS3"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "pbs",
-        "s3"
-      ]
-    },
-    "SiteConfig": {
-      "type": "object",
-      "properties": {
-        "backup": {
-          "$ref": "#/$defs/SiteBackup"
-        },
-        "proxmox": {
-          "$ref": "#/$defs/ProxmoxSite"
-        },
-        "site": {
-          "$ref": "#/$defs/SiteIdentity"
-        },
-        "workload_profile": {
-          "$ref": "#/$defs/WorkloadProfile"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "site",
-        "proxmox",
-        "workload_profile",
-        "backup"
-      ]
-    },
-    "SiteIdentity": {
-      "type": "object",
-      "properties": {
-        "environment": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "environment"
-      ]
-    },
-    "SitePbs": {
-      "type": "object",
-      "properties": {
-        "deployment": {
-          "type": "string"
-        },
-        "endpoint": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "deployment",
-        "endpoint"
-      ]
-    },
-    "SiteS3": {
-      "type": "object",
-      "properties": {
-        "configured_in_pbs": {
-          "type": "boolean"
-        },
-        "endpoint": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "configured_in_pbs",
-        "endpoint"
-      ]
-    },
     "Start": {
       "type": "object",
       "properties": {
@@ -1741,6 +1696,17 @@
         },
         "efi": {
           "$ref": "#/$defs/Efi"
+        },
+        "firewall": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirewallPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "machine": {
           "type": "string"

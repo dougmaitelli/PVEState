@@ -112,6 +112,79 @@
         "pre_enrolled_keys"
       ]
     },
+    "FirewallPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "log_level_in": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FirewallRule"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "rules"
+      ]
+    },
+    "FirewallRule": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "comment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "destination_port": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "direction": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "interface": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "log": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "direction",
+        "action",
+        "log"
+      ]
+    },
     "Lxc": {
       "type": "object",
       "properties": {
@@ -127,6 +200,17 @@
           "format": "uint16",
           "maximum": 65535,
           "minimum": 0
+        },
+        "firewall": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirewallPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "hostname": {
           "type": "string"
@@ -276,6 +360,17 @@
         },
         "efi": {
           "$ref": "#/$defs/Efi"
+        },
+        "firewall": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirewallPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "machine": {
           "type": "string"

@@ -26,19 +26,19 @@ const ENTRIES: &[ScopeEntry] = &[
         "Repository format and tool compatibility metadata.",
     ),
     entry(
-        "site.yml",
-        "*",
+        "cluster.yml",
+        "{cluster,proxmox,workload_profile,backup}",
         ManagementClass::Metadata,
         "Environment inventory and operator-facing context.",
     ),
     entry(
-        "host.yml",
-        "host.*",
+        "node.yml",
+        "node.*",
         ManagementClass::Metadata,
         "Observed host identity and version expectations.",
     ),
     entry(
-        "host.yml",
+        "node.yml",
         "storage_topology.*",
         ManagementClass::DeclaredOnly,
         "Documents storage prerequisites, but recovery does not currently consume them.",
@@ -51,7 +51,7 @@ const ENTRIES: &[ScopeEntry] = &[
     ),
     entry(
         "guests.yml",
-        "lxcs.*.{hostname,os,cores,memory_mb,swap_mb,networks,bind_mounts,start}",
+        "lxcs.*.{hostname,os,cores,memory_mb,swap_mb,networks,bind_mounts,start,firewall}",
         ManagementClass::ProductionManaged,
         "Compared with the live LXC API; listed devices are updated and removed devices are deleted.",
     ),
@@ -98,10 +98,16 @@ const ENTRIES: &[ScopeEntry] = &[
         "Describes the management endpoint but is not independently reconciled.",
     ),
     entry(
-        "firewall.yml",
-        "{cluster,nodes,guests,absent_guest_files}",
+        "cluster.yml",
+        "firewall",
         ManagementClass::ProductionManaged,
-        "Creates, replaces, or explicitly removes cluster, node, and guest firewall files with concurrent-change checks.",
+        "Creates, replaces, or removes the cluster firewall file with concurrent-change checks.",
+    ),
+    entry(
+        "node.yml",
+        "firewall",
+        ManagementClass::ProductionManaged,
+        "Creates, replaces, or removes the managed node firewall file with concurrent-change checks.",
     ),
     entry(
         "storage.yml",
@@ -181,11 +187,10 @@ mod tests {
         let actual: BTreeSet<_> = entries().iter().map(|entry| entry.document).collect();
         let expected = BTreeSet::from([
             "pves.yml",
-            "site.yml",
-            "host.yml",
+            "cluster.yml",
+            "node.yml",
             "guests.yml",
             "network.yml",
-            "firewall.yml",
             "storage.yml",
             "backup.yml",
             "restore.yml",

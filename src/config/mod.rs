@@ -11,11 +11,10 @@ pub struct Repository {
     pub root: PathBuf,
     pub guests: Guests,
     pub network: Network,
-    pub firewall: FirewallConfig,
     pub recovery_checks: RecoveryChecks,
     pub manifest: RepositoryManifest,
-    pub site: SiteConfig,
-    pub host: HostConfig,
+    pub cluster: ClusterConfig,
+    pub node: NodeConfig,
     pub storage: StorageConfig,
     pub backup: BackupConfig,
     pub restore: RestoreConfig,
@@ -29,11 +28,10 @@ impl Repository {
             root: root.to_path_buf(),
             guests: read(root, "guests.yml")?,
             network: read(root, "network.yml")?,
-            firewall: read(root, "firewall.yml")?,
             recovery_checks: read(root, "recovery-checks.yml")?,
             manifest: serde_yaml::from_str(&fs::read_to_string(root.join("pves.yml"))?)?,
-            site: read(root, "site.yml")?,
-            host: read(root, "host.yml")?,
+            cluster: read(root, "cluster.yml")?,
+            node: read(root, "node.yml")?,
             storage: read(root, "storage.yml")?,
             backup: read(root, "backup.yml")?,
             restore: read(root, "restore.yml")?,
@@ -65,10 +63,6 @@ impl Repository {
                 include_str!("../../examples/basic/config/network.yml"),
             ),
             (
-                "firewall.yml",
-                include_str!("../../examples/basic/config/firewall.yml"),
-            ),
-            (
                 "recovery-checks.yml",
                 include_str!("../../examples/basic/config/recovery-checks.yml"),
             ),
@@ -77,12 +71,12 @@ impl Repository {
                 include_str!("../../examples/basic/config/restore.yml"),
             ),
             (
-                "site.yml",
-                include_str!("../../examples/basic/config/site.yml"),
+                "cluster.yml",
+                include_str!("../../examples/basic/config/cluster.yml"),
             ),
             (
-                "host.yml",
-                include_str!("../../examples/basic/config/host.yml"),
+                "node.yml",
+                include_str!("../../examples/basic/config/node.yml"),
             ),
             (
                 "storage.yml",
@@ -123,11 +117,10 @@ impl Repository {
             };
         }
         write!("repository.schema.json", RepositoryDocument);
-        write!("site.schema.json", SiteConfig);
-        write!("host.schema.json", HostConfig);
+        write!("cluster.schema.json", ClusterConfig);
+        write!("node.schema.json", NodeConfig);
         write!("guests.schema.json", Guests);
         write!("network.schema.json", Network);
-        write!("firewall.schema.json", FirewallConfig);
         write!("storage.schema.json", StorageConfig);
         write!("backup.schema.json", BackupConfig);
         write!("restore.schema.json", RestoreConfig);
@@ -147,11 +140,10 @@ impl Repository {
 #[serde(deny_unknown_fields)]
 pub struct RepositoryDocument {
     pub pves: RepositoryManifest,
-    pub site: SiteConfig,
-    pub host: HostConfig,
+    pub cluster: ClusterConfig,
+    pub node: NodeConfig,
     pub guests: Guests,
     pub network: Network,
-    pub firewall: FirewallConfig,
     pub storage: StorageConfig,
     pub backup: BackupConfig,
     pub restore: RestoreConfig,

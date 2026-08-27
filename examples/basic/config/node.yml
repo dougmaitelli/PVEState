@@ -1,4 +1,4 @@
-host:
+node:
   name: pve
   standalone: true
   pve_version: "9.0"
@@ -9,3 +9,7 @@ storage_topology:
     redundancy: none
     device_class: nvme
     provides: [local, local-lvm]
+firewall:
+  enabled: true
+  rules:
+    - {direction: IN, action: ACCEPT, interface: vmbr0, protocol: tcp, destination_port: "22", log: nolog, comment: SSH administration}

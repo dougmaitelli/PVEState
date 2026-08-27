@@ -11,5 +11,6 @@
   {"action":"write-file","domain":"network","resource":"pve","path":"/etc/network/interfaces","activate":true},
   {"action":"write-file","domain":"firewall","resource":"cluster","path":"/etc/pve/firewall/cluster.fw","activate":false},
   {"action":"write-file","domain":"firewall","resource":"101","path":"/etc/pve/firewall/101.fw","activate":false},
+  {"action":"delete-file","domain":"firewall","resource":"201","path":"/etc/pve/firewall/201.fw"},
   {"action":"write-file","domain":"firewall","resource":"node/pve","path":"/etc/pve/nodes/pve/host.fw","activate":false}
 ]

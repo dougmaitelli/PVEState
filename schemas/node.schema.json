@@ -1,10 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "HostConfig",
+  "title": "NodeConfig",
   "type": "object",
   "properties": {
-    "host": {
-      "$ref": "#/$defs/HostIdentity"
+    "firewall": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FirewallPolicy"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "node": {
+      "$ref": "#/$defs/NodeIdentity"
     },
     "storage_topology": {
       "type": "object",
@@ -15,11 +26,84 @@
   },
   "additionalProperties": false,
   "required": [
-    "host",
+    "node",
     "storage_topology"
   ],
   "$defs": {
-    "HostIdentity": {
+    "FirewallPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "log_level_in": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FirewallRule"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "rules"
+      ]
+    },
+    "FirewallRule": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "comment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "destination_port": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "direction": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "interface": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "log": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "direction",
+        "action",
+        "log"
+      ]
+    },
+    "NodeIdentity": {
       "type": "object",
       "properties": {
         "kernel": {

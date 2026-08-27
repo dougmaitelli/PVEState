@@ -1,4 +1,4 @@
-use super::{DiskInterface, UsbSlot};
+use super::{DiskInterface, FirewallPolicy, UsbSlot};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -28,6 +28,8 @@ pub struct Lxc {
     pub start: Start,
     #[serde(default)]
     pub bind_mounts: Vec<BindMount>,
+    #[serde(default)]
+    pub firewall: Option<FirewallPolicy>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -45,6 +47,8 @@ pub struct Vm {
     pub usb_passthrough: Vec<Usb>,
     pub qemu_guest_agent: bool,
     pub start: Start,
+    #[serde(default)]
+    pub firewall: Option<FirewallPolicy>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

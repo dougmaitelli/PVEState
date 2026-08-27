@@ -4,7 +4,7 @@ use std::{collections::BTreeMap, fs};
 
 pub(super) fn capture(repo: &Repository, ssh: &dyn RemoteHost) -> Result<Vec<String>> {
     let pbs_vmid = repo.backup.pbs.guest.vmid;
-    let cluster_command = if repo.host.host.standalone {
+    let cluster_command = if repo.node.node.standalone {
         "pvecm status 2>&1 || true"
     } else {
         "pvecm status 2>&1"

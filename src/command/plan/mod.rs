@@ -197,59 +197,77 @@ pub fn run(repo: &Repository, api: &dyn PveClient, pbs: &dyn PbsClient) -> Resul
         true,
         &mut operations,
     )?;
-    file::operation(
-        repo,
-        ("firewall", "cluster"),
-        ("pve/firewall/cluster.fw", "/etc/pve/firewall/cluster.fw"),
-        render::firewall_policy(&repo.firewall.cluster),
-        false,
-        &mut operations,
-    )?;
-    for (id, policy) in &repo.firewall.guests {
-        let id = id.to_string();
+    if let Some(policy) = &repo.cluster.firewall {
         file::operation(
             repo,
-            ("firewall", &id),
-            (
-                &format!("pve/firewall/{id}.fw"),
-                &format!("/etc/pve/firewall/{id}.fw"),
-            ),
+            ("firewall", "cluster"),
+            ("pve/firewall/cluster.fw", "/etc/pve/firewall/cluster.fw"),
             render::firewall_policy(policy),
             false,
             &mut operations,
         )?;
-    }
-    for id in &repo.firewall.absent_guest_files {
+    } else {
         file::deletion(
             repo,
-            ("firewall", &id.to_string()),
-            (
-                &format!("pve/firewall/{id}.fw"),
-                &format!("/etc/pve/firewall/{id}.fw"),
-            ),
+            ("firewall", "cluster"),
+            ("pve/firewall/cluster.fw", "/etc/pve/firewall/cluster.fw"),
             &mut operations,
         )?;
     }
-    for (node, firewall) in &repo.firewall.nodes {
-        let local = format!("pve/firewall/{node}-host.fw");
-        let remote = format!("/etc/pve/nodes/{node}/host.fw");
-        if firewall.present {
+    let guest_firewalls = repo
+        .guests
+        .lxcs
+        .iter()
+        .map(|(id, guest)| (id, guest.firewall.as_ref()))
+        .chain(
+            repo.guests
+                .vms
+                .iter()
+                .map(|(id, guest)| (id, guest.firewall.as_ref())),
+        );
+    for (id, policy) in guest_firewalls {
+        let id = id.to_string();
+        let paths = (
+            format!("pve/firewall/{id}.fw"),
+            format!("/etc/pve/firewall/{id}.fw"),
+        );
+        if let Some(policy) = policy {
             file::operation(
                 repo,
-                ("firewall", &format!("node/{node}")),
-                (&local, &remote),
-                render::node_firewall(firewall),
+                ("firewall", &id),
+                (&paths.0, &paths.1),
+                render::firewall_policy(policy),
                 false,
                 &mut operations,
             )?;
         } else {
             file::deletion(
                 repo,
-                ("firewall", &format!("node/{node}")),
-                (&local, &remote),
+                ("firewall", &id),
+                (&paths.0, &paths.1),
                 &mut operations,
             )?;
         }
+    }
+    let node = &repo.node.node.name;
+    let local = format!("pve/firewall/{node}-host.fw");
+    let remote = format!("/etc/pve/nodes/{node}/host.fw");
+    if let Some(policy) = &repo.node.firewall {
+        file::operation(
+            repo,
+            ("firewall", &format!("node/{node}")),
+            (&local, &remote),
+            render::firewall_policy(policy),
+            false,
+            &mut operations,
+        )?;
+    } else {
+        file::deletion(
+            repo,
+            ("firewall", &format!("node/{node}")),
+            (&local, &remote),
+            &mut operations,
+        )?;
     }
 
     let mut plan = Plan {
@@ -473,6 +491,12 @@ mod tests {
     fn fixture_plans_guest_backup_dns_and_file_mutations() {
         let temp = tempfile::tempdir().unwrap();
         Repository::initialize(temp.path()).unwrap();
+        fs::create_dir_all(temp.path().join("observed/production/pve/firewall")).unwrap();
+        fs::write(
+            temp.path().join("observed/production/pve/firewall/201.fw"),
+            "[OPTIONS]\n\nenable: 1\n",
+        )
+        .unwrap();
         complete_capture(temp.path());
         let repo = Repository::open(temp.path()).unwrap();
         let fixture: LiveFixture =

@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClusterConfig",
+  "type": "object",
+  "properties": {
+    "backup": {
+      "$ref": "#/$defs/ClusterBackup"
+    },
+    "cluster": {
+      "$ref": "#/$defs/ClusterIdentity"
+    },
+    "firewall": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FirewallPolicy"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "proxmox": {
+      "$ref": "#/$defs/ProxmoxCluster"
+    },
+    "workload_profile": {
+      "$ref": "#/$defs/WorkloadProfile"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "cluster",
+    "proxmox",
+    "workload_profile",
+    "backup"
+  ],
+  "$defs": {
+    "ClusterBackup": {
+      "type": "object",
+      "properties": {
+        "pbs": {
+          "$ref": "#/$defs/ClusterPbs"
+        },
+        "s3": {
+          "$ref": "#/$defs/ClusterS3"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "pbs",
+        "s3"
+      ]
+    },
+    "ClusterIdentity": {
+      "type": "object",
+      "properties": {
+        "environment": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "environment"
+      ]
+    },
+    "ClusterPbs": {
+      "type": "object",
+      "properties": {
+        "deployment": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "deployment",
+        "endpoint"
+      ]
+    },
+    "ClusterS3": {
+      "type": "object",
+      "properties": {
+        "configured_in_pbs": {
+          "type": "boolean"
+        },
+        "endpoint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "configured_in_pbs",
+        "endpoint"
+      ]
+    },
+    "Count": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "FirewallPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "log_level_in": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FirewallRule"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "rules"
+      ]
+    },
+    "FirewallRule": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "comment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "destination_port": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "direction": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "interface": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "log": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "direction",
+        "action",
+        "log"
+      ]
+    },
+    "ProxmoxCluster": {
+      "type": "object",
+      "properties": {
+        "change_policy": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "existing_environment": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "endpoint",
+        "existing_environment",
+        "change_policy"
+      ]
+    },
+    "WorkloadProfile": {
+      "type": "object",
+      "properties": {
+        "containers": {
+          "$ref": "#/$defs/Count"
+        },
+        "virtual_machines": {
+          "$ref": "#/$defs/Count"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "virtual_machines",
+        "containers"
+      ]
+    }
+  }
+}

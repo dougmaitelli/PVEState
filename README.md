@@ -132,7 +132,7 @@ is changed by `apply`. PVE State classifies configuration as:
 
 The field-level source of truth is `scope::entries()` in the tool. `pves schema`
 publishes it as `management-scope.json`; the checked-in copy lives alongside the
-JSON Schemas. PVE/PBS backup jobs, node firewalls, absent guest firewall files,
+JSON Schemas. PVE/PBS backup jobs, node firewalls, embedded guest firewall policies,
 LXC bind mounts, and guest device removals are production-managed. Remaining
 gaps, such as privileged/unprivileged LXC conversion, are explicitly marked
 `declared-only`.

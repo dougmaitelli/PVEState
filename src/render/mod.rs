@@ -1,4 +1,4 @@
-use crate::model::{BindMount, FirewallPolicy, FirewallRule, Network, Nic, NodeFirewall, VmNic};
+use crate::model::{BindMount, FirewallPolicy, FirewallRule, Network, Nic, VmNic};
 
 pub fn options(items: Vec<(&str, Option<String>)>) -> String {
     items
@@ -79,18 +79,6 @@ pub fn firewall_policy(policy: &FirewallPolicy) -> String {
         render_firewall_rules(&mut s, &policy.rules);
     }
     s
-}
-
-pub fn node_firewall(firewall: &NodeFirewall) -> String {
-    let mut output = format!("[OPTIONS]\n\nenable: {}\n", u8::from(firewall.enabled));
-    if let Some(value) = &firewall.log_level_in {
-        output += &format!("log_level_in: {value}\n");
-    }
-    if !firewall.rules.is_empty() {
-        output += "\n[RULES]\n\n";
-        render_firewall_rules(&mut output, &firewall.rules);
-    }
-    output
 }
 
 fn render_firewall_rules(output: &mut String, rules: &[FirewallRule]) {

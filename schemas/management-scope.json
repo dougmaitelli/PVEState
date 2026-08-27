@@ -6,19 +6,19 @@
     "behavior": "Repository format and tool compatibility metadata."
   },
   {
-    "document": "site.yml",
-    "fields": "*",
+    "document": "cluster.yml",
+    "fields": "{cluster,proxmox,workload_profile,backup}",
     "class": "metadata",
     "behavior": "Environment inventory and operator-facing context."
   },
   {
-    "document": "host.yml",
-    "fields": "host.*",
+    "document": "node.yml",
+    "fields": "node.*",
     "class": "metadata",
     "behavior": "Observed host identity and version expectations."
   },
   {
-    "document": "host.yml",
+    "document": "node.yml",
     "fields": "storage_topology.*",
     "class": "declared-only",
     "behavior": "Documents storage prerequisites, but recovery does not currently consume them."
@@ -31,7 +31,7 @@
   },
   {
     "document": "guests.yml",
-    "fields": "lxcs.*.{hostname,os,cores,memory_mb,swap_mb,networks,bind_mounts,start}",
+    "fields": "lxcs.*.{hostname,os,cores,memory_mb,swap_mb,networks,bind_mounts,start,firewall}",
     "class": "production-managed",
     "behavior": "Compared with the live LXC API; listed devices are updated and removed devices are deleted."
   },
@@ -78,10 +78,16 @@
     "behavior": "Describes the management endpoint but is not independently reconciled."
   },
   {
-    "document": "firewall.yml",
-    "fields": "{cluster,nodes,guests,absent_guest_files}",
+    "document": "cluster.yml",
+    "fields": "firewall",
     "class": "production-managed",
-    "behavior": "Creates, replaces, or explicitly removes cluster, node, and guest firewall files with concurrent-change checks."
+    "behavior": "Creates, replaces, or removes the cluster firewall file with concurrent-change checks."
+  },
+  {
+    "document": "node.yml",
+    "fields": "firewall",
+    "class": "production-managed",
+    "behavior": "Creates, replaces, or removes the managed node firewall file with concurrent-change checks."
   },
   {
     "document": "storage.yml",

@@ -50,6 +50,11 @@ fn init_creates_a_configuration_repository() {
     assert!(root.join("pves.yml").is_file());
     assert!(root.join(".pves.env.example").is_file());
     assert!(root.join("config").is_dir());
+    assert!(root.join("config/cluster.yml").is_file());
+    assert!(root.join("config/node.yml").is_file());
+    assert!(!root.join("config/site.yml").exists());
+    assert!(!root.join("config/host.yml").exists());
+    assert!(!root.join("config/firewall.yml").exists());
     assert!(root.join("observed/production").is_dir());
     Repository::open(&root).expect("generated repository must satisfy every typed contract");
 }
@@ -79,11 +84,10 @@ fn schema_command_writes_every_document_schema() {
     Repository::write_schema(Some(temp.path())).unwrap();
     for name in [
         "repository",
-        "site",
-        "host",
+        "cluster",
+        "node",
         "guests",
         "network",
-        "firewall",
         "storage",
         "backup",
         "restore",

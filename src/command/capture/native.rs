@@ -14,10 +14,14 @@ pub(super) fn export(
         ("pve/storage.cfg", "/etc/pve/storage.cfg"),
         ("pve/jobs.cfg", "/etc/pve/jobs.cfg"),
         ("pve/datacenter.cfg", "/etc/pve/datacenter.cfg"),
-        ("pve/firewall/cluster.fw", "/etc/pve/firewall/cluster.fw"),
     ] {
         required(ssh, remote, &repo.observed().join(local))?;
     }
+    optional(
+        ssh,
+        "cat /etc/pve/firewall/cluster.fw",
+        &repo.observed().join("pve/firewall/cluster.fw"),
+    )?;
 
     let mut guest_ids = BTreeSet::new();
     for (node_name, node) in &snapshot.nodes {

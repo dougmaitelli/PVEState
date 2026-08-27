@@ -157,12 +157,22 @@ fn bootstrap_pve(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
         &render::network(&repo.network),
         "0644",
     )?;
-    write(
-        ssh,
-        "/etc/pve/firewall/cluster.fw",
-        &render::firewall_policy(&repo.firewall.cluster),
-        "0640",
-    )?;
+    if let Some(policy) = &repo.cluster.firewall {
+        write(
+            ssh,
+            "/etc/pve/firewall/cluster.fw",
+            &render::firewall_policy(policy),
+            "0640",
+        )?;
+    }
+    if let Some(policy) = &repo.node.firewall {
+        write(
+            ssh,
+            &format!("/etc/pve/nodes/{}/host.fw", repo.node.node.name),
+            &render::firewall_policy(policy),
+            "0640",
+        )?;
+    }
     println!("replacement PVE configuration staged; activate networking only with console access");
     Ok(())
 }
@@ -241,13 +251,26 @@ fn restore(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
             shell::quote(target)
         ))?;
     }
-    for (id, policy) in &repo.firewall.guests {
-        write(
-            ssh,
-            &format!("/etc/pve/firewall/{id}.fw"),
-            &render::firewall_policy(policy),
-            "0640",
-        )?;
+    for (id, policy) in repo
+        .guests
+        .lxcs
+        .iter()
+        .map(|(id, guest)| (id, guest.firewall.as_ref()))
+        .chain(
+            repo.guests
+                .vms
+                .iter()
+                .map(|(id, guest)| (id, guest.firewall.as_ref())),
+        )
+    {
+        if let Some(policy) = policy {
+            write(
+                ssh,
+                &format!("/etc/pve/firewall/{id}.fw"),
+                &render::firewall_policy(policy),
+                "0640",
+            )?;
+        }
     }
     for id in &repo.restore.restore_order {
         ssh.run(&format!("qm start {id} 2>/dev/null || pct start {id}"))?;

@@ -1,25 +1,28 @@
+use super::FirewallPolicy;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct SiteConfig {
-    pub site: SiteIdentity,
-    pub proxmox: ProxmoxSite,
+pub struct ClusterConfig {
+    pub cluster: ClusterIdentity,
+    pub proxmox: ProxmoxCluster,
     pub workload_profile: WorkloadProfile,
-    pub backup: SiteBackup,
+    pub backup: ClusterBackup,
+    #[serde(default)]
+    pub firewall: Option<FirewallPolicy>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct SiteIdentity {
+pub struct ClusterIdentity {
     pub name: String,
     pub environment: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct ProxmoxSite {
+pub struct ProxmoxCluster {
     pub endpoint: String,
     pub existing_environment: bool,
     pub change_policy: String,
@@ -41,21 +44,21 @@ pub enum Count {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct SiteBackup {
-    pub pbs: SitePbs,
-    pub s3: SiteS3,
+pub struct ClusterBackup {
+    pub pbs: ClusterPbs,
+    pub s3: ClusterS3,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct SitePbs {
+pub struct ClusterPbs {
     pub deployment: String,
     pub endpoint: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct SiteS3 {
+pub struct ClusterS3 {
     pub configured_in_pbs: bool,
     pub endpoint: String,
 }

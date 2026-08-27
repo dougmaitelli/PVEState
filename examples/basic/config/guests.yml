@@ -13,6 +13,11 @@ lxcs:
     start: {onboot: true, order: 20, delay_seconds: 10}
     bind_mounts:
       - {source: /mnt/data/apps, target: /srv/data, backed_up_by_pve: false}
+    firewall:
+      enabled: true
+      log_level_in: info
+      rules:
+        - {direction: IN, action: ACCEPT, interface: net0, protocol: tcp, destination_port: "443", log: nolog, comment: HTTPS applications}
 vms:
   201:
     name: home-automation
