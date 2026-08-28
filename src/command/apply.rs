@@ -74,6 +74,8 @@ fn authorize(repo: &Repository, settings: &ApplySettings) -> Result<Plan> {
             target_error: "apply target does not match plan target",
             max_age: chrono::Duration::minutes(30),
             stale_error: "plan is stale; capture and plan again",
+            max_future_skew: chrono::Duration::minutes(2),
+            future_error: "plan timestamp is too far in the future; check system clocks",
             blocker_prefix: "plan has blockers: ",
             blocker_separator: "; ",
         },

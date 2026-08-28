@@ -174,6 +174,8 @@ fn authorize(plan: &RecoveryPlan, target: &str, settings: &RecoverySettings) -> 
             target_error: "recovery target mismatch",
             max_age: chrono::Duration::minutes(30),
             stale_error: "recovery plan is stale",
+            max_future_skew: chrono::Duration::minutes(2),
+            future_error: "recovery plan timestamp is too far in the future; check system clocks",
             blocker_prefix: "recovery blockers: ",
             blocker_separator: ", ",
         },

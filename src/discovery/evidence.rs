@@ -97,7 +97,11 @@ impl CaptureManifest {
                 incomplete.join(", ")
             )
         }
-        if Utc::now() - self.exported_at > max_age {
+        let now = Utc::now();
+        if self.exported_at - now > Duration::minutes(2) {
+            bail!("observed exports are future-dated; check system clocks and run capture again")
+        }
+        if now - self.exported_at > max_age {
             bail!("observed exports are stale; run capture before plan")
         }
 
@@ -203,5 +207,22 @@ mod tests {
         let manifest = CaptureManifest::new(Utc::now(), source(true), artifacts);
         fs::write(temp.path().join("pve.json"), "after").unwrap();
         assert!(manifest.verify(temp.path(), Duration::minutes(30)).is_err());
+    }
+
+    #[test]
+    fn future_capture_beyond_clock_skew_is_rejected() {
+        let temp = tempfile::tempdir().unwrap();
+        let manifest = CaptureManifest::new(
+            Utc::now() + Duration::minutes(3),
+            source(true),
+            BTreeMap::new(),
+        );
+        assert!(
+            manifest
+                .verify(temp.path(), Duration::minutes(30))
+                .unwrap_err()
+                .to_string()
+                .contains("future-dated")
+        );
     }
 }

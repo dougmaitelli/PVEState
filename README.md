@@ -144,6 +144,8 @@ target, explicitly approved domains, and separate mutation credentials. Guest
 deletion/replacement, disk shrinking, and implicit storage moves are not modeled.
 Proxmox config digests and remote file hashes reject concurrent changes.
 Network files are not activated unless `PVES_APPLY_NETWORK_NOW=YES`.
+Plans and capture evidence more than two minutes in the future are rejected to
+allow minor clock skew without permitting future-dated freshness bypasses.
 
 Every authorized apply attempt creates `.runtime/apply-<id>.json` and updates
 `.runtime/apply-latest.json` before initializing mutation clients. Operations
