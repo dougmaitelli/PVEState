@@ -33,7 +33,14 @@ impl Ssh {
         }
     }
     fn command(&self, remote: &str) -> Command {
+        self.command_with_options(remote, false)
+    }
+
+    fn command_with_options(&self, remote: &str, verbose: bool) -> Command {
         let mut c = Command::new("ssh");
+        if verbose {
+            c.arg("-v");
+        }
         c.args([
             "-p",
             &self.port,
@@ -51,6 +58,28 @@ impl Ssh {
             remote,
         ]);
         c
+    }
+
+    pub fn host_key_fingerprint(&self) -> Result<String> {
+        let output = self
+            .command_with_options("true", true)
+            .output()
+            .context("probe SSH host key")?;
+        if !output.status.success() {
+            bail!(
+                "SSH host-key probe failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+        }
+        let stderr = String::from_utf8(output.stderr)?;
+        stderr
+            .lines()
+            .find_map(|line| {
+                line.split_whitespace()
+                    .find(|field| field.starts_with("SHA256:"))
+                    .map(str::to_owned)
+            })
+            .context("SSH did not report the negotiated host-key fingerprint")
     }
     pub fn run(&self, remote: &str) -> Result<String> {
         let output = self.probe(remote)?;
@@ -81,6 +110,9 @@ impl Ssh {
 }
 
 impl RemoteHost for Ssh {
+    fn host_key_fingerprint(&self) -> Result<String> {
+        self.host_key_fingerprint()
+    }
     fn run(&self, remote: &str) -> Result<String> {
         self.run(remote)
     }

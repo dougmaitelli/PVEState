@@ -129,13 +129,13 @@ const ENTRIES: &[ScopeEntry] = &[
     ),
     entry(
         "restore.yml",
-        "{target.production_address,pbs_bootstrap.lxc_template,pbs_bootstrap.storage_attached_to_pve,archives,restore_order,reattach_mounts,application.configure_command}",
+        "{target.expected_hostname,target.expected_host_key_sha256,target.production_address,pbs_bootstrap.lxc_template,pbs_bootstrap.storage_attached_to_pve,archives,restore_order,reattach_mounts,application.configure_command}",
         ManagementClass::RecoveryOnly,
         "Controls guarded replacement-host recovery stages.",
     ),
     entry(
         "restore.yml",
-        "{target.expected_hostname,target.plan_max_age_minutes,pbs_bootstrap.vmid,pbs_bootstrap.datastore,pbs_bootstrap.cache_path,pbs_bootstrap.s3_endpoint_id,pbs_bootstrap.bucket,pbs_bootstrap.region,protected_vmids,application.repository,application.docker_guest_vmid,application.configure_playbook}",
+        "{target.plan_max_age_minutes,pbs_bootstrap.vmid,pbs_bootstrap.datastore,pbs_bootstrap.cache_path,pbs_bootstrap.s3_endpoint_id,pbs_bootstrap.bucket,pbs_bootstrap.region,protected_vmids,application.repository,application.docker_guest_vmid,application.configure_playbook}",
         ManagementClass::DeclaredOnly,
         "Accepted by the recovery model but not currently consumed by recovery execution.",
     ),

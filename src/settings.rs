@@ -76,7 +76,6 @@ pub struct ApplySettings {
 pub struct RecoverySettings {
     pub enabled: bool,
     pub confirm_plan_sha: Option<String>,
-    pub allow_production_target: bool,
 }
 
 impl Settings {
@@ -165,7 +164,6 @@ impl Settings {
             recovery: RecoverySettings {
                 enabled: yes("PVES_ENABLE_RECOVERY"),
                 confirm_plan_sha: value("PVES_CONFIRM_PLAN_SHA"),
-                allow_production_target: yes("PVES_ALLOW_PRODUCTION_TARGET"),
             },
         })
     }

@@ -27,6 +27,7 @@ pub trait PbsClient {
 }
 
 pub trait RemoteHost {
+    fn host_key_fingerprint(&self) -> Result<String>;
     fn run(&self, remote: &str) -> Result<String>;
     fn probe(&self, remote: &str) -> Result<SshOutput>;
     fn stdin(&self, remote: &str, input: &[u8]) -> Result<()>;

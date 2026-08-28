@@ -171,6 +171,10 @@
     "RestoreTarget": {
       "type": "object",
       "properties": {
+        "expected_host_key_sha256": {
+          "description": "OpenSSH SHA-256 fingerprint, for example `SHA256:...`.",
+          "type": "string"
+        },
         "expected_hostname": {
           "type": "string"
         },
@@ -186,6 +190,7 @@
       "additionalProperties": false,
       "required": [
         "expected_hostname",
+        "expected_host_key_sha256",
         "production_address",
         "plan_max_age_minutes"
       ]

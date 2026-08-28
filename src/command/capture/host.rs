@@ -77,6 +77,10 @@ mod tests {
     struct FakeSsh;
 
     impl RemoteHost for FakeSsh {
+        fn host_key_fingerprint(&self) -> Result<String> {
+            Ok("SHA256:fixture".into())
+        }
+
         fn run(&self, _: &str) -> Result<String> {
             Ok(String::new())
         }

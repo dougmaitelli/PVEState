@@ -1,6 +1,7 @@
 schema_version: 1
 target:
   expected_hostname: pve
+  expected_host_key_sha256: SHA256:replace-with-recovery-host-fingerprint
   production_address: pve.example.test
   plan_max_age_minutes: 30
 pbs_bootstrap:

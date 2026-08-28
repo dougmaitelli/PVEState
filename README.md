@@ -153,6 +153,13 @@ later pending work, timestamps, targets, and the confirmed plan digest. Journal
 files are published with write, flush, filesystem sync, and rename; apply errors
 always report the attempt-specific journal path.
 
+Recovery plans pin both `restore.target.expected_hostname` and
+`restore.target.expected_host_key_sha256`. Before any recovery mutation, `pves`
+verifies the selected key from the recovery `known_hosts` file and checks the
+hostname reported by the authenticated machine. A replacement may intentionally
+reuse production DNS or IP addresses; safety depends on the signed replacement
+host-key pin rather than an address-based override.
+
 ```bash
 export PVES_ENABLE_PRODUCTION_APPLY=YES
 export PVES_CONFIRM_PLAN_SHA='<sha from .runtime/production-plan.json>'

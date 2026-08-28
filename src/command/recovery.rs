@@ -30,6 +30,8 @@ struct RecoveryPlan {
     schema_version: u8,
     created_at: DateTime<Utc>,
     target: String,
+    expected_hostname: String,
+    expected_host_key_sha256: String,
     blockers: Vec<String>,
     plan_sha256: String,
 }
@@ -64,10 +66,8 @@ pub fn run(
         &fs::read(repo.runtime().join("recovery-plan.json")).context("run recover plan first")?,
     )?;
     authorize(&plan, target, settings)?;
-    if repo.restore.target.production_address == target && !settings.allow_production_target {
-        bail!("recovery target is production; PVES_ALLOW_PRODUCTION_TARGET must equal YES")
-    }
     let ssh = ssh.context("recovery SSH settings are required")?;
+    verify_recovery_host(ssh, &plan)?;
     match stage {
         Stage::BootstrapPve => bootstrap_pve(repo, ssh),
         Stage::BootstrapPbs => bootstrap_pbs(repo, ssh),
@@ -116,6 +116,8 @@ fn create_plan(repo: &Repository, target: &str) -> Result<()> {
         schema_version: 1,
         created_at: Utc::now(),
         target: target.into(),
+        expected_hostname: repo.restore.target.expected_hostname.clone(),
+        expected_host_key_sha256: repo.restore.target.expected_host_key_sha256.clone(),
         blockers,
         plan_sha256: String::new(),
     };
@@ -123,6 +125,36 @@ fn create_plan(repo: &Repository, target: &str) -> Result<()> {
     atomic_file::write_json(&repo.runtime().join("recovery-plan.json"), &plan)?;
     println!("{}", serde_json::to_string_pretty(&plan)?);
     Ok(())
+}
+
+fn verify_recovery_host(ssh: &dyn RemoteHost, plan: &RecoveryPlan) -> Result<()> {
+    let fingerprint = ssh.host_key_fingerprint()?;
+    if fingerprint != plan.expected_host_key_sha256 {
+        bail!(
+            "recovery host key mismatch: expected {}, negotiated {}",
+            plan.expected_host_key_sha256,
+            fingerprint
+        )
+    }
+    let actual = normalize_hostname(ssh.run("hostname")?.trim());
+    let expected = normalize_hostname(&plan.expected_hostname);
+    if actual != expected {
+        bail!(
+            "recovery host identity mismatch: expected hostname {}, got {}",
+            plan.expected_hostname,
+            actual
+        )
+    }
+    Ok(())
+}
+
+fn normalize_hostname(value: &str) -> String {
+    value
+        .trim()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim_end_matches('.')
+        .to_ascii_lowercase()
 }
 
 fn authorize(plan: &RecoveryPlan, target: &str, settings: &RecoverySettings) -> Result<()> {
@@ -313,6 +345,8 @@ mod tests {
             schema_version: 1,
             created_at: Utc::now(),
             target: "host".into(),
+            expected_hostname: "replacement".into(),
+            expected_host_key_sha256: "SHA256:fixture".into(),
             blockers: Vec::new(),
             plan_sha256: String::new(),
         };
@@ -320,5 +354,14 @@ mod tests {
         assert!(plan.verify().is_ok());
         plan.target = "other".into();
         assert!(plan.verify().is_err());
+    }
+
+    #[test]
+    fn hostnames_are_normalized_for_identity_checks() {
+        assert_eq!(
+            normalize_hostname(" PVE.EXAMPLE.TEST. "),
+            "pve.example.test"
+        );
+        assert_eq!(normalize_hostname("[2001:DB8::1]"), "2001:db8::1");
     }
 }
