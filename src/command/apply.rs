@@ -6,15 +6,12 @@ use crate::{
     command::plan::{ApiMethod, ApiTarget, Operation, Plan},
     config::Repository,
     settings::ApplySettings,
-    utility::{authorization, progress, shell},
+    utility::{authorization, progress, runtime_security, shell},
 };
 use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::Utc;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
-};
+use std::collections::{BTreeMap, BTreeSet};
 pub fn run(
     repo: &Repository,
     settings: &ApplySettings,
@@ -23,6 +20,7 @@ pub fn run(
     ssh: Option<&dyn RemoteHost>,
 ) -> Result<()> {
     progress::section("Applying production plan");
+    repo.secure_runtime()?;
     let plan = authorize(repo, settings)?;
     let mut journal = ApplyJournal::new(&repo.runtime(), &plan);
     journal.persist()?;
@@ -53,7 +51,8 @@ pub fn run(
 
 fn authorize(repo: &Repository, settings: &ApplySettings) -> Result<Plan> {
     let plan: Plan = serde_json::from_slice(
-        &fs::read(repo.runtime().join("production-plan.json")).context("run plan first")?,
+        &runtime_security::read(&repo.runtime().join("production-plan.json"))
+            .context("run plan first")?,
     )?;
     plan.verify()?;
     let target = settings
@@ -289,6 +288,7 @@ mod tests {
     use anyhow::anyhow;
     use reqwest::Url;
     use serde_json::Value;
+    use std::fs;
     use std::sync::{
         Mutex,
         atomic::{AtomicUsize, Ordering},

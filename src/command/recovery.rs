@@ -6,14 +6,13 @@ use crate::{
     utility::{
         atomic_file, authorization,
         plan_envelope::{self, PlanEnvelope},
-        progress, shell,
+        progress, runtime_security, shell,
     },
 };
 use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::fs;
 
 #[derive(Clone, Copy)]
 pub enum Stage {
@@ -59,11 +58,13 @@ pub fn run(
     ssh: Option<&dyn RemoteHost>,
 ) -> Result<()> {
     progress::section(format!("Recovery: {}", stage.name()));
+    repo.secure_runtime()?;
     if matches!(stage, Stage::Plan) {
         return create_plan(repo, target);
     }
     let plan: RecoveryPlan = serde_json::from_slice(
-        &fs::read(repo.runtime().join("recovery-plan.json")).context("run recover plan first")?,
+        &runtime_security::read(&repo.runtime().join("recovery-plan.json"))
+            .context("run recover plan first")?,
     )?;
     authorize(&plan, target, settings)?;
     let ssh = ssh.context("recovery SSH settings are required")?;

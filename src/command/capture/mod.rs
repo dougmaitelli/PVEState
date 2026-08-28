@@ -8,7 +8,7 @@ use crate::{
         CaptureManifest, CaptureStatus, SourceEvidence, capture_pve, collect_artifacts,
         write_snapshot,
     },
-    utility::progress,
+    utility::{atomic_file, progress},
 };
 use anyhow::{Result, anyhow, bail};
 use chrono::Utc;
@@ -23,7 +23,7 @@ pub fn run(
 ) -> Result<()> {
     progress::section("Capturing production state");
     progress::detail(format!("configuration: {}", repo.root.display()));
-    fs::create_dir_all(repo.runtime())?;
+    repo.secure_runtime()?;
     fs::create_dir_all(repo.observed().join("api"))?;
 
     let started = Utc::now();
@@ -124,15 +124,17 @@ fn source(endpoint: &str, failures: Vec<String>) -> SourceEvidence {
 fn write_manifest(repo: &Repository, manifest: &CaptureManifest) -> Result<()> {
     let content = serde_json::to_vec_pretty(manifest)?;
     fs::write(repo.observed().join("manifest.json"), &content)?;
-    fs::write(
-        repo.runtime()
+    atomic_file::write(
+        &repo
+            .runtime()
             .join(format!("capture-manifest-{}.json", manifest.capture_id)),
-        content,
+        &content,
     )?;
     Ok(())
 }
 
 pub fn validate(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
+    repo.secure_runtime()?;
     let mut failures = Vec::new();
     let mut report = Vec::new();
     progress::section("Running recovery validation checks");
@@ -152,10 +154,9 @@ pub fn validate(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
             },
         }
     }
-    fs::create_dir_all(repo.runtime())?;
-    fs::write(
-        repo.runtime().join("validation.json"),
-        serde_json::to_vec_pretty(&report)?,
+    atomic_file::write(
+        &repo.runtime().join("validation.json"),
+        &serde_json::to_vec_pretty(&report)?,
     )?;
     if failures.is_empty() {
         println!("validation passed: {} checks", report.len());

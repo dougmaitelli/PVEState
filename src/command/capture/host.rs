@@ -1,6 +1,10 @@
-use crate::{client::RemoteHost, config::Repository, utility::progress};
+use crate::{
+    client::RemoteHost,
+    config::Repository,
+    utility::{atomic_file, progress},
+};
 use anyhow::Result;
-use std::{collections::BTreeMap, fs};
+use std::collections::BTreeMap;
 
 pub(super) fn capture(repo: &Repository, ssh: &dyn RemoteHost) -> Result<Vec<String>> {
     let pbs_vmid = repo.backup.pbs.guest.vmid;
@@ -62,9 +66,9 @@ pub(super) fn capture(repo: &Repository, ssh: &dyn RemoteHost) -> Result<Vec<Str
             )
         })
         .collect();
-    fs::write(
-        repo.runtime().join("host-latest.json"),
-        serde_json::to_vec_pretty(&host)?,
+    atomic_file::write(
+        &repo.runtime().join("host-latest.json"),
+        &serde_json::to_vec_pretty(&host)?,
     )?;
     Ok(failures)
 }
@@ -73,6 +77,7 @@ pub(super) fn capture(repo: &Repository, ssh: &dyn RemoteHost) -> Result<Vec<Str
 mod tests {
     use super::*;
     use crate::client::SshOutput;
+    use std::fs;
 
     struct FakeSsh;
 

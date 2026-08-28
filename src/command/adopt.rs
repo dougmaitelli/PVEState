@@ -5,7 +5,7 @@ use crate::{
     config::Repository,
     discovery::CaptureManifest,
     model::{GuestField, GuestKind, GuestRef},
-    utility::{atomic_file, progress},
+    utility::{atomic_file, progress, runtime_security},
 };
 use anyhow::{Context, Result, bail};
 use chrono::Duration;
@@ -31,12 +31,14 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
     } else {
         "Adopting production state"
     });
+    repo.secure_runtime()?;
     let manifest: CaptureManifest = serde_json::from_slice(
         &fs::read(repo.observed().join("manifest.json")).context("run capture first")?,
     )?;
     manifest.verify(&repo.observed(), Duration::minutes(30))?;
     let plan: Plan = serde_json::from_slice(
-        &fs::read(repo.runtime().join("production-plan.json")).context("run plan first")?,
+        &runtime_security::read(&repo.runtime().join("production-plan.json"))
+            .context("run plan first")?,
     )?;
     plan.verify()?;
     let observed: Value = serde_json::from_slice(&fs::read(repo.observed().join("api/pve.json"))?)?;

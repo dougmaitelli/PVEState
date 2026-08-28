@@ -1,3 +1,4 @@
+use crate::utility::{atomic_file, runtime_security};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -14,9 +15,9 @@ pub fn write_snapshot<T: Serialize>(
     let raw = serde_json::to_value(snapshot)?;
     let raw_bytes = serde_json::to_vec_pretty(&raw)?;
     let stamp = collected_at.format("%Y%m%dT%H%M%SZ");
-    fs::create_dir_all(runtime)?;
-    fs::write(runtime.join(format!("{name}-{stamp}.json")), &raw_bytes)?;
-    fs::write(runtime.join(format!("{name}-latest.json")), &raw_bytes)?;
+    runtime_security::prepare(runtime)?;
+    atomic_file::write(&runtime.join(format!("{name}-{stamp}.json")), &raw_bytes)?;
+    atomic_file::write(&runtime.join(format!("{name}-latest.json")), &raw_bytes)?;
 
     let mut safe = raw;
     sanitize(&mut safe);

@@ -138,6 +138,7 @@ impl PlanEnvelope for Plan {
 
 pub fn run(repo: &Repository, api: &dyn PveClient, pbs: &dyn PbsClient) -> Result<Plan> {
     progress::section("Planning production changes");
+    repo.secure_runtime()?;
     validation::validate(repo)?;
     ensure_observations_are_fresh(repo)?;
     let mut operations = Vec::new();

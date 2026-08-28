@@ -1014,6 +1014,7 @@ dependencies = [
  "percent-encoding",
  "predicates",
  "reqwest",
+ "rustix",
  "schemars",
  "serde",
  "serde_json",

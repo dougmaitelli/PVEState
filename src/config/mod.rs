@@ -1,4 +1,4 @@
-use crate::{model::*, scope};
+use crate::{model::*, scope, utility::runtime_security};
 use anyhow::{Context, Result};
 use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
@@ -44,6 +44,12 @@ impl Repository {
         self.root.join(".runtime")
     }
 
+    pub fn secure_runtime(&self) -> Result<PathBuf> {
+        let runtime = self.runtime();
+        runtime_security::prepare(&runtime)?;
+        Ok(runtime)
+    }
+
     pub fn observed(&self) -> PathBuf {
         self.root.join("observed/production")
     }
@@ -51,6 +57,7 @@ impl Repository {
     pub fn initialize(path: &Path) -> Result<()> {
         fs::create_dir_all(path.join("config"))?;
         fs::create_dir_all(path.join("observed/production"))?;
+        runtime_security::prepare(&path.join(".runtime"))?;
         fs::write(path.join("pves.yml"), "schema_version: 1\n")?;
         fs::write(path.join(".gitignore"), ".pves.env\n.secrets/\n.runtime/\n")?;
         for (name, content) in [

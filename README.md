@@ -153,6 +153,11 @@ later pending work, timestamps, targets, and the confirmed plan digest. Journal
 files are published with write, flush, filesystem sync, and rename; apply errors
 always report the attempt-specific journal path.
 
+The runtime directory is created with owner-only `0700` permissions and runtime
+artifacts with `0600` permissions on Unix. Commands reject a symlinked runtime
+directory, artifacts that are not regular files, ownership mismatches, and any
+group- or world-accessible runtime permissions.
+
 Recovery plans pin both `restore.target.expected_hostname` and
 `restore.target.expected_host_key_sha256`. Before any recovery mutation, `pves`
 verifies the selected key from the recovery `known_hosts` file and checks the
