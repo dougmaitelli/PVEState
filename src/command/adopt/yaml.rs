@@ -18,6 +18,7 @@ pub enum Patch {
 /// comments and layout remain untouched. Structural changes are serialized once
 /// into serde_yaml's deterministic representation.
 pub fn apply_patches(input: &str, patches: &[Patch]) -> Result<String> {
+    let newline = line_ending(input);
     let mut output = input.to_owned();
     let mut structural = Vec::new();
     for patch in patches {
@@ -42,7 +43,8 @@ pub fn apply_patches(input: &str, patches: &[Patch]) -> Result<String> {
             Patch::Remove(path) => remove_value(&mut document, path)?,
         }
     }
-    serde_yaml::to_string(&document).context("serialize patched YAML")
+    let serialized = serde_yaml::to_string(&document).context("serialize patched YAML")?;
+    Ok(with_line_ending(serialized, newline))
 }
 
 fn scalar(value: &Value) -> bool {
@@ -116,15 +118,28 @@ fn descend<'a>(value: &'a mut Value, path: &[Segment], create: bool) -> Result<&
 }
 
 pub fn replace_scalar(input: &str, path: &[Segment], value: &str) -> Result<String> {
+    let newline = line_ending(input);
     let trailing_newline = input.ends_with('\n');
     let mut lines = input.lines().map(str::to_owned).collect::<Vec<_>>();
     let end = lines.len();
     replace_in(&mut lines, 0, end, None, path, value)?;
-    let mut output = lines.join("\n");
+    let mut output = lines.join(newline);
     if trailing_newline {
-        output.push('\n');
+        output.push_str(newline);
     }
     Ok(output)
+}
+
+fn line_ending(input: &str) -> &'static str {
+    if input.contains("\r\n") { "\r\n" } else { "\n" }
+}
+
+fn with_line_ending(value: String, newline: &str) -> String {
+    if newline == "\r\n" {
+        value.replace('\n', "\r\n")
+    } else {
+        value
+    }
 }
 
 fn replace_in(
@@ -308,6 +323,24 @@ mod tests {
             output,
             "# keep\nlxcs:\n  106:\n    rootfs: {storage: VMs, size_gb: 12}\n    start: {onboot: true, order: 4} # keep\n"
         );
+    }
+
+    #[test]
+    fn preserves_windows_line_endings() {
+        let input = "lxcs:\r\n  101:\r\n    cores: 2 # keep\r\n";
+        let output = replace_scalar(
+            input,
+            &[
+                Segment::Key("lxcs".into()),
+                Segment::Key("101".into()),
+                Segment::Key("cores".into()),
+            ],
+            "4",
+        )
+        .unwrap();
+
+        assert_eq!(output, "lxcs:\r\n  101:\r\n    cores: 4 # keep\r\n");
+        assert!(!output.replace("\r\n", "").contains('\n'));
     }
 
     #[test]
