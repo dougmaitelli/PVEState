@@ -26,7 +26,12 @@ fn adopt_requires_exactly_one_mode() {
         .unwrap();
     assert!(!missing.status.success());
     let stderr = String::from_utf8(missing.stderr).unwrap();
-    assert!(stderr.contains("Usage: pves adopt"), "{stderr}");
+    assert!(
+        stderr.lines().any(|line| {
+            line.starts_with("Usage: ") && line.split_whitespace().nth(2) == Some("adopt")
+        }),
+        "{stderr}"
+    );
     for mode in ["--preview", "--all", "[ID]..."] {
         assert!(stderr.contains(mode), "{stderr}");
     }
