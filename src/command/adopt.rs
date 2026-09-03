@@ -45,6 +45,7 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
     let candidates = candidates(repo, &plan, &observed)?;
 
     if preview {
+        progress::finish(true);
         println!("{}", serde_json::to_string_pretty(&candidates)?);
         return Ok(());
     }
@@ -80,6 +81,7 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
     serde_yaml::from_str::<crate::model::Guests>(&content)
         .context("validate adopted config/guests.yml")?;
     atomic_file::write(&path, content.as_bytes())?;
+    progress::finish(true);
     println!(
         "adopted {} production value(s) into config/guests.yml",
         selected.len()

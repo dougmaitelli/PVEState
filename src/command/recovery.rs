@@ -99,6 +99,9 @@ impl Stage {
 
 fn create_plan(repo: &Repository, target: &str) -> Result<()> {
     let mut blockers = Vec::new();
+    if repo.restore.target.expected_host_key_sha256.is_none() {
+        blockers.push("target.expected_host_key_sha256".into());
+    }
     if repo.restore.pbs_bootstrap.lxc_template.is_none() {
         blockers.push("pbs_bootstrap.lxc_template".into());
     }
@@ -118,12 +121,18 @@ fn create_plan(repo: &Repository, target: &str) -> Result<()> {
         created_at: Utc::now(),
         target: target.into(),
         expected_hostname: repo.restore.target.expected_hostname.clone(),
-        expected_host_key_sha256: repo.restore.target.expected_host_key_sha256.clone(),
+        expected_host_key_sha256: repo
+            .restore
+            .target
+            .expected_host_key_sha256
+            .clone()
+            .unwrap_or_default(),
         blockers,
         plan_sha256: String::new(),
     };
     plan_envelope::sign(&mut plan)?;
     atomic_file::write_json(&repo.runtime().join("recovery-plan.json"), &plan)?;
+    progress::finish(true);
     println!("{}", serde_json::to_string_pretty(&plan)?);
     Ok(())
 }
@@ -208,6 +217,7 @@ fn bootstrap_pve(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
             "0640",
         )?;
     }
+    progress::finish(true);
     println!("replacement PVE configuration staged; activate networking only with console access");
     Ok(())
 }

@@ -65,6 +65,12 @@ enum Recovery {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     pvestate::utility::progress::set(cli.verbose);
+    let result = run(cli);
+    pvestate::utility::progress::finish(result.is_ok());
+    result
+}
+
+fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Init { path } => {
             pvestate::utility::progress::section("Initializing configuration repository");
@@ -84,6 +90,7 @@ fn main() -> Result<()> {
             let pve = Pve::discovery(&settings.pve)?;
             let pbs = Pbs::discovery(&settings.pbs)?;
             let p = plan::run(&repo, &pve, &pbs)?;
+            pvestate::utility::progress::finish(true);
             println!("{}", serde_json::to_string_pretty(&p)?);
             Ok(())
         },

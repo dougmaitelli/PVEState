@@ -66,7 +66,10 @@ High-level progress is shown by default. Use `-v` to show each operation and
 `-vv` for additional diagnostic detail. Progress is written to stderr so JSON
 output on stdout remains safe to pipe or redirect. For example, `pves capture`
 shows its major stages, while `pves capture -v` also shows every API request,
-native configuration read, and host probe.
+native configuration read, and host probe. Interactive terminals show colored
+spinners, live operation counts, elapsed times, and completion markers. CI,
+redirected output, and `TERM=dumb` automatically use stable plain-text output;
+terminal coloring also respects `NO_COLOR`.
 
 PVE State uses one canonical host for both API and SSH access:
 
@@ -161,7 +164,9 @@ directory, artifacts that are not regular files, ownership mismatches, and any
 group- or world-accessible runtime permissions.
 
 Recovery plans pin both `restore.target.expected_hostname` and
-`restore.target.expected_host_key_sha256`. Before any recovery mutation, `pves`
+`restore.target.expected_host_key_sha256`. The fingerprint may be omitted from
+configuration used for normal capture and planning, but its absence blocks every
+recovery mutation. Before any recovery mutation, `pves`
 verifies the selected key from the recovery `known_hosts` file and checks the
 hostname reported by the authenticated machine. A replacement may intentionally
 reuse production DNS or IP addresses; safety depends on the signed replacement

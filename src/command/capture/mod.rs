@@ -58,6 +58,7 @@ pub fn run(
     if manifest.status == CaptureStatus::Partial {
         bail!("capture is partial: {}", manifest.failures.join("; "))
     }
+    progress::finish(true);
     println!("captured production into {}", repo.root.display());
     Ok(())
 }
@@ -79,10 +80,9 @@ fn perform(
         &repo.runtime(),
         &repo.observed().join("api"),
     )?;
-    sources.insert(
-        "pve-api".into(),
-        source(pve.endpoint(), pve_snapshot.failures()),
-    );
+    let pve_failures = pve_snapshot.failures();
+    progress::finish(pve_failures.is_empty());
+    sources.insert("pve-api".into(), source(pve.endpoint(), pve_failures));
 
     progress::section("Proxmox Backup Server API");
     let pbs_snapshot = capture_pbs(pbs);
@@ -93,21 +93,22 @@ fn perform(
         &repo.runtime(),
         &repo.observed().join("api"),
     )?;
-    sources.insert(
-        "pbs-api".into(),
-        source(pbs.endpoint(), pbs_snapshot.failures()),
-    );
+    let pbs_failures = pbs_snapshot.failures();
+    progress::finish(pbs_failures.is_empty());
+    sources.insert("pbs-api".into(), source(pbs.endpoint(), pbs_failures));
 
     progress::section("Native configuration files");
     let native_failures = native::export(repo, ssh, &pve_snapshot)
         .err()
         .map(|error| vec![format!("{error:#}")])
         .unwrap_or_default();
+    progress::finish(native_failures.is_empty());
     sources.insert("native-ssh".into(), source(pve.endpoint(), native_failures));
 
     progress::section("Host and PBS diagnostics");
     let host_failures =
         host::capture(repo, ssh).map_err(|error| anyhow!("host evidence capture: {error:#}"))?;
+    progress::finish(host_failures.is_empty());
     sources.insert("host-ssh".into(), source(pve.endpoint(), host_failures));
     Ok(sources)
 }
@@ -159,6 +160,7 @@ pub fn validate(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
         &serde_json::to_vec_pretty(&report)?,
     )?;
     if failures.is_empty() {
+        progress::finish(true);
         println!("validation passed: {} checks", report.len());
         Ok(())
     } else {

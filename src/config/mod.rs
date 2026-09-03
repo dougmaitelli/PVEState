@@ -108,6 +108,7 @@ impl Repository {
             path.join(".pves.env.example"),
             include_str!("../../examples/basic/.pves.env.example"),
         )?;
+        crate::utility::progress::finish(true);
         println!("initialized configuration repository: {}", path.display());
         Ok(())
     }
@@ -138,6 +139,7 @@ impl Repository {
             dir.join("management-scope.json"),
             serde_json::to_string_pretty(scope::entries())? + "\n",
         )?;
+        crate::utility::progress::finish(true);
         println!("wrote configuration schemas to {}", dir.display());
         Ok(())
     }

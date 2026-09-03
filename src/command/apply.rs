@@ -29,6 +29,7 @@ pub fn run(
         Ok(()) => {
             journal.succeed();
             journal.persist()?;
+            progress::finish(true);
             println!("{}", serde_json::to_string_pretty(&journal)?);
             Ok(())
         },

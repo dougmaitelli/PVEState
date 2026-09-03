@@ -20,7 +20,8 @@ pub struct RestoreConfig {
 pub struct RestoreTarget {
     pub expected_hostname: String,
     /// OpenSSH SHA-256 fingerprint, for example `SHA256:...`.
-    pub expected_host_key_sha256: String,
+    #[serde(default)]
+    pub expected_host_key_sha256: Option<String>,
     pub production_address: String,
     pub plan_max_age_minutes: u32,
 }

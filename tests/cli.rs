@@ -84,6 +84,26 @@ fn configuration_rejects_unknown_fields() {
 }
 
 #[test]
+fn normal_configuration_allows_recovery_host_key_to_be_omitted() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("environment");
+    Repository::initialize(&root).unwrap();
+    let restore = root.join("config/restore.yml");
+    let yaml = fs::read_to_string(&restore)
+        .unwrap()
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("expected_host_key_sha256:"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    fs::write(restore, yaml).unwrap();
+
+    let repository = Repository::open(&root).unwrap();
+
+    assert!(repository.restore.target.expected_host_key_sha256.is_none());
+}
+
+#[test]
 fn schema_command_writes_every_document_schema() {
     let temp = tempfile::tempdir().unwrap();
     Repository::write_schema(Some(temp.path())).unwrap();
