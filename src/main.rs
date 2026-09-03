@@ -30,7 +30,11 @@ enum Command {
         path: PathBuf,
     },
     Capture,
-    Plan,
+    Plan {
+        /// Print the complete machine-readable plan
+        #[arg(long)]
+        json: bool,
+    },
     #[command(arg_required_else_help = true)]
     Adopt {
         #[arg(long, conflicts_with_all = ["ids", "all"])]
@@ -84,14 +88,18 @@ fn run(cli: Cli) -> Result<()> {
             let ssh = Ssh::new(&settings.ssh.discovery);
             capture::run(&repo, &pve, &pbs, &ssh)
         },
-        Command::Plan => {
+        Command::Plan { json } => {
             let repo = Repository::open(&cli.config_dir)?;
             let settings = Settings::load(&cli.config_dir)?;
             let pve = Pve::discovery(&settings.pve)?;
             let pbs = Pbs::discovery(&settings.pbs)?;
             let p = plan::run(&repo, &pve, &pbs)?;
             pvestate::utility::progress::finish(true);
-            println!("{}", serde_json::to_string_pretty(&p)?);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&p)?);
+            } else {
+                plan::print_human(&p);
+            }
             Ok(())
         },
         Command::Adopt { preview, all, ids } => {

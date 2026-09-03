@@ -173,6 +173,7 @@ mod tests {
             domain: "firewall".into(),
             resource: "guest/101".into(),
             path: "/etc/pve/firewall/101.fw".into(),
+            before_content: "old firewall".into(),
             before_sha256: "before".into(),
         });
         plan

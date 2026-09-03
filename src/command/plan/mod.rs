@@ -1,7 +1,10 @@
 mod backup;
 mod file;
 mod guest;
+mod output;
 mod validation;
+
+pub use output::print_human;
 
 use crate::{
     client::{PbsClient, PveClient},
@@ -45,6 +48,8 @@ pub enum Operation {
         resource: String,
         path: String,
         content: String,
+        #[serde(skip)]
+        before_content: Option<String>,
         before_sha256: Option<String>,
         activate: bool,
     },
@@ -52,6 +57,8 @@ pub enum Operation {
         domain: String,
         resource: String,
         path: String,
+        #[serde(skip)]
+        before_content: String,
         before_sha256: String,
     },
 }

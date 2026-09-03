@@ -22,12 +22,16 @@ pub(super) fn operation(
         render::semantic_lines(&wanted) != render::semantic_lines(current_text)
     };
     if differs {
+        let before_sha256 = current
+            .as_ref()
+            .map(|value| hex::encode(Sha256::digest(value.as_bytes())));
         operations.push(Operation::WriteFile {
             domain: domain.into(),
             resource: resource.into(),
             path: remote.into(),
             content: wanted,
-            before_sha256: current.map(|value| hex::encode(Sha256::digest(value.as_bytes()))),
+            before_content: current,
+            before_sha256,
             activate,
         });
     }
@@ -47,7 +51,8 @@ pub(super) fn deletion(
         domain: identity.0.into(),
         resource: identity.1.into(),
         path: paths.1.into(),
-        before_sha256: hex::encode(Sha256::digest(current)),
+        before_sha256: hex::encode(Sha256::digest(&current)),
+        before_content: String::from_utf8_lossy(&current).into_owned(),
     });
     Ok(())
 }

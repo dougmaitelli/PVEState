@@ -184,7 +184,9 @@ pves apply
 
 - `init PATH`: scaffold an environment repository.
 - `capture`: refresh API observations and sanitized host/firewall exports.
-- `plan`: validate desired state and create a deterministic guarded plan.
+- `plan`: validate desired state, create a deterministic guarded plan, and show
+  its changes grouped by domain. Use `--json` for the complete machine-readable
+  plan envelope.
 - `adopt`: preview production values or copy explicitly selected values into
   desired state.
 - `apply`: execute exactly the confirmed plan; removals are generated only from

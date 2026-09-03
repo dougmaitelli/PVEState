@@ -19,6 +19,19 @@ fn help_lists_compact_interface() {
 }
 
 #[test]
+fn plan_help_offers_machine_readable_output() {
+    let output = Command::new(env!("CARGO_BIN_EXE_pves"))
+        .args(["plan", "--help"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("--json"), "{stdout}");
+    assert!(stdout.contains("machine-readable plan"), "{stdout}");
+}
+
+#[test]
 fn adopt_requires_exactly_one_mode() {
     let missing = Command::new(env!("CARGO_BIN_EXE_pves"))
         .arg("adopt")
