@@ -106,21 +106,7 @@ fn run(cli: Cli) -> Result<()> {
         Command::Apply => {
             let repo = Repository::open(&cli.config_dir)?;
             let settings = Settings::load(&cli.config_dir)?;
-            let pve = Pve::mutation(&settings.pve)?;
-            let pbs = settings
-                .pbs
-                .mutation
-                .as_ref()
-                .map(|_| Pbs::mutation(&settings.pbs))
-                .transpose()?;
-            let ssh = settings.ssh.mutation.as_ref().map(Ssh::new);
-            apply::run(
-                &repo,
-                &settings.apply,
-                &pve,
-                pbs.as_ref().map(|client| client as _),
-                ssh.as_ref().map(|client| client as _),
-            )
+            apply::run(&repo, &settings)
         },
         Command::Validate => {
             let repo = Repository::open(&cli.config_dir)?;

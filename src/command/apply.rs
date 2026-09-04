@@ -2,22 +2,53 @@ mod journal;
 
 use self::journal::ApplyJournal;
 use crate::{
-    client::{PbsClient, PveClient, RemoteHost},
+    client::{Pbs, PbsClient, Pve, PveClient, RemoteHost, Ssh},
     command::plan::{ApiMethod, ApiTarget, Operation, Plan},
     config::Repository,
-    settings::ApplySettings,
+    settings::{ApplySettings, Settings},
     utility::{authorization, progress, runtime_security, shell},
 };
 use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use std::collections::{BTreeMap, BTreeSet};
-pub fn run(
+
+struct MutationClients {
+    pve: Box<dyn PveClient>,
+    pbs: Option<Box<dyn PbsClient>>,
+    ssh: Option<Box<dyn RemoteHost>>,
+}
+
+impl MutationClients {
+    fn configured(settings: &Settings) -> Result<Self> {
+        Ok(Self {
+            pve: Box::new(Pve::mutation(&settings.pve)?),
+            pbs: settings
+                .pbs
+                .mutation
+                .as_ref()
+                .map(|_| Pbs::mutation(&settings.pbs))
+                .transpose()?
+                .map(|client| Box::new(client) as Box<dyn PbsClient>),
+            ssh: settings
+                .ssh
+                .mutation
+                .as_ref()
+                .map(|target| Box::new(Ssh::new(target)) as Box<dyn RemoteHost>),
+        })
+    }
+}
+
+pub fn run(repo: &Repository, settings: &Settings) -> Result<()> {
+    run_with_factory(repo, &settings.apply, || {
+        MutationClients::configured(settings)
+    })
+}
+
+fn run_with_factory(
     repo: &Repository,
     settings: &ApplySettings,
-    api: &dyn PveClient,
-    pbs: Option<&dyn PbsClient>,
-    ssh: Option<&dyn RemoteHost>,
+    factory: impl FnOnce() -> Result<MutationClients>,
 ) -> Result<()> {
     progress::section("Applying local configuration to live system");
     repo.secure_runtime()?;
@@ -25,7 +56,17 @@ pub fn run(
     let mut journal = ApplyJournal::new(&repo.runtime(), &plan);
     journal.persist()?;
 
-    match execute(&plan, settings, api, pbs, ssh, &mut journal) {
+    let result = factory().and_then(|clients| {
+        execute(
+            &plan,
+            settings,
+            clients.pve.as_ref(),
+            clients.pbs.as_deref(),
+            clients.ssh.as_deref(),
+            &mut journal,
+        )
+    });
+    match result {
         Ok(()) => {
             journal.succeed();
             journal.persist()?;
@@ -291,6 +332,7 @@ mod tests {
     use anyhow::anyhow;
     use reqwest::Url;
     use serde_json::Value;
+    use std::cell::Cell;
     use std::fs;
     use std::sync::{
         Mutex,
@@ -396,6 +438,77 @@ mod tests {
             digest: None,
         }
     }
+
+    fn authorized_apply() -> (tempfile::TempDir, Repository, ApplySettings) {
+        let temp = tempfile::tempdir().unwrap();
+        Repository::initialize(temp.path()).unwrap();
+        let repo = Repository::open(temp.path()).unwrap();
+        let mut plan = Plan {
+            schema_version: 2,
+            created_at: Utc::now(),
+            capture_id: "fixture-capture".into(),
+            target: "https://pve.test:8006".into(),
+            pbs_target: "https://pbs.test:8007".into(),
+            operations: Vec::new(),
+            blockers: Vec::new(),
+            plan_sha256: String::new(),
+        };
+        plan.plan_sha256 = plan.calculate_hash().unwrap();
+        crate::utility::atomic_file::write_json(
+            &repo.runtime().join("production-plan.json"),
+            &plan,
+        )
+        .unwrap();
+        let settings = ApplySettings {
+            enabled: true,
+            confirm_plan_sha: Some(plan.plan_sha256),
+            target: Some(Url::parse(&plan.target).unwrap()),
+            domains: BTreeSet::new(),
+            activate_network: false,
+            secrets: BTreeMap::new(),
+        };
+        (temp, repo, settings)
+    }
+
+    #[test]
+    fn authorization_failure_does_not_construct_mutation_clients() {
+        let (_temp, repo, mut settings) = authorized_apply();
+        settings.enabled = false;
+        let factory_called = Cell::new(false);
+
+        let error = run_with_factory(&repo, &settings, || -> Result<MutationClients> {
+            factory_called.set(true);
+            bail!("factory must not run")
+        })
+        .unwrap_err();
+
+        assert!(format!("{error:#}").contains("PVES_ENABLE_PRODUCTION_APPLY"));
+        assert!(!factory_called.get());
+        assert!(!repo.runtime().join("apply-latest.json").exists());
+    }
+
+    #[test]
+    fn client_initialization_failure_is_persisted_in_apply_journal() {
+        let (_temp, repo, settings) = authorized_apply();
+
+        let error = run_with_factory(&repo, &settings, || -> Result<MutationClients> {
+            bail!("injected client initialization failure")
+        })
+        .unwrap_err();
+
+        assert!(format!("{error:#}").contains("injected client initialization failure"));
+        let journal: Value =
+            serde_json::from_slice(&fs::read(repo.runtime().join("apply-latest.json")).unwrap())
+                .unwrap();
+        assert_eq!(journal["status"], "failed");
+        assert!(
+            journal["failure"]
+                .as_str()
+                .unwrap()
+                .contains("injected client initialization failure")
+        );
+    }
+
     #[test]
     fn injected_client_failure_is_journaled_without_network() {
         let temp = tempfile::tempdir().unwrap();
