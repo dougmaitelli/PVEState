@@ -1,4 +1,4 @@
-mod native;
+pub(crate) mod native;
 mod yaml;
 
 use crate::{

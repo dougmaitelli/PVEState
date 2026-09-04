@@ -216,6 +216,9 @@ fn build(
 
     backup::plan(repo, api, pbs, &mut operations, &mut blockers)?;
 
+    if let Ok(captured_network) = fs::read_to_string(repo.observed().join("network/interfaces")) {
+        blockers.extend(network_safety_blockers(&captured_network, &repo.network)?);
+    }
     file::operation(
         repo,
         ("network", &repo.guests.node),
@@ -335,6 +338,20 @@ fn compare(
     if current.as_deref() != Some(&wanted) {
         changes.insert(key.into(), wanted);
     }
+}
+
+fn network_safety_blockers(content: &str, current: &crate::model::Network) -> Result<Vec<String>> {
+    let parsed = crate::command::adopt::native::parse_network(content, current)?;
+    Ok(parsed
+        .unmodeled
+        .iter()
+        .map(|directive| {
+            format!(
+                "network configuration cannot be represented safely: {}",
+                directive.diagnostic()
+            )
+        })
+        .collect())
 }
 
 fn dns_changes(
@@ -515,6 +532,22 @@ mod tests {
             serde_json::json!({"search":"example.test", "dns1":"1.1.1.1", "dns2":"8.8.8.8"});
         let changes = dns_changes("example.test", &["1.1.1.1".into()], &actual);
         assert_eq!(changes.get("delete").map(String::as_str), Some("dns2"));
+    }
+
+    #[test]
+    fn unsupported_native_network_syntax_becomes_a_plan_blocker() {
+        let network: crate::model::Network =
+            serde_yaml::from_str(include_str!("../../../examples/basic/config/network.yml"))
+                .unwrap();
+        let blockers = network_safety_blockers(
+            "iface vmbr0 inet manual\n    bridge-ports none\n    bridge-vlan-aware yes\n",
+            &network,
+        )
+        .unwrap();
+
+        assert_eq!(blockers.len(), 1);
+        assert!(blockers[0].contains("cannot be represented safely"));
+        assert!(blockers[0].contains("bridge-vlan-aware yes"));
     }
 
     #[test]
