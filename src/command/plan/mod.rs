@@ -1,7 +1,5 @@
-mod backup;
 mod captured;
 mod file;
-mod guest;
 mod output;
 mod validation;
 
@@ -12,6 +10,7 @@ use crate::{
     config::Repository,
     discovery::CaptureManifest,
     render,
+    resource::{backup, guest},
     utility::{
         atomic_file,
         plan_envelope::{self, PlanEnvelope},
@@ -346,7 +345,7 @@ fn compare(
 }
 
 fn network_safety_blockers(content: &str, current: &crate::model::Network) -> Result<Vec<String>> {
-    let parsed = crate::command::adopt::native::parse_network(content, current)?;
+    let parsed = crate::resource::native::parse_network(content, current)?;
     Ok(parsed
         .unmodeled
         .iter()
@@ -378,7 +377,7 @@ fn firewall_artifacts(repo: &Repository) -> Vec<(String, String)> {
 }
 
 fn firewall_safety_blockers(content: &str, resource: &str) -> Vec<String> {
-    crate::command::adopt::native::parse_firewall(content)
+    crate::resource::native::parse_firewall(content)
         .unmodeled
         .iter()
         .map(|directive| {

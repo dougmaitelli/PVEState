@@ -1,4 +1,4 @@
-use super::yaml::{self, Patch, Segment};
+use crate::utility::yaml_patch::{self, Patch, Segment};
 use crate::{
     config::Repository,
     model::{
@@ -128,7 +128,7 @@ fn patch_document(
         .cloned()
         .map(Ok)
         .unwrap_or_else(|| fs::read_to_string(repo.root.join(path)))?;
-    let updated = yaml::apply_patches(&content, &patches)?;
+    let updated = yaml_patch::apply_patches(&content, &patches)?;
     documents.insert(path.to_string(), updated);
     Ok(())
 }
@@ -754,8 +754,7 @@ mod tests {
     #[test]
     fn parses_ipv4_and_ipv6_bridge_configuration() {
         let current: Network =
-            serde_yaml::from_str(include_str!("../../../examples/basic/config/network.yml"))
-                .unwrap();
+            serde_yaml::from_str(include_str!("../../examples/basic/config/network.yml")).unwrap();
         let captured = "iface eno1 inet manual\n\nauto vmbr0\niface vmbr0 inet static\n\taddress 192.0.2.10/24\n\tgateway 192.0.2.1\n\tbridge-ports eno1\n\tbridge-stp off\n\tbridge-fd 0\n\niface vmbr0 inet6 static\n\taddress 2001:db8::10/64\n\tgateway 2001:db8::1\n";
 
         let parsed = parse_network(captured, &current).unwrap();
@@ -776,8 +775,7 @@ mod tests {
     #[test]
     fn supported_network_is_stable_across_parse_and_render() {
         let current: Network =
-            serde_yaml::from_str(include_str!("../../../examples/basic/config/network.yml"))
-                .unwrap();
+            serde_yaml::from_str(include_str!("../../examples/basic/config/network.yml")).unwrap();
         let rendered = crate::render::network(&current);
 
         let first = parse_network(&rendered, &current).unwrap();
@@ -795,8 +793,7 @@ mod tests {
     #[test]
     fn unsupported_network_constructs_are_reported_instead_of_disappearing() {
         let current: Network =
-            serde_yaml::from_str(include_str!("../../../examples/basic/config/network.yml"))
-                .unwrap();
+            serde_yaml::from_str(include_str!("../../examples/basic/config/network.yml")).unwrap();
         let cases = [
             ("bridge-vlan-aware yes", "bridge-vlan-aware"),
             ("bond-slaves eno1 eno2", "bond-slaves"),
@@ -822,8 +819,7 @@ mod tests {
     #[test]
     fn multiple_addresses_and_custom_top_level_syntax_are_reported() {
         let current: Network =
-            serde_yaml::from_str(include_str!("../../../examples/basic/config/network.yml"))
-                .unwrap();
+            serde_yaml::from_str(include_str!("../../examples/basic/config/network.yml")).unwrap();
         let captured = "# keep this operator note\nallow-hotplug eno1\niface vmbr0 inet static\n    address 192.0.2.10/24\n    address 192.0.2.11/24\n    bridge-ports eno1\niface vmbr0 inet6 static\n    address 2001:db8::10/64\n    address 2001:db8::11/64\n";
 
         let parsed = parse_network(captured, &current).unwrap();
@@ -842,8 +838,7 @@ mod tests {
     #[test]
     fn bare_dhcp_interface_round_trips_but_dhcp_options_do_not() {
         let current: Network =
-            serde_yaml::from_str(include_str!("../../../examples/basic/config/network.yml"))
-                .unwrap();
+            serde_yaml::from_str(include_str!("../../examples/basic/config/network.yml")).unwrap();
         let parsed = parse_network("iface eno1 inet dhcp\n", &current).unwrap();
 
         assert!(parsed.unmodeled.is_empty());

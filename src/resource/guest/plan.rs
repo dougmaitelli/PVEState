@@ -1,5 +1,5 @@
-use super::{ApiMethod, ApiTarget, Operation};
 use crate::{
+    command::plan::{ApiMethod, ApiTarget, Operation},
     model::{GuestField, GuestKind, GuestRef, Lxc, Vm},
     render,
 };
@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-pub(super) fn lxc(
+pub(crate) fn lxc(
     node: &str,
     id: u32,
     desired: &Lxc,
@@ -54,7 +54,7 @@ pub(super) fn lxc(
     add_removed(actual, &wanted, &["net", "mp"], &mut changes);
     let actual_unprivileged = actual
         .get("unprivileged")
-        .map(super::value_string)
+        .map(value_string)
         .unwrap_or_else(|| "0".into());
     if actual_unprivileged != if desired.unprivileged { "1" } else { "0" } {
         blockers.push(format!(
@@ -77,7 +77,7 @@ pub(super) fn lxc(
     )
 }
 
-pub(super) fn vm(
+pub(crate) fn vm(
     node: &str,
     id: u32,
     desired: &Vm,
@@ -233,17 +233,13 @@ fn changed(wanted: &BTreeMap<String, String>, actual: &Value) -> BTreeMap<String
                     ) != expected
                 })
             } else {
-                actual
-                    .get(*key)
-                    .map(super::value_string)
-                    .unwrap_or_else(|| {
-                        if *key == "agent" {
-                            "0".into()
-                        } else {
-                            "".into()
-                        }
-                    })
-                    != **value
+                actual.get(*key).map(value_string).unwrap_or_else(|| {
+                    if *key == "agent" {
+                        "0".into()
+                    } else {
+                        "".into()
+                    }
+                }) != **value
             }
         })
         .map(|(key, value)| (key.clone(), value.clone()))
@@ -342,6 +338,13 @@ fn parse_options(value: &str) -> BTreeMap<String, String> {
                 .or_else(|| (index == 0).then(|| ("volume".into(), item.into())))
         })
         .collect()
+}
+
+fn value_string(value: &Value) -> String {
+    value
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| value.to_string())
 }
 
 #[cfg(test)]

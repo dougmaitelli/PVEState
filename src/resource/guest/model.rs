@@ -1,4 +1,4 @@
-use super::{DiskInterface, FirewallPolicy, UsbSlot};
+use crate::model::{DiskInterface, FirewallPolicy, UsbSlot};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

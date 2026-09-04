@@ -1,13 +1,12 @@
-pub(crate) mod native;
 mod transaction;
-mod yaml;
 
 use crate::{
     command::plan::{ApiTarget, Operation, Plan},
     config::Repository,
     discovery::CaptureManifest,
     model::{GuestField, GuestKind, GuestRef},
-    utility::{progress, runtime_security},
+    resource::native,
+    utility::{progress, runtime_security, yaml_patch},
 };
 use anyhow::{Context, Result, bail};
 use chrono::Duration;
@@ -322,16 +321,16 @@ fn apply_candidate(content: &str, candidate: &Candidate) -> Result<String> {
     let reference: GuestRef = candidate.resource.parse()?;
     let field = candidate_field(&candidate.field)?;
     let mut prefix = vec![
-        yaml::Segment::Key(reference.kind.collection_name().into()),
-        yaml::Segment::Key(reference.vmid.to_string()),
+        yaml_patch::Segment::Key(reference.kind.collection_name().into()),
+        yaml_patch::Segment::Key(reference.vmid.to_string()),
     ];
-    let yaml::Patch::Set(mut path, value) =
+    let yaml_patch::Patch::Set(mut path, value) =
         adoption_patch(reference.kind, field, &candidate.captured)?
     else {
         unreachable!("guest field adoption only creates set patches")
     };
     prefix.append(&mut path);
-    yaml::apply_patches(content, &[yaml::Patch::Set(prefix, value)])
+    yaml_patch::apply_patches(content, &[yaml_patch::Patch::Set(prefix, value)])
 }
 
 #[derive(Clone, Copy)]
@@ -447,10 +446,14 @@ const FIELD_MAPPINGS: &[FieldMapping] = &[
     },
 ];
 
-fn adoption_patch(kind: GuestKind, field: GuestField, production: &str) -> Result<yaml::Patch> {
-    use yaml::Segment::{Index, Key};
+fn adoption_patch(
+    kind: GuestKind,
+    field: GuestField,
+    production: &str,
+) -> Result<yaml_patch::Patch> {
+    use yaml_patch::Segment::{Index, Key};
     if let (GuestKind::Lxc, GuestField::BindMountBackup(index)) = (kind, field) {
-        return Ok(yaml::Patch::Set(
+        return Ok(yaml_patch::Patch::Set(
             vec![
                 Key("bind_mounts".into()),
                 Index(index.into()),
@@ -470,7 +473,7 @@ fn adoption_patch(kind: GuestKind, field: GuestField, production: &str) -> Resul
         FieldValue::Integer => serde_yaml::from_str(production)?,
         FieldValue::Boolean => serde_yaml::Value::Bool(bool_value(production)?),
     };
-    Ok(yaml::Patch::Set(path, value))
+    Ok(yaml_patch::Patch::Set(path, value))
 }
 
 fn guest_config<'a>(observed: &'a Value, node: &str, guest: GuestRef) -> Result<&'a Value> {

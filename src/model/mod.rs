@@ -1,9 +1,5 @@
-mod backup;
 mod cluster;
-mod firewall;
-mod guest;
 mod manifest;
-mod network;
 mod node;
 mod proxmox;
 mod recovery_check;
@@ -12,12 +8,20 @@ mod secrets;
 mod services;
 mod storage;
 
-pub use backup::*;
+pub use crate::resource::{
+    backup::{
+        BackupConfig, BackupGuest, BackupJobs, Datastore, PbsBackup, PruneJob, PveBackupJob,
+        Retention, S3Endpoint, SyncJob, VerifyJob,
+    },
+    firewall::{
+        FirewallAlias, FirewallIpSet, FirewallIpSetEntry, FirewallPolicy, FirewallRule,
+        FirewallSecurityGroup,
+    },
+    guest::{BindMount, Cpu, Disk, Efi, Guests, Lxc, Nic, Start, Usb, Vm, VmDisk, VmNic},
+    network::{Bridge, Dns, Interface, Network},
+};
 pub use cluster::*;
-pub use firewall::*;
-pub use guest::*;
 pub use manifest::*;
-pub use network::*;
 pub use node::*;
 pub use proxmox::*;
 pub use recovery_check::*;

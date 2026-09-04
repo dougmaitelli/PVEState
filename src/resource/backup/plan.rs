@@ -1,6 +1,6 @@
-use super::{ApiMethod, ApiTarget, Operation};
 use crate::{
     client::{PbsClient, PveClient},
+    command::plan::{ApiMethod, ApiTarget, Operation},
     config::Repository,
     model::{PruneJob, SyncJob, VerifyJob},
 };
@@ -9,7 +9,7 @@ use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-pub(super) fn plan(
+pub(crate) fn plan(
     repo: &Repository,
     pve: &dyn PveClient,
     pbs: &dyn PbsClient,

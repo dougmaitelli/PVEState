@@ -4,6 +4,7 @@ pub mod config;
 pub mod discovery;
 pub mod model;
 pub mod render;
+pub mod resource;
 pub mod scope;
 pub mod settings;
 pub mod utility;
