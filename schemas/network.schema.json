@@ -59,6 +59,20 @@
             "null"
           ]
         },
+        "gateway6": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "ipv6": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "method": {
           "type": "string"
         },

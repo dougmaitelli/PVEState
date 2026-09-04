@@ -11,7 +11,8 @@ bridges:
     method: static
     address: 192.0.2.10/24
     gateway: 192.0.2.1
+    ipv6: null
+    gateway6: null
     ports: [eno1]
     stp: false
     forward_delay: 0
-

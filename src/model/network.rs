@@ -35,6 +35,10 @@ pub struct Bridge {
     pub address: Option<String>,
     pub gateway: Option<String>,
     #[serde(default)]
+    pub ipv6: Option<String>,
+    #[serde(default)]
+    pub gateway6: Option<String>,
+    #[serde(default)]
     pub ports: Vec<String>,
     pub stp: bool,
     pub forward_delay: u16,

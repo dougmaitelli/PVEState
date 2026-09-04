@@ -30,6 +30,10 @@ pub fn apply_patches(input: &str, patches: &[Patch]) -> Result<String> {
                     Err(_) => structural.push(patch),
                 }
             },
+            Patch::Set(path, value) => match replace_structure(&output, path, value) {
+                Ok(updated) => output = updated,
+                Err(_) => structural.push(patch),
+            },
             _ => structural.push(patch),
         }
     }
@@ -45,6 +49,47 @@ pub fn apply_patches(input: &str, patches: &[Patch]) -> Result<String> {
     }
     let serialized = serde_yaml::to_string(&document).context("serialize patched YAML")?;
     Ok(with_line_ending(serialized, newline))
+}
+
+fn replace_structure(input: &str, path: &[Segment], value: &Value) -> Result<String> {
+    let newline = line_ending(input);
+    let trailing_newline = input.ends_with('\n');
+    let mut lines = input.lines().map(str::to_owned).collect::<Vec<_>>();
+    let (start, end, key) = locate_mapping_node(&lines, 0, lines.len(), None, path)?;
+    let indent = indentation(&lines[start]);
+    let padding = " ".repeat(indent);
+    let child_padding = " ".repeat(indent + 2);
+    let serialized = serde_yaml::to_string(value)?;
+    let body = serialized.trim_end_matches('\n');
+    let mut replacement = vec![format!("{padding}{key}:")];
+    replacement.extend(body.lines().map(|line| format!("{child_padding}{line}")));
+    lines.splice(start..end, replacement);
+    let mut output = lines.join(newline);
+    if trailing_newline {
+        output.push_str(newline);
+    }
+    Ok(output)
+}
+
+fn locate_mapping_node(
+    lines: &[String],
+    start: usize,
+    end: usize,
+    parent_indent: Option<usize>,
+    path: &[Segment],
+) -> Result<(usize, usize, String)> {
+    let (segment, remaining) = path.split_first().context("empty YAML path")?;
+    let Segment::Key(key) = segment else {
+        bail!("structural replacement requires mapping keys")
+    };
+    let index = find_key(lines, start, end, parent_indent, key)
+        .with_context(|| format!("YAML key {key}"))?;
+    let indent = indentation(&lines[index]);
+    let node_end = block_end(lines, index + 1, end, indent);
+    if remaining.is_empty() {
+        return Ok((index, node_end, key.clone()));
+    }
+    locate_mapping_node(lines, index + 1, node_end, Some(indent), remaining)
 }
 
 fn scalar(value: &Value) -> bool {
@@ -98,7 +143,7 @@ fn descend<'a>(value: &'a mut Value, path: &[Segment], create: bool) -> Result<&
                 let Value::Mapping(mapping) = current else {
                     bail!("YAML path component {key} is not a mapping")
                 };
-                let key = Value::String(key.clone());
+                let key = mapping_key(mapping, key);
                 if create && !mapping.contains_key(&key) {
                     mapping.insert(key.clone(), Value::Mapping(Mapping::new()));
                 }
@@ -115,6 +160,19 @@ fn descend<'a>(value: &'a mut Value, path: &[Segment], create: bool) -> Result<&
         }
     }
     Ok(current)
+}
+
+fn mapping_key(mapping: &Mapping, key: &str) -> Value {
+    let string = Value::String(key.into());
+    if mapping.contains_key(&string) {
+        return string;
+    }
+    key.parse::<u64>()
+        .ok()
+        .map(serde_yaml::Number::from)
+        .map(Value::Number)
+        .filter(|number| mapping.contains_key(number))
+        .unwrap_or(string)
 }
 
 pub fn replace_scalar(input: &str, path: &[Segment], value: &str) -> Result<String> {
@@ -360,6 +418,31 @@ mod tests {
         .unwrap();
         assert!(output.contains("backed_up_by_pve: false}\n"));
         assert!(output.contains("backed_up_by_pve: true # keep\n"));
+    }
+
+    #[test]
+    fn structural_patch_updates_numeric_mapping_key() {
+        let input = "lxcs:\n  105:\n    hostname: docker\n";
+        let output = apply_patches(
+            input,
+            &[Patch::Set(
+                vec![
+                    Segment::Key("lxcs".into()),
+                    Segment::Key("105".into()),
+                    Segment::Key("firewall".into()),
+                ],
+                serde_yaml::from_str("{enabled: true, log_level_in: null, rules: []}").unwrap(),
+            )],
+        )
+        .unwrap();
+        let parsed: Value = serde_yaml::from_str(&output).unwrap();
+
+        assert!(
+            parsed["lxcs"][105]["firewall"]["enabled"]
+                .as_bool()
+                .unwrap()
+        );
+        assert!(parsed["lxcs"].get("105").is_none());
     }
 
     #[test]

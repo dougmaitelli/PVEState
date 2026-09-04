@@ -62,7 +62,14 @@ pub fn network(n: &Network) -> String {
             },
             if b.stp { "on" } else { "off" },
             b.forward_delay
-        )
+        );
+        if let Some(address) = &b.ipv6 {
+            s += &format!("iface {} inet6 static\n    address {address}\n", b.name);
+            if let Some(gateway) = &b.gateway6 {
+                s += &format!("    gateway {gateway}\n");
+            }
+            s.push('\n');
+        }
     }
     s += "source /etc/network/interfaces.d/*\n";
     s

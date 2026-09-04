@@ -1,3 +1,4 @@
+mod native;
 mod yaml;
 
 use crate::{
@@ -23,6 +24,8 @@ pub struct Candidate {
     pub adoptable: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(skip)]
+    native: Option<native::Target>,
 }
 
 pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) -> Result<()> {
@@ -59,8 +62,11 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
         bail!("unknown adoption IDs: {unknown:?}")
     }
 
-    let path = repo.root.join("config/guests.yml");
-    let mut content = fs::read_to_string(&path)?;
+    let guest_path = repo.root.join("config/guests.yml");
+    let mut guest_content = fs::read_to_string(&guest_path)?;
+    let mut guest_changed = false;
+    let mut documents = BTreeSet::new();
+    let mut native_targets = Vec::new();
     for candidate in candidates
         .iter()
         .filter(|candidate| selected.contains(&candidate.id))
@@ -76,15 +82,28 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
                 candidate.reason.as_deref().unwrap_or("unsupported")
             )
         }
-        content = apply_candidate(&content, candidate)?;
+        if let Some(target) = &candidate.native {
+            native_targets.push(target);
+        } else {
+            guest_content = apply_candidate(&guest_content, candidate)?;
+            guest_changed = true;
+        }
     }
-    serde_yaml::from_str::<crate::model::Guests>(&content)
-        .context("validate adopted config/guests.yml")?;
-    atomic_file::write(&path, content.as_bytes())?;
+    if guest_changed {
+        serde_yaml::from_str::<crate::model::Guests>(&guest_content)
+            .context("validate adopted config/guests.yml")?;
+        atomic_file::write(&guest_path, guest_content.as_bytes())?;
+        documents.insert("config/guests.yml");
+    }
+    for target in native_targets {
+        documents.insert(native::adopt(repo, target)?);
+    }
+    Repository::open(&repo.root).context("validate adopted configuration repository")?;
     progress::finish(true);
     println!(
-        "adopted {} production value(s) into config/guests.yml",
-        selected.len()
+        "adopted {} production value(s) into {}",
+        selected.len(),
+        documents.into_iter().collect::<Vec<_>>().join(", ")
     );
     Ok(())
 }
@@ -197,6 +216,30 @@ fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Ca
     }
     for operation in &plan.operations {
         match operation {
+            Operation::WriteFile {
+                domain, resource, ..
+            }
+            | Operation::DeleteFile {
+                domain, resource, ..
+            } if domain == "network" || domain == "firewall" => {
+                let target = if domain == "network" {
+                    native::Target::Network
+                } else {
+                    native::Target::Firewall {
+                        resource: resource.clone(),
+                    }
+                };
+                let mut value = candidate(
+                    resource,
+                    "file",
+                    "configured state",
+                    "captured production state",
+                    true,
+                    None,
+                );
+                value.native = Some(target);
+                result.push(value);
+            },
             Operation::WriteFile { resource, path, .. }
             | Operation::DeleteFile { resource, path, .. } => result.push(candidate(
                 resource,
@@ -204,7 +247,7 @@ fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Ca
                 "desired rendering",
                 path,
                 false,
-                "adopting rendered host files is not supported",
+                "this native configuration format has no typed adoption adapter",
             )),
             _ => {},
         }
@@ -228,6 +271,7 @@ fn candidate(
         production: production.into(),
         adoptable,
         reason: reason.into().map(str::to_owned),
+        native: None,
     }
 }
 
@@ -476,6 +520,7 @@ mod tests {
             production: "1".into(),
             adoptable: true,
             reason: None,
+            native: None,
         };
 
         let after = apply_candidate(before, &candidate).unwrap();
@@ -504,6 +549,7 @@ mod tests {
                 production: "4".into(),
                 adoptable: true,
                 reason: None,
+                native: None,
             },
             Candidate {
                 id: "no".into(),
@@ -513,6 +559,7 @@ mod tests {
                 production: "live".into(),
                 adoptable: false,
                 reason: Some("unsupported".into()),
+                native: None,
             },
         ];
         assert_eq!(
