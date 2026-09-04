@@ -1,9 +1,11 @@
 mod captured;
 mod file;
 mod output;
+mod types;
 mod validation;
 
 pub use output::print_human;
+pub use types::{ApiPath, DiskId, Domain, ResourceId, SecretName};
 
 use crate::{
     client::{PbsClient, PveClient},
@@ -28,24 +30,24 @@ pub enum Operation {
     ApiMutation {
         target: ApiTarget,
         method: ApiMethod,
-        domain: String,
-        resource: String,
-        endpoint: String,
+        domain: Domain,
+        resource: ResourceId,
+        endpoint: ApiPath,
         changes: BTreeMap<String, String>,
         #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-        environment_changes: BTreeMap<String, String>,
+        environment_changes: BTreeMap<String, SecretName>,
         digest: Option<String>,
     },
     GrowDisk {
-        domain: String,
-        resource: String,
-        endpoint: String,
-        disk: String,
+        domain: Domain,
+        resource: ResourceId,
+        endpoint: ApiPath,
+        disk: DiskId,
         size_gb: u64,
     },
     WriteFile {
-        domain: String,
-        resource: String,
+        domain: Domain,
+        resource: ResourceId,
         path: String,
         content: String,
         #[serde(skip)]
@@ -54,8 +56,8 @@ pub enum Operation {
         activate: bool,
     },
     DeleteFile {
-        domain: String,
-        resource: String,
+        domain: Domain,
+        resource: ResourceId,
         path: String,
         #[serde(skip)]
         before_content: String,
@@ -79,12 +81,12 @@ pub enum ApiMethod {
 }
 
 impl Operation {
-    pub fn domain(&self) -> &str {
+    pub fn domain(&self) -> Domain {
         match self {
             Self::ApiMutation { domain, .. }
             | Self::GrowDisk { domain, .. }
             | Self::WriteFile { domain, .. }
-            | Self::DeleteFile { domain, .. } => domain,
+            | Self::DeleteFile { domain, .. } => *domain,
         }
     }
 
@@ -138,7 +140,53 @@ impl Plan {
                 self.schema_version
             )
         }
-        plan_envelope::verify(self, "plan file integrity check failed")
+        plan_envelope::verify(self, "plan file integrity check failed")?;
+        for operation in &self.operations {
+            match operation {
+                Operation::ApiMutation {
+                    target,
+                    domain,
+                    resource,
+                    endpoint,
+                    environment_changes,
+                    ..
+                } => {
+                    types::validate_operation(*domain, *target, resource)?;
+                    if !endpoint.is_valid() {
+                        bail!("invalid API path {endpoint}")
+                    }
+                    if let Some(secret) =
+                        environment_changes.values().find(|value| !value.is_valid())
+                    {
+                        bail!("invalid secret environment variable {secret}")
+                    }
+                },
+                Operation::GrowDisk {
+                    domain,
+                    resource,
+                    endpoint,
+                    disk,
+                    ..
+                } => {
+                    types::validate_operation(*domain, ApiTarget::Pve, resource)?;
+                    if !endpoint.is_valid() {
+                        bail!("invalid API path {endpoint}")
+                    }
+                    if !disk.is_valid() {
+                        bail!("invalid guest disk identifier {disk}")
+                    }
+                },
+                Operation::WriteFile {
+                    domain, resource, ..
+                }
+                | Operation::DeleteFile {
+                    domain, resource, ..
+                } => {
+                    types::validate_operation(*domain, ApiTarget::Pve, resource)?;
+                },
+            }
+        }
+        Ok(())
     }
 }
 
@@ -205,8 +253,8 @@ fn build(
             target: ApiTarget::Pve,
             method: ApiMethod::Put,
             domain: "dns".into(),
-            resource: repo.guests.node.clone(),
-            endpoint: format!("/nodes/{}/dns", repo.guests.node),
+            resource: ResourceId::Named(repo.guests.node.clone()),
+            endpoint: format!("/nodes/{}/dns", repo.guests.node).into(),
             changes,
             environment_changes: BTreeMap::new(),
             digest: None,
@@ -552,6 +600,33 @@ mod tests {
         assert!(plan.verify().is_ok());
         plan.capture_id.push_str("-tampered");
         assert!(plan.verify().is_err());
+    }
+
+    #[test]
+    fn plan_verification_rejects_cross_domain_operations() {
+        let mut plan = Plan {
+            schema_version: 2,
+            created_at: Utc::now(),
+            capture_id: "fixture-capture".into(),
+            target: "https://pve.example:8006".into(),
+            pbs_target: "https://pbs.example:8007".into(),
+            operations: vec![Operation::ApiMutation {
+                target: ApiTarget::Pbs,
+                method: ApiMethod::Put,
+                domain: Domain::Guest,
+                resource: ResourceId::parse("lxc/101"),
+                endpoint: "/nodes/pve/lxc/101/config".into(),
+                changes: BTreeMap::new(),
+                environment_changes: BTreeMap::new(),
+                digest: None,
+            }],
+            blockers: Vec::new(),
+            plan_sha256: String::new(),
+        };
+        plan.plan_sha256 = plan.calculate_hash().unwrap();
+
+        let error = plan.verify().unwrap_err();
+        assert!(error.to_string().contains("incompatible"));
     }
 
     #[test]

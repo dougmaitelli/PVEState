@@ -30,7 +30,7 @@ pub fn print_human(plan: &Plan) {
     let mut domains: BTreeMap<&str, Vec<&Operation>> = BTreeMap::new();
     for operation in &plan.operations {
         domains
-            .entry(operation.domain())
+            .entry(operation.domain().as_str())
             .or_default()
             .push(operation);
     }
@@ -105,7 +105,7 @@ fn print_operation(operation: &Operation) {
             println!("  {} {resource}", style("WRITE").green().bold());
             println!("      {path}");
             print_diff(
-                domain,
+                domain.as_str(),
                 before_content.as_deref().unwrap_or_default(),
                 content,
             );
@@ -122,7 +122,7 @@ fn print_operation(operation: &Operation) {
         } => {
             println!("  {} {resource}", style("DELETE").red().bold());
             println!("      {path}");
-            print_diff(domain, before_content, "");
+            print_diff(domain.as_str(), before_content, "");
         },
     }
 }

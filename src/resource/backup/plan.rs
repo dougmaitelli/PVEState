@@ -163,7 +163,7 @@ fn s3_endpoint(repo: &Repository, actual: &Value, operations: &mut Vec<Operation
             target: ApiTarget::Pbs,
             method: ApiMethod::Post,
             domain: "pbs".into(),
-            resource: format!("s3/{}", desired.id),
+            resource: format!("s3/{}", desired.id).into(),
             endpoint: "/config/s3".into(),
             changes: BTreeMap::from([
                 ("id".into(), desired.id.clone()),
@@ -342,7 +342,7 @@ fn push(
         method,
         domain: domain.into(),
         resource: resource.into(),
-        endpoint,
+        endpoint: endpoint.into(),
         changes,
         environment_changes: BTreeMap::new(),
         digest: None,

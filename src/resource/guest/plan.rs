@@ -174,8 +174,8 @@ fn push_update(
             target: ApiTarget::Pve,
             method: ApiMethod::Put,
             domain: "guests".into(),
-            resource: guest.to_string(),
-            endpoint: guest.config_endpoint(node),
+            resource: guest.to_string().into(),
+            endpoint: guest.config_endpoint(node).into(),
             changes,
             environment_changes: BTreeMap::new(),
             digest: actual["digest"].as_str().map(str::to_string),
@@ -207,8 +207,8 @@ fn disk(
     } else if size > current {
         operations.push(Operation::GrowDisk {
             domain: "guests".into(),
-            resource: format!("{guest}/{key}"),
-            endpoint: guest.resize_endpoint(node),
+            resource: format!("{guest}/{key}").into(),
+            endpoint: guest.resize_endpoint(node).into(),
             disk: key.into(),
             size_gb: size,
         });

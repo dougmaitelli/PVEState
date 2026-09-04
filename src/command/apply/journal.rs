@@ -75,7 +75,7 @@ impl ApplyJournal {
                 .map(|(index, operation)| JournalOperation {
                     index,
                     domain: operation.domain().into(),
-                    resource: resource(operation).into(),
+                    resource: resource(operation),
                     action: action(operation),
                     status: OperationStatus::Pending,
                     started_at: None,

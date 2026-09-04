@@ -173,7 +173,7 @@ fn execute(
                         x.insert(
                             parameter.clone(),
                             settings
-                                .secret(variable)
+                                .secret(variable.as_str())
                                 .with_context(|| format!("resolve {variable} for {parameter}"))?
                                 .into(),
                         );
@@ -202,7 +202,7 @@ fn execute(
                     api.put(
                         endpoint,
                         &BTreeMap::from([
-                            ("disk".into(), disk.clone()),
+                            ("disk".into(), disk.to_string()),
                             ("size".into(), format!("{size_gb}G")),
                         ]),
                     )?;
@@ -290,12 +290,12 @@ fn execute(
     Ok(())
 }
 
-fn resource(o: &Operation) -> &str {
+fn resource(o: &Operation) -> String {
     match o {
         Operation::ApiMutation { resource, .. }
         | Operation::GrowDisk { resource, .. }
         | Operation::WriteFile { resource, .. }
-        | Operation::DeleteFile { resource, .. } => resource,
+        | Operation::DeleteFile { resource, .. } => resource.to_string(),
     }
 }
 
@@ -432,7 +432,7 @@ mod tests {
             method: ApiMethod::Put,
             domain: "guests".into(),
             resource: resource.into(),
-            endpoint: format!("/{resource}"),
+            endpoint: format!("/{resource}").into(),
             changes: BTreeMap::new(),
             environment_changes: BTreeMap::new(),
             digest: None,

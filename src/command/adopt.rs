@@ -166,7 +166,7 @@ fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Ca
             }
             continue;
         }
-        let guest: GuestRef = resource.parse()?;
+        let guest = resource.guest().context("guest operation resource")?;
         let actual = guest_config(observed, &repo.guests.node, guest)?;
         for (field, desired) in changes {
             if field == "delete" {
@@ -206,13 +206,11 @@ fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Ca
     }
     for operation in &plan.operations {
         if let Operation::GrowDisk { resource, disk, .. } = operation {
-            let mut parts = resource.split('/');
-            let (Some(kind), Some(id)) = (parts.next(), parts.next()) else {
+            let Some(guest) = resource.guest() else {
                 continue;
             };
-            let guest = GuestRef::new(kind.parse()?, id.parse()?);
             let actual = guest_config(observed, &repo.guests.node, guest)?;
-            let disk_config = value_string(actual.get(disk).unwrap_or(&Value::Null));
+            let disk_config = value_string(actual.get(disk.as_str()).unwrap_or(&Value::Null));
             let production = option(&disk_config, "size").unwrap_or_default();
             result.push(candidate(
                 resource,
@@ -236,7 +234,7 @@ fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Ca
                     native::Target::Network
                 } else {
                     native::Target::Firewall {
-                        resource: resource.clone(),
+                        resource: resource.to_string(),
                     }
                 };
                 let mut value = candidate(
@@ -266,7 +264,7 @@ fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Ca
 }
 
 fn candidate(
-    resource: &str,
+    resource: &impl ToString,
     field: &str,
     local: &str,
     captured: &str,
@@ -274,8 +272,8 @@ fn candidate(
     reason: impl Into<Option<&'static str>>,
 ) -> Candidate {
     Candidate {
-        id: format!("{resource}:{field}"),
-        resource: resource.into(),
+        id: format!("{}:{field}", resource.to_string()),
+        resource: resource.to_string(),
         field: field.into(),
         local: local.into(),
         captured: captured.into(),
