@@ -5,10 +5,12 @@ use crate::{
         Bridge, FirewallAlias, FirewallIpSet, FirewallIpSetEntry, FirewallPolicy, FirewallRule,
         FirewallSecurityGroup, Interface, Network,
     },
-    utility::atomic_file,
 };
 use anyhow::{Context, Result, bail};
-use std::{collections::BTreeSet, fs, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct ParsedNetwork {
@@ -43,7 +45,11 @@ pub enum Target {
     Firewall { resource: String },
 }
 
-pub fn adopt(repo: &Repository, target: &Target) -> Result<&'static str> {
+pub fn prepare(
+    repo: &Repository,
+    target: &Target,
+    documents: &mut BTreeMap<String, String>,
+) -> Result<()> {
     match target {
         Target::Network => {
             let captured = fs::read_to_string(repo.observed().join("network/interfaces"))?;
@@ -60,16 +66,18 @@ pub fn adopt(repo: &Repository, target: &Target) -> Result<&'static str> {
                 )
             }
             patch_document(
-                &repo.root.join("config/network.yml"),
+                repo,
+                documents,
+                "config/network.yml",
                 vec![
                     set("interfaces", &parsed.managed.interfaces)?,
                     set("bridges", &parsed.managed.bridges)?,
                 ],
             )?;
-            Ok("config/network.yml")
+            Ok(())
         },
         Target::Firewall { resource } => {
-            let (observed, config, path) = firewall_paths(repo, resource)?;
+            let (observed, path) = firewall_paths(repo, resource)?;
             let policy = if let Ok(content) = fs::read_to_string(observed) {
                 let parsed = parse_firewall(&content);
                 if !parsed.unmodeled.is_empty() {
@@ -87,15 +95,17 @@ pub fn adopt(repo: &Repository, target: &Target) -> Result<&'static str> {
             } else {
                 None
             };
-            patch_document(
-                &config,
-                vec![Patch::Set(path, serde_yaml::to_value(policy)?)],
-            )?;
-            Ok(match resource.as_str() {
+            let document = match resource.as_str() {
                 "cluster" => "config/cluster.yml",
                 value if value.starts_with("node/") => "config/node.yml",
                 _ => "config/guests.yml",
-            })
+            };
+            patch_document(
+                repo,
+                documents,
+                document,
+                vec![Patch::Set(path, serde_yaml::to_value(policy)?)],
+            )
         },
     }
 }
@@ -107,29 +117,33 @@ fn set(key: &str, value: &impl serde::Serialize) -> Result<Patch> {
     ))
 }
 
-fn patch_document(path: &Path, patches: Vec<Patch>) -> Result<()> {
-    let content = fs::read_to_string(path)?;
+fn patch_document(
+    repo: &Repository,
+    documents: &mut BTreeMap<String, String>,
+    path: &str,
+    patches: Vec<Patch>,
+) -> Result<()> {
+    let content = documents
+        .get(path)
+        .cloned()
+        .map(Ok)
+        .unwrap_or_else(|| fs::read_to_string(repo.root.join(path)))?;
     let updated = yaml::apply_patches(&content, &patches)?;
-    atomic_file::write(path, updated.as_bytes())
+    documents.insert(path.to_string(), updated);
+    Ok(())
 }
 
-fn firewall_paths(
-    repo: &Repository,
-    resource: &str,
-) -> Result<(std::path::PathBuf, std::path::PathBuf, Vec<Segment>)> {
+fn firewall_paths(repo: &Repository, resource: &str) -> Result<(std::path::PathBuf, Vec<Segment>)> {
     let observed = repo.observed().join("pve/firewall");
-    let config = repo.root.join("config");
     if resource == "cluster" {
         return Ok((
             observed.join("cluster.fw"),
-            config.join("cluster.yml"),
             vec![Segment::Key("firewall".into())],
         ));
     }
     if let Some(node) = resource.strip_prefix("node/") {
         return Ok((
             observed.join(format!("{node}-host.fw")),
-            config.join("node.yml"),
             vec![Segment::Key("firewall".into())],
         ));
     }
@@ -146,7 +160,6 @@ fn firewall_paths(
     }
     Ok((
         observed.join(format!("{id}.fw")),
-        config.join("guests.yml"),
         vec![
             Segment::Key(collection.into()),
             Segment::Key(id.to_string()),

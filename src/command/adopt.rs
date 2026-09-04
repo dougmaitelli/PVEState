@@ -1,4 +1,5 @@
 pub(crate) mod native;
+mod transaction;
 mod yaml;
 
 use crate::{
@@ -6,13 +7,16 @@ use crate::{
     config::Repository,
     discovery::CaptureManifest,
     model::{GuestField, GuestKind, GuestRef},
-    utility::{atomic_file, progress, runtime_security},
+    utility::{progress, runtime_security},
 };
 use anyhow::{Context, Result, bail};
 use chrono::Duration;
 use serde::Serialize;
 use serde_json::Value;
-use std::{collections::BTreeSet, fs};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+};
 
 #[derive(Debug, Serialize)]
 pub struct Candidate {
@@ -69,10 +73,10 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
         bail!("unknown adoption IDs: {unknown:?}")
     }
 
-    let guest_path = repo.root.join("config/guests.yml");
-    let mut guest_content = fs::read_to_string(&guest_path)?;
+    let guest_document = "config/guests.yml".to_string();
+    let mut guest_content = fs::read_to_string(repo.root.join(&guest_document))?;
     let mut guest_changed = false;
-    let mut documents = BTreeSet::new();
+    let mut documents = BTreeMap::new();
     let mut native_targets = Vec::new();
     for candidate in candidates
         .iter()
@@ -99,18 +103,18 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
     if guest_changed {
         serde_yaml::from_str::<crate::model::Guests>(&guest_content)
             .context("validate adopted config/guests.yml")?;
-        atomic_file::write(&guest_path, guest_content.as_bytes())?;
-        documents.insert("config/guests.yml");
+        documents.insert(guest_document, guest_content);
     }
     for target in native_targets {
-        documents.insert(native::adopt(repo, target)?);
+        native::prepare(repo, target, &mut documents)?;
     }
-    Repository::open(&repo.root).context("validate adopted configuration repository")?;
+    transaction::validate(repo, &documents)?;
+    transaction::publish(repo, &documents)?;
     progress::finish(true);
     println!(
         "adopted {} captured value(s) into {}",
         selected.len(),
-        documents.into_iter().collect::<Vec<_>>().join(", ")
+        documents.keys().cloned().collect::<Vec<_>>().join(", ")
     );
     Ok(())
 }
