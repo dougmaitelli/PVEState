@@ -1,4 +1,5 @@
 mod backup;
+mod captured;
 mod file;
 mod guest;
 mod output;
@@ -17,7 +18,7 @@ use crate::{
         progress,
     },
 };
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs};
@@ -115,6 +116,8 @@ impl Operation {
 pub struct Plan {
     pub schema_version: u8,
     pub created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub capture_id: String,
     pub target: String,
     pub pbs_target: String,
     pub operations: Vec<Operation>,
@@ -130,6 +133,12 @@ impl Plan {
     }
 
     pub fn verify(&self) -> Result<()> {
+        if self.schema_version != 2 {
+            bail!(
+                "unsupported plan schema {}; run plan again",
+                self.schema_version
+            )
+        }
         plan_envelope::verify(self, "plan file integrity check failed")
     }
 }
@@ -143,11 +152,21 @@ impl PlanEnvelope for Plan {
     }
 }
 
-pub fn run(repo: &Repository, api: &dyn PveClient, pbs: &dyn PbsClient) -> Result<Plan> {
-    progress::section("Planning production changes");
+pub fn run(repo: &Repository) -> Result<Plan> {
+    progress::section("Comparing local configuration with live state");
     repo.secure_runtime()?;
     validation::validate(repo)?;
-    ensure_observations_are_fresh(repo)?;
+    let manifest = verified_capture(repo)?;
+    let clients = captured::CapturedClients::load(repo, &manifest)?;
+    build(repo, &clients.pve, &clients.pbs, &manifest.capture_id)
+}
+
+fn build(
+    repo: &Repository,
+    api: &dyn PveClient,
+    pbs: &dyn PbsClient,
+    capture_id: &str,
+) -> Result<Plan> {
     let mut operations = Vec::new();
     let mut blockers = Vec::new();
 
@@ -279,8 +298,9 @@ pub fn run(repo: &Repository, api: &dyn PveClient, pbs: &dyn PbsClient) -> Resul
     }
 
     let mut plan = Plan {
-        schema_version: 1,
+        schema_version: 2,
         created_at: Utc::now(),
+        capture_id: capture_id.into(),
         target: api.endpoint().into(),
         pbs_target: pbs.endpoint().into(),
         operations,
@@ -296,11 +316,12 @@ pub fn run(repo: &Repository, api: &dyn PveClient, pbs: &dyn PbsClient) -> Resul
     Ok(plan)
 }
 
-fn ensure_observations_are_fresh(repo: &Repository) -> Result<()> {
+fn verified_capture(repo: &Repository) -> Result<CaptureManifest> {
     let manifest: CaptureManifest = serde_json::from_slice(
         &fs::read(repo.observed().join("manifest.json")).context("run capture before plan")?,
     )?;
-    manifest.verify(&repo.observed(), chrono::Duration::minutes(30))
+    manifest.verify(&repo.observed(), chrono::Duration::minutes(30))?;
+    Ok(manifest)
 }
 
 fn compare(
@@ -466,8 +487,9 @@ mod tests {
     #[test]
     fn plan_hash_detects_tampering() {
         let mut plan = Plan {
-            schema_version: 1,
+            schema_version: 2,
             created_at: Utc::now(),
+            capture_id: "fixture-capture".into(),
             target: "https://pve.example:8006".into(),
             pbs_target: "https://pbs.example:8007".into(),
             operations: Vec::new(),
@@ -476,7 +498,7 @@ mod tests {
         };
         plan.plan_sha256 = plan.calculate_hash().unwrap();
         assert!(plan.verify().is_ok());
-        plan.target.push_str("/tampered");
+        plan.capture_id.push_str("-tampered");
         assert!(plan.verify().is_err());
     }
 
@@ -519,7 +541,7 @@ mod tests {
             responses: &fixture.pbs,
         };
 
-        let plan = run(&repo, &pve, &pbs).unwrap();
+        let plan = build(&repo, &pve, &pbs, "fixture-capture").unwrap();
         assert!(plan.blockers.is_empty());
         let actual = plan
             .operations

@@ -19,7 +19,7 @@ pub fn run(
     pbs: Option<&dyn PbsClient>,
     ssh: Option<&dyn RemoteHost>,
 ) -> Result<()> {
-    progress::section("Applying production plan");
+    progress::section("Applying local configuration to live system");
     repo.secure_runtime()?;
     let plan = authorize(repo, settings)?;
     let mut journal = ApplyJournal::new(&repo.runtime(), &plan);
@@ -400,8 +400,9 @@ mod tests {
     fn injected_client_failure_is_journaled_without_network() {
         let temp = tempfile::tempdir().unwrap();
         let plan = Plan {
-            schema_version: 1,
+            schema_version: 2,
             created_at: Utc::now(),
+            capture_id: "fixture-capture".into(),
             target: "https://pve.test:8006".into(),
             pbs_target: "https://pbs.test:8007".into(),
             operations: vec![operation("first"), operation("second"), operation("third")],
@@ -440,8 +441,9 @@ mod tests {
         ))
         .unwrap();
         let plan = Plan {
-            schema_version: 1,
+            schema_version: 2,
             created_at: Utc::now(),
+            capture_id: "fixture-capture".into(),
             target: fixture.pve_target.clone(),
             pbs_target: fixture.pbs_target.clone(),
             operations: fixture.operations,

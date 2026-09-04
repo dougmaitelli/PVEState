@@ -90,10 +90,7 @@ fn run(cli: Cli) -> Result<()> {
         },
         Command::Plan { json } => {
             let repo = Repository::open(&cli.config_dir)?;
-            let settings = Settings::load(&cli.config_dir)?;
-            let pve = Pve::discovery(&settings.pve)?;
-            let pbs = Pbs::discovery(&settings.pbs)?;
-            let p = plan::run(&repo, &pve, &pbs)?;
+            let p = plan::run(&repo)?;
             pvestate::utility::progress::finish(true);
             if json {
                 println!("{}", serde_json::to_string_pretty(&p)?);

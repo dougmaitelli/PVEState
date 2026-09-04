@@ -157,8 +157,9 @@ mod tests {
 
     fn plan() -> Plan {
         Plan {
-            schema_version: 1,
+            schema_version: 2,
             created_at: Utc::now(),
+            capture_id: "fixture-capture".into(),
             target: "https://pve.test:8006".into(),
             pbs_target: "https://pbs.test:8007".into(),
             operations: Vec::new(),

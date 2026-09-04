@@ -26,6 +26,10 @@ cargo install --git https://github.com/dougmaitelli/pvestate
 
 Create or select a separate environment repository:
 
+CLI output uses `live` for the running PVE/PBS system, `captured` for the latest
+snapshot under `observed/production`, and `local` for editable files under
+`config/`.
+
 ```bash
 pves init ./my-proxmox
 export PVES_CONFIG_DIR="$PWD/my-proxmox"
@@ -35,7 +39,7 @@ The current Hades environment is stored separately at `/root/pveconf`.
 
 ```text
 my-proxmox/
-├── config/                 desired YAML
+├── config/                 local editable YAML
 ├── observed/production/    sanitized, reviewable API snapshots and native exports
 ├── .runtime/               ignored raw observations and plans
 ├── .pves.env               ignored PVE State credentials and connection settings
@@ -122,6 +126,13 @@ when all required PVE API, PBS API, native SSH, and host SSH requests succeed.
 The manifest records the exact sanitized artifact set, SHA-256 hashes, sizes,
 source endpoints, and failures. Partial captures remain available for diagnosis,
 but `plan` rejects partial, stale, missing, unexpected, or modified evidence.
+Capture artifacts are assembled in a staging directory and promoted only after
+every required source succeeds; a failed capture therefore leaves the last
+complete `observed/production` snapshot intact.
+
+`pves plan` reads only that verified captured snapshot; it does not contact PVE
+or PBS. The capture ID is embedded in the signed plan, and `pves adopt` rejects
+the plan if a newer or different capture is currently selected.
 
 ### Configuration scope
 
@@ -183,14 +194,14 @@ pves apply
 ## Commands
 
 - `init PATH`: scaffold an environment repository.
-- `capture`: refresh API observations and sanitized host/firewall exports.
-- `plan`: validate desired state, create a deterministic guarded plan, and show
-  its changes grouped by domain. Use `--json` for the complete machine-readable
-  plan envelope.
-- `adopt`: preview production values or copy explicitly selected values into
-  desired state.
-- `apply`: execute exactly the confirmed plan; removals are generated only from
-  explicit desired-state absence or `absent_*` identifiers.
+- `capture`: refresh the captured snapshot of live API and native configuration.
+- `plan`: compare local configuration with live state, create a deterministic
+  guarded plan, and show its changes grouped by domain. Use `--json` for the
+  complete machine-readable plan envelope.
+- `adopt`: preview captured values or copy explicitly selected values into the
+  local configuration.
+- `apply`: execute exactly the confirmed local-to-live plan; removals are
+  generated only from explicit local absence or `absent_*` identifiers.
 - `validate`: verify all managed guests are running.
 - `recover ACTION TARGET`: grouped disaster-recovery interface.
 - `schema`: emit JSON Schemas for the repository manifest and every configuration document.

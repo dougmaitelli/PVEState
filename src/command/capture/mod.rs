@@ -13,7 +13,7 @@ use crate::{
 use anyhow::{Result, anyhow, bail};
 use chrono::Utc;
 use serde_json::json;
-use std::{collections::BTreeMap, fs};
+use std::{collections::BTreeMap, fs, path::Path};
 
 pub fn run(
     repo: &Repository,
@@ -21,10 +21,15 @@ pub fn run(
     pbs: &dyn PbsClient,
     ssh: &dyn RemoteHost,
 ) -> Result<()> {
-    progress::section("Capturing production state");
+    progress::section("Capturing live state");
     progress::detail(format!("configuration: {}", repo.root.display()));
     repo.secure_runtime()?;
-    fs::create_dir_all(repo.observed().join("api"))?;
+    fs::create_dir_all(repo.root.join("observed"))?;
+    let staging = tempfile::Builder::new()
+        .prefix(".capture-")
+        .tempdir_in(repo.root.join("observed"))?;
+    let staged_observed = staging.path().join("production");
+    fs::create_dir_all(staged_observed.join("api"))?;
 
     let started = Utc::now();
     let initial = CaptureManifest::new(
@@ -35,9 +40,9 @@ pub fn run(
         )]),
         BTreeMap::new(),
     );
-    write_manifest(repo, &initial)?;
+    write_runtime_manifest(repo, &initial)?;
 
-    let sources = match perform(repo, pve, pbs, ssh) {
+    let sources = match perform(repo, &staged_observed, pve, pbs, ssh) {
         Ok(sources) => sources,
         Err(error) => {
             let failed = CaptureManifest::new(
@@ -46,25 +51,29 @@ pub fn run(
                     "capture".into(),
                     source("local", vec![format!("{error:#}")]),
                 )]),
-                collect_artifacts(&repo.observed())?,
+                collect_artifacts(&staged_observed)?,
             );
-            write_manifest(repo, &failed)?;
+            write_runtime_manifest(repo, &failed)?;
             return Err(error);
         },
     };
 
-    let manifest = CaptureManifest::new(Utc::now(), sources, collect_artifacts(&repo.observed())?);
-    write_manifest(repo, &manifest)?;
+    let manifest = CaptureManifest::new(Utc::now(), sources, collect_artifacts(&staged_observed)?);
     if manifest.status == CaptureStatus::Partial {
+        write_runtime_manifest(repo, &manifest)?;
         bail!("capture is partial: {}", manifest.failures.join("; "))
     }
+    write_observed_manifest(&staged_observed, &manifest)?;
+    publish_observed(repo, &staged_observed, &manifest.capture_id)?;
+    write_runtime_manifest(repo, &manifest)?;
     progress::finish(true);
-    println!("captured production into {}", repo.root.display());
+    println!("captured live state into {}", repo.root.display());
     Ok(())
 }
 
 fn perform(
     repo: &Repository,
+    observed: &Path,
     pve: &dyn PveClient,
     pbs: &dyn PbsClient,
     ssh: &dyn RemoteHost,
@@ -78,7 +87,7 @@ fn perform(
         pve_snapshot.collected_at,
         &pve_snapshot,
         &repo.runtime(),
-        &repo.observed().join("api"),
+        &observed.join("api"),
     )?;
     let pve_failures = pve_snapshot.failures();
     progress::finish(pve_failures.is_empty());
@@ -91,14 +100,14 @@ fn perform(
         pbs_snapshot.collected_at,
         &pbs_snapshot,
         &repo.runtime(),
-        &repo.observed().join("api"),
+        &observed.join("api"),
     )?;
     let pbs_failures = pbs_snapshot.failures();
     progress::finish(pbs_failures.is_empty());
     sources.insert("pbs-api".into(), source(pbs.endpoint(), pbs_failures));
 
     progress::section("Native configuration files");
-    let native_failures = native::export(repo, ssh, &pve_snapshot)
+    let native_failures = native::export(repo, observed, ssh, &pve_snapshot)
         .err()
         .map(|error| vec![format!("{error:#}")])
         .unwrap_or_default();
@@ -122,15 +131,44 @@ fn source(endpoint: &str, failures: Vec<String>) -> SourceEvidence {
     }
 }
 
-fn write_manifest(repo: &Repository, manifest: &CaptureManifest) -> Result<()> {
+fn write_observed_manifest(observed: &Path, manifest: &CaptureManifest) -> Result<()> {
     let content = serde_json::to_vec_pretty(manifest)?;
-    fs::write(repo.observed().join("manifest.json"), &content)?;
+    atomic_file::write(&observed.join("manifest.json"), &content)
+}
+
+fn write_runtime_manifest(repo: &Repository, manifest: &CaptureManifest) -> Result<()> {
+    let content = serde_json::to_vec_pretty(manifest)?;
     atomic_file::write(
         &repo
             .runtime()
             .join(format!("capture-manifest-{}.json", manifest.capture_id)),
         &content,
     )?;
+    Ok(())
+}
+
+fn publish_observed(repo: &Repository, staged: &Path, capture_id: &str) -> Result<()> {
+    let current = repo.observed();
+    let previous = repo
+        .root
+        .join("observed")
+        .join(format!(".previous-{capture_id}"));
+    let had_current = current.exists();
+    if had_current {
+        fs::rename(&current, &previous)?;
+    }
+    if let Err(error) = fs::rename(staged, &current) {
+        if had_current {
+            fs::rename(&previous, &current)?;
+        }
+        return Err(error.into());
+    }
+    if had_current && let Err(error) = fs::remove_dir_all(&previous) {
+        progress::detail(format!(
+            "could not remove previous capture {}: {error}",
+            previous.display()
+        ));
+    }
     Ok(())
 }
 
@@ -165,5 +203,35 @@ pub fn validate(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
         Ok(())
     } else {
         bail!(failures.join("\n"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn complete_capture_replaces_previous_observed_tree() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("environment");
+        Repository::initialize(&root).unwrap();
+        let repo = Repository::open(&root).unwrap();
+        fs::write(repo.observed().join("previous.txt"), "previous").unwrap();
+        let staging = tempfile::Builder::new()
+            .prefix(".capture-")
+            .tempdir_in(root.join("observed"))
+            .unwrap();
+        let staged = staging.path().join("production");
+        fs::create_dir(&staged).unwrap();
+        fs::write(staged.join("current.txt"), "current").unwrap();
+
+        publish_observed(&repo, &staged, "fixture").unwrap();
+
+        assert_eq!(
+            fs::read_to_string(repo.observed().join("current.txt")).unwrap(),
+            "current"
+        );
+        assert!(!repo.observed().join("previous.txt").exists());
+        assert!(!root.join("observed/.previous-fixture").exists());
     }
 }

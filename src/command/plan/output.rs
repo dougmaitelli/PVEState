@@ -3,10 +3,11 @@ use console::style;
 use std::collections::BTreeMap;
 
 pub fn print_human(plan: &Plan) {
-    println!("{}", style("Production plan").bold().cyan());
+    println!("{}", style("Live change plan").bold().cyan());
     println!("  {:<10} {}", "PVE", plan.target);
     println!("  {:<10} {}", "PBS", plan.pbs_target);
     println!("  {:<10} {}", "Created", plan.created_at.to_rfc3339());
+    println!("  {:<10} {}", "Capture", plan.capture_id);
     println!("  {:<10} {}", "SHA-256", plan.plan_sha256);
 
     if !plan.blockers.is_empty() {
@@ -160,8 +161,8 @@ enum DiffLine<'a> {
 
 fn print_diff(domain: &str, before: &str, after: &str) {
     let (before, after) = comparable_content(domain, before, after);
-    println!("      {}", style("--- production").red().dim());
-    println!("      {}", style("+++ desired").green().dim());
+    println!("      {}", style("--- captured").red().dim());
+    println!("      {}", style("+++ local").green().dim());
 
     let diff = line_diff(&before, &after);
     let changed = diff

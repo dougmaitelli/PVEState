@@ -19,8 +19,8 @@ pub struct Candidate {
     pub id: String,
     pub resource: String,
     pub field: String,
-    pub desired: String,
-    pub production: String,
+    pub local: String,
+    pub captured: String,
     pub adoptable: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
@@ -30,9 +30,9 @@ pub struct Candidate {
 
 pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) -> Result<()> {
     progress::section(if preview {
-        "Previewing adoptable drift"
+        "Previewing captured drift"
     } else {
-        "Adopting production state"
+        "Adopting captured state into local configuration"
     });
     repo.secure_runtime()?;
     let manifest: CaptureManifest = serde_json::from_slice(
@@ -44,6 +44,13 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
             .context("run plan first")?,
     )?;
     plan.verify()?;
+    if plan.capture_id != manifest.capture_id {
+        bail!(
+            "plan was created from capture {}, but the current capture is {}; run plan again",
+            plan.capture_id,
+            manifest.capture_id
+        )
+    }
     let observed: Value = serde_json::from_slice(&fs::read(repo.observed().join("api/pve.json"))?)?;
     let candidates = candidates(repo, &plan, &observed)?;
 
@@ -73,7 +80,7 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
     {
         progress::operation(format!(
             "{}: {} -> {}",
-            candidate.id, candidate.desired, candidate.production
+            candidate.id, candidate.local, candidate.captured
         ));
         if !candidate.adoptable {
             bail!(
@@ -101,7 +108,7 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
     Repository::open(&repo.root).context("validate adopted configuration repository")?;
     progress::finish(true);
     println!(
-        "adopted {} production value(s) into {}",
+        "adopted {} captured value(s) into {}",
         selected.len(),
         documents.into_iter().collect::<Vec<_>>().join(", ")
     );
@@ -120,7 +127,7 @@ fn selection(
             .map(|candidate| candidate.id.clone())
             .collect::<BTreeSet<_>>();
         if selected.is_empty() {
-            bail!("there are no adoptable production values")
+            bail!("there are no adoptable captured values")
         }
         return Ok(selected);
     }
@@ -164,7 +171,7 @@ fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Ca
                     resource,
                     field,
                     desired,
-                    "present in production",
+                    "present in captured state",
                     false,
                     "adopting additional devices is not yet supported",
                 ));
@@ -233,7 +240,7 @@ fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Ca
                     resource,
                     "file",
                     "configured state",
-                    "captured production state",
+                    "captured state",
                     true,
                     None,
                 );
@@ -244,7 +251,7 @@ fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Ca
             | Operation::DeleteFile { resource, path, .. } => result.push(candidate(
                 resource,
                 "file",
-                "desired rendering",
+                "local rendering",
                 path,
                 false,
                 "this native configuration format has no typed adoption adapter",
@@ -258,8 +265,8 @@ fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Ca
 fn candidate(
     resource: &str,
     field: &str,
-    desired: &str,
-    production: &str,
+    local: &str,
+    captured: &str,
     adoptable: bool,
     reason: impl Into<Option<&'static str>>,
 ) -> Candidate {
@@ -267,8 +274,8 @@ fn candidate(
         id: format!("{resource}:{field}"),
         resource: resource.into(),
         field: field.into(),
-        desired: desired.into(),
-        production: production.into(),
+        local: local.into(),
+        captured: captured.into(),
         adoptable,
         reason: reason.into().map(str::to_owned),
         native: None,
@@ -315,7 +322,7 @@ fn apply_candidate(content: &str, candidate: &Candidate) -> Result<String> {
         yaml::Segment::Key(reference.vmid.to_string()),
     ];
     let yaml::Patch::Set(mut path, value) =
-        adoption_patch(reference.kind, field, &candidate.production)?
+        adoption_patch(reference.kind, field, &candidate.captured)?
     else {
         unreachable!("guest field adoption only creates set patches")
     };
@@ -516,8 +523,8 @@ mod tests {
             id: "lxc/101:mp0.backed_up_by_pve".into(),
             resource: "lxc/101".into(),
             field: "mp0.backed_up_by_pve".into(),
-            desired: "0".into(),
-            production: "1".into(),
+            local: "0".into(),
+            captured: "1".into(),
             adoptable: true,
             reason: None,
             native: None,
@@ -545,8 +552,8 @@ mod tests {
                 id: "yes".into(),
                 resource: "lxc/1".into(),
                 field: "cores".into(),
-                desired: "2".into(),
-                production: "4".into(),
+                local: "2".into(),
+                captured: "4".into(),
                 adoptable: true,
                 reason: None,
                 native: None,
@@ -555,8 +562,8 @@ mod tests {
                 id: "no".into(),
                 resource: "cluster".into(),
                 field: "file".into(),
-                desired: "wanted".into(),
-                production: "live".into(),
+                local: "wanted".into(),
+                captured: "live".into(),
                 adoptable: false,
                 reason: Some("unsupported".into()),
                 native: None,
