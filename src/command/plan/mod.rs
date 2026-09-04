@@ -219,6 +219,11 @@ fn build(
     if let Ok(captured_network) = fs::read_to_string(repo.observed().join("network/interfaces")) {
         blockers.extend(network_safety_blockers(&captured_network, &repo.network)?);
     }
+    for (resource, path) in firewall_artifacts(repo) {
+        if let Ok(content) = fs::read_to_string(repo.observed().join(path)) {
+            blockers.extend(firewall_safety_blockers(&content, &resource));
+        }
+    }
     file::operation(
         repo,
         ("network", &repo.guests.node),
@@ -352,6 +357,37 @@ fn network_safety_blockers(content: &str, current: &crate::model::Network) -> Re
             )
         })
         .collect())
+}
+
+fn firewall_artifacts(repo: &Repository) -> Vec<(String, String)> {
+    let mut artifacts = vec![
+        ("cluster".into(), "pve/firewall/cluster.fw".into()),
+        (
+            format!("node/{}", repo.guests.node),
+            format!("pve/firewall/{}-host.fw", repo.guests.node),
+        ),
+    ];
+    artifacts.extend(
+        repo.guests
+            .lxcs
+            .keys()
+            .chain(repo.guests.vms.keys())
+            .map(|id| (id.to_string(), format!("pve/firewall/{id}.fw"))),
+    );
+    artifacts
+}
+
+fn firewall_safety_blockers(content: &str, resource: &str) -> Vec<String> {
+    crate::command::adopt::native::parse_firewall(content)
+        .unmodeled
+        .iter()
+        .map(|directive| {
+            format!(
+                "firewall {resource} cannot be represented safely: {}",
+                directive.diagnostic()
+            )
+        })
+        .collect()
 }
 
 fn dns_changes(
@@ -527,6 +563,14 @@ mod tests {
     }
 
     #[test]
+    fn firewall_rule_order_remains_semantic() {
+        let a = "[RULES]\nIN ACCEPT -dport 22\nIN DROP\n";
+        let b = "[RULES]\nIN DROP\nIN ACCEPT -dport 22\n";
+
+        assert_ne!(render::firewall_semantic(a), render::firewall_semantic(b));
+    }
+
+    #[test]
     fn extra_dns_servers_are_deleted() {
         let actual =
             serde_json::json!({"search":"example.test", "dns1":"1.1.1.1", "dns2":"8.8.8.8"});
@@ -548,6 +592,18 @@ mod tests {
         assert_eq!(blockers.len(), 1);
         assert!(blockers[0].contains("cannot be represented safely"));
         assert!(blockers[0].contains("bridge-vlan-aware yes"));
+    }
+
+    #[test]
+    fn unsupported_native_firewall_syntax_becomes_a_plan_blocker() {
+        let blockers = firewall_safety_blockers(
+            "[RULES]\nIN ACCEPT -p tcp -m conntrack -dport 443\n",
+            "cluster",
+        );
+
+        assert_eq!(blockers.len(), 1);
+        assert!(blockers[0].contains("firewall cluster cannot be represented safely"));
+        assert!(blockers[0].contains("-m"));
     }
 
     #[test]

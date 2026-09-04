@@ -81,6 +81,30 @@ pub fn firewall_policy(policy: &FirewallPolicy) -> String {
     if let Some(x) = &policy.log_level_in {
         s += &format!("log_level_in: {x}\n")
     }
+    for (key, value) in &policy.options {
+        s += &format!("{key}: {value}\n");
+    }
+    if !policy.aliases.is_empty() {
+        s += "\n[ALIASES]\n\n";
+        for alias in &policy.aliases {
+            s += &format!("{} {}", alias.name, alias.network);
+            append_comment(&mut s, alias.comment.as_deref());
+        }
+    }
+    for ip_set in &policy.ip_sets {
+        s += &format!("\n[IPSET {}]\n\n", ip_set.name);
+        for entry in &ip_set.entries {
+            s += &entry.network;
+            if entry.nomatch {
+                s += " nomatch";
+            }
+            append_comment(&mut s, entry.comment.as_deref());
+        }
+    }
+    for group in &policy.security_groups {
+        s += &format!("\n[group {}]\n\n", group.name);
+        render_firewall_rules(&mut s, &group.rules);
+    }
     if !policy.rules.is_empty() {
         s += "\n[RULES]\n\n";
         render_firewall_rules(&mut s, &policy.rules);
@@ -93,22 +117,40 @@ fn render_firewall_rules(output: &mut String, rules: &[FirewallRule]) {
         if !rule.enabled {
             output.push('|')
         }
-        *output += &format!("{} {}", rule.direction, rule.action);
+        *output += &format!("{} ", rule.direction);
+        if let Some(name) = &rule.macro_name {
+            *output += &format!("{name}({})", rule.action);
+        } else {
+            *output += &rule.action;
+        }
         if let Some(value) = &rule.interface {
             *output += &format!(" -i {value}")
         }
         if let Some(value) = &rule.protocol {
             *output += &format!(" -p {value}")
         }
+        if let Some(value) = &rule.source {
+            *output += &format!(" -source {value}")
+        }
+        if let Some(value) = &rule.destination {
+            *output += &format!(" -dest {value}")
+        }
+        if let Some(value) = &rule.source_port {
+            *output += &format!(" -sport {value}")
+        }
         if let Some(value) = &rule.destination_port {
             *output += &format!(" -dport {value}")
         }
         *output += &format!(" -log {}", rule.log);
-        if let Some(value) = &rule.comment {
-            *output += &format!(" # {value}")
-        }
-        output.push('\n')
+        append_comment(output, rule.comment.as_deref());
     }
+}
+
+fn append_comment(output: &mut String, comment: Option<&str>) {
+    if let Some(value) = comment {
+        *output += &format!(" # {value}");
+    }
+    output.push('\n');
 }
 
 pub fn semantic_lines(s: &str) -> Vec<String> {
@@ -120,19 +162,19 @@ pub fn semantic_lines(s: &str) -> Vec<String> {
 }
 
 pub fn firewall_semantic(s: &str) -> (Vec<String>, Vec<String>) {
-    let mut section = "";
+    let mut section = String::new();
     let mut options = Vec::new();
     let mut rules = Vec::new();
     for line in semantic_lines(s) {
         if line.starts_with('[') {
-            section = if line == "[OPTIONS]" {
-                "options"
-            } else {
-                "rules"
-            };
-        } else if section == "options" {
-            options.push(line);
-        } else if section == "rules" {
+            section.clone_from(&line);
+            if line == "[RULES]" || line.starts_with("[group ") {
+                rules.push(line);
+            }
+        } else if section == "[OPTIONS]" || section == "[ALIASES]" || section.starts_with("[IPSET ")
+        {
+            options.push(format!("{section}:{line}"));
+        } else if section == "[RULES]" || section.starts_with("[group ") {
             rules.push(line);
         }
     }

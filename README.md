@@ -75,6 +75,13 @@ spinners, live operation counts, elapsed times, and completion markers. CI,
 redirected output, and `TERM=dumb` automatically use stable plain-text output;
 terminal coloring also respects `NO_COLOR`.
 
+Native `/etc/pve/firewall/*.fw` files are the authoritative firewall
+representation for comparison, adoption, and apply. The PVE firewall API is
+captured as supporting evidence, but is not mixed into mutation planning.
+Options, aliases, IP sets, security groups, and ordered rules are modeled from
+the native files. A plan is blocked if a captured file contains syntax that the
+local model cannot reproduce without loss.
+
 PVE State uses one canonical host for both API and SSH access:
 
 ```bash

@@ -1,4 +1,4 @@
-use crate::config::Repository;
+use crate::{config::Repository, model::FirewallPolicy};
 use anyhow::{Result, bail};
 use std::collections::BTreeSet;
 
@@ -66,11 +66,69 @@ pub(super) fn validate(repo: &Repository) -> Result<()> {
         repo.backup.pbs.jobs.sync.keys(),
         &repo.backup.pbs.jobs.absent_sync,
     )?;
+    for (resource, policy) in
+        std::iter::once(("cluster".to_string(), repo.cluster.firewall.as_ref()))
+            .chain(std::iter::once((
+                format!("node/{}", repo.guests.node),
+                repo.node.firewall.as_ref(),
+            )))
+            .chain(
+                repo.guests
+                    .lxcs
+                    .iter()
+                    .map(|(id, guest)| (format!("lxc/{id}"), guest.firewall.as_ref())),
+            )
+            .chain(
+                repo.guests
+                    .vms
+                    .iter()
+                    .map(|(id, guest)| (format!("qemu/{id}"), guest.firewall.as_ref())),
+            )
+    {
+        if let Some(policy) = policy {
+            validate_firewall(&resource, policy)?;
+        }
+    }
     println!(
         "configuration structurally valid: {} guests, {} NICs; management scope is documented in management-scope.json",
         managed.len(),
         macs.len()
     );
+    Ok(())
+}
+
+fn validate_firewall(resource: &str, policy: &FirewallPolicy) -> Result<()> {
+    for reserved in ["enable", "log_level_in"] {
+        if policy.options.contains_key(reserved) {
+            bail!("firewall {resource}: option `{reserved}` has a dedicated field");
+        }
+    }
+    unique_names(
+        resource,
+        "alias",
+        policy.aliases.iter().map(|item| item.name.as_str()),
+    )?;
+    unique_names(
+        resource,
+        "IP set",
+        policy.ip_sets.iter().map(|item| item.name.as_str()),
+    )?;
+    unique_names(
+        resource,
+        "security group",
+        policy.security_groups.iter().map(|item| item.name.as_str()),
+    )
+}
+
+fn unique_names<'a>(
+    resource: &str,
+    kind: &str,
+    names: impl IntoIterator<Item = &'a str>,
+) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    if let Some(name) = names.into_iter().find(|name| !seen.insert(*name)) {
+        bail!("firewall {resource}: duplicate {kind} `{name}`");
+    }
     Ok(())
 }
 
