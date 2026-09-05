@@ -1,5 +1,8 @@
-use super::{Operation, Plan, resource};
-use crate::utility::atomic_file;
+use super::resource;
+use crate::{
+    reconcile::{Operation, Plan},
+    utility::atomic_file,
+};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -152,7 +155,7 @@ fn action(operation: &Operation) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::command::plan::Plan;
+    use crate::reconcile::Plan;
     use std::fs;
 
     fn plan() -> Plan {
@@ -173,7 +176,7 @@ mod tests {
         plan.operations.push(Operation::DeleteFile {
             domain: "firewall".into(),
             resource: "guest/101".into(),
-            target: crate::command::plan::ManagedFile::GuestFirewall { vmid: 101 },
+            target: crate::reconcile::ManagedFile::GuestFirewall { vmid: 101 },
             before_content: "old firewall".into(),
             before_sha256: "before".into(),
         });

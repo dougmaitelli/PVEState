@@ -1,6 +1,6 @@
 use crate::{
-    command::plan::{Domain, ManagedFile, PlanBuilder},
     config::LocalState,
+    reconcile::{Domain, ManagedFile, PlanBuilder},
     resource::{native, native_paths},
 };
 use anyhow::Result;
@@ -13,7 +13,7 @@ pub(crate) fn plan(local: &LocalState, builder: &mut PlanBuilder) -> Result<()> 
             .blockers()
             .extend(safety_blockers(&captured, &local.network)?);
     }
-    crate::command::plan::file::operation(
+    crate::resource::file_plan::operation(
         local,
         (Domain::Network, &local.guests.node),
         native_paths::NETWORK_ARTIFACT,

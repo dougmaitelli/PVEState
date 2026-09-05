@@ -1,6 +1,6 @@
 use crate::{
-    command::plan::{Domain, ManagedFile, PlanBuilder},
     config::LocalState,
+    reconcile::{Domain, ManagedFile, PlanBuilder},
     resource::{native, native_paths},
 };
 use anyhow::Result;
@@ -67,7 +67,7 @@ fn plan_policy(
     builder: &mut PlanBuilder,
 ) -> Result<()> {
     if let Some(policy) = policy {
-        crate::command::plan::file::operation(
+        crate::resource::file_plan::operation(
             local,
             (Domain::Firewall, resource),
             artifact,
@@ -76,7 +76,7 @@ fn plan_policy(
             builder.operations(),
         )
     } else {
-        crate::command::plan::file::deletion(
+        crate::resource::file_plan::deletion(
             local,
             (Domain::Firewall, resource),
             artifact,

@@ -1,4 +1,4 @@
-use crate::command::plan::Domain;
+use crate::reconcile::Domain;
 use anyhow::{Context, Result, bail};
 use reqwest::Url;
 use std::{

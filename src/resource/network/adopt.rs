@@ -1,7 +1,7 @@
 use crate::{
-    command::plan::Operation,
     config::{AdoptionCandidate, ConfigDocument, LocalPatch, LocalState},
     discovery::CapturedState,
+    reconcile::Operation,
     utility::yaml_patch::Segment,
 };
 use anyhow::Result;

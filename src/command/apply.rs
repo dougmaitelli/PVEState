@@ -3,8 +3,8 @@ mod journal;
 use self::journal::ApplyJournal;
 use crate::{
     client::{Pbs, PbsClient, Pve, PveClient, RemoteHost, Ssh},
-    command::plan::{ApiMethod, ApiTarget, Operation, Plan},
     config::LocalState,
+    reconcile::{ApiMethod, ApiTarget, Operation, Plan},
     settings::{ApplySettings, Settings},
     utility::{authorization, progress::EventSink, remote_file, runtime_security, shell},
 };

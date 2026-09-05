@@ -1,7 +1,7 @@
 use crate::{
     client::PveClient,
-    command::plan::{ApiMethod, ApiTarget, Domain, Operation, PlanBuilder, ResourceId},
     config::LocalState,
+    reconcile::{ApiMethod, ApiTarget, Domain, Operation, PlanBuilder, ResourceId},
 };
 use anyhow::Result;
 use std::collections::BTreeMap;

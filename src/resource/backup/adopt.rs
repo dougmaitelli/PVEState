@@ -1,8 +1,8 @@
 use crate::{
-    command::plan::{ApiMethod, Operation},
     config::{AdoptionCandidate, ConfigDocument, LocalPatch, LocalState},
     discovery::CapturedState,
     model::{PruneJob, SyncJob, VerifyJob},
+    reconcile::{ApiMethod, Operation},
     resource::backup::{BackupMode, Datastore, PveBackupJob, Retention, S3Endpoint},
     utility::yaml_patch::Segment,
 };

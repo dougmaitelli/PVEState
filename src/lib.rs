@@ -4,6 +4,7 @@ mod command;
 mod config;
 mod discovery;
 mod model;
+mod reconcile;
 mod resource;
 mod scope;
 mod settings;

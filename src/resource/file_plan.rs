@@ -1,6 +1,6 @@
-use super::{Domain, ManagedFile, Operation, ResourceId};
 use crate::{
     config::LocalState,
+    reconcile::{Domain, ManagedFile, Operation, ResourceId},
     resource::{firewall, network},
 };
 use anyhow::Result;

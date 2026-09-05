@@ -1,9 +1,9 @@
 use super::{agent::QemuAgentOptions, render};
 use crate::{
     client::PveClient,
-    command::plan::{ApiMethod, ApiTarget, Operation, PlanBuilder},
     config::LocalState,
     model::{GuestField, GuestKind, GuestRef, Lxc, Vm},
+    reconcile::{ApiMethod, ApiTarget, Domain, Operation, PlanBuilder},
 };
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -264,7 +264,7 @@ fn push_update(
         operations.push(Operation::ApiMutation {
             target: ApiTarget::Pve,
             method: ApiMethod::Put,
-            domain: crate::command::plan::Domain::Guest,
+            domain: Domain::Guest,
             resource: guest.to_string().into(),
             endpoint: guest.config_endpoint(node).into(),
             changes,
@@ -297,7 +297,7 @@ fn disk(
         blockers.push(format!("{guest}: disk shrinking is forbidden"));
     } else if size > current {
         operations.push(Operation::GrowDisk {
-            domain: crate::command::plan::Domain::Guest,
+            domain: Domain::Guest,
             resource: format!("{guest}/{key}").into(),
             endpoint: guest.resize_endpoint(node).into(),
             disk: key.into(),

@@ -1,236 +1,17 @@
-mod builder;
-pub(crate) mod file;
 mod output;
-mod types;
 mod validation;
 
-pub(crate) use builder::PlanBuilder;
 pub(crate) use output::print_human;
-pub(crate) use types::{ApiPath, DiskId, Domain, ManagedFile, ResourceId, SecretName};
 
 use crate::{
     client::{PbsClient, PveClient},
     config::LocalState,
     discovery::CapturedState,
+    reconcile::{Plan, PlanBuilder},
     resource::{backup, dns, firewall, guest, network},
-    utility::{
-        atomic_file,
-        plan_envelope::{self, PlanEnvelope},
-        progress, runtime_security,
-    },
+    utility::{atomic_file, progress, runtime_security},
 };
-use anyhow::{Result, bail};
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "action", rename_all = "kebab-case")]
-pub(crate) enum Operation {
-    ApiMutation {
-        target: ApiTarget,
-        method: ApiMethod,
-        domain: Domain,
-        resource: ResourceId,
-        endpoint: ApiPath,
-        changes: BTreeMap<String, String>,
-        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-        environment_changes: BTreeMap<String, SecretName>,
-        digest: Option<String>,
-    },
-    GrowDisk {
-        domain: Domain,
-        resource: ResourceId,
-        endpoint: ApiPath,
-        disk: DiskId,
-        size_gb: u64,
-    },
-    WriteFile {
-        domain: Domain,
-        resource: ResourceId,
-        target: ManagedFile,
-        content: String,
-        #[serde(skip)]
-        before_content: Option<String>,
-        before_sha256: Option<String>,
-    },
-    DeleteFile {
-        domain: Domain,
-        resource: ResourceId,
-        target: ManagedFile,
-        #[serde(skip)]
-        before_content: String,
-        before_sha256: String,
-    },
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum ApiTarget {
-    Pve,
-    Pbs,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum ApiMethod {
-    Post,
-    Put,
-    Delete,
-}
-
-impl Operation {
-    pub(crate) const fn resource(&self) -> &ResourceId {
-        match self {
-            Self::ApiMutation { resource, .. }
-            | Self::GrowDisk { resource, .. }
-            | Self::WriteFile { resource, .. }
-            | Self::DeleteFile { resource, .. } => resource,
-        }
-    }
-
-    pub(crate) fn domain(&self) -> Domain {
-        match self {
-            Self::ApiMutation { domain, .. }
-            | Self::GrowDisk { domain, .. }
-            | Self::WriteFile { domain, .. }
-            | Self::DeleteFile { domain, .. } => *domain,
-        }
-    }
-
-    pub(crate) fn description(&self) -> String {
-        match self {
-            Self::ApiMutation {
-                target,
-                method,
-                resource,
-                changes,
-                ..
-            } => {
-                format!(
-                    "{method:?} {target:?} {resource} ({} change(s))",
-                    changes.len()
-                )
-            },
-            Self::GrowDisk {
-                resource, size_gb, ..
-            } => format!("grow {resource} to {size_gb} GiB"),
-            Self::WriteFile { target, .. } => format!("write {}", target.path()),
-            Self::DeleteFile { target, .. } => format!("delete {}", target.path()),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct Plan {
-    pub(crate) schema_version: u8,
-    pub(crate) created_at: DateTime<Utc>,
-    #[serde(default)]
-    pub(crate) capture_id: String,
-    pub(crate) target: String,
-    pub(crate) pbs_target: String,
-    pub(crate) operations: Vec<Operation>,
-    pub(crate) blockers: Vec<String>,
-    pub(crate) plan_sha256: String,
-}
-
-impl Plan {
-    pub(crate) fn from_slice(bytes: &[u8]) -> Result<Self> {
-        let value: serde_json::Value = serde_json::from_slice(bytes)?;
-        let schema_version = value
-            .get("schema_version")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or_default();
-        if schema_version != 3 {
-            bail!("unsupported plan schema {schema_version}; run plan again")
-        }
-        Ok(serde_json::from_value(value)?)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn calculate_hash(&self) -> Result<String> {
-        let mut signed = self.clone();
-        plan_envelope::sign(&mut signed)?;
-        Ok(signed.plan_sha256)
-    }
-
-    pub(crate) fn verify(&self) -> Result<()> {
-        if self.schema_version != 3 {
-            bail!(
-                "unsupported plan schema {}; run plan again",
-                self.schema_version
-            )
-        }
-        plan_envelope::verify(self, "plan file integrity check failed")?;
-        for operation in &self.operations {
-            match operation {
-                Operation::ApiMutation {
-                    target,
-                    domain,
-                    resource,
-                    endpoint,
-                    environment_changes,
-                    ..
-                } => {
-                    types::validate_operation(*domain, *target, resource)?;
-                    if !endpoint.is_valid() {
-                        bail!("invalid API path {endpoint}")
-                    }
-                    if let Some(secret) =
-                        environment_changes.values().find(|value| !value.is_valid())
-                    {
-                        bail!("invalid secret environment variable {secret}")
-                    }
-                },
-                Operation::GrowDisk {
-                    domain,
-                    resource,
-                    endpoint,
-                    disk,
-                    ..
-                } => {
-                    types::validate_operation(*domain, ApiTarget::Pve, resource)?;
-                    if !endpoint.is_valid() {
-                        bail!("invalid API path {endpoint}")
-                    }
-                    if !disk.is_valid() {
-                        bail!("invalid guest disk identifier {disk}")
-                    }
-                },
-                Operation::WriteFile {
-                    domain,
-                    resource,
-                    target,
-                    ..
-                }
-                | Operation::DeleteFile {
-                    domain,
-                    resource,
-                    target,
-                    ..
-                } => {
-                    types::validate_operation(*domain, ApiTarget::Pve, resource)?;
-                    if !target.matches(*domain, resource) {
-                        bail!(
-                            "managed file {} is incompatible with domain {domain} and resource {resource}",
-                            target.path()
-                        )
-                    }
-                },
-            }
-        }
-        Ok(())
-    }
-}
-
-impl PlanEnvelope for Plan {
-    fn integrity(&self) -> &str {
-        &self.plan_sha256
-    }
-    fn set_integrity(&mut self, value: String) {
-        self.plan_sha256 = value;
-    }
-}
+use anyhow::Result;
 
 pub(crate) fn run(repo: &LocalState, events: &dyn progress::EventSink) -> Result<Plan> {
     events.section("Comparing local configuration with live state");
@@ -289,8 +70,11 @@ mod tests {
     use crate::{
         client::{PbsClient, PveClient},
         discovery::{CaptureManifest, SourceEvidence, collect_artifacts},
+        reconcile::{ApiMethod, ApiTarget, Domain, ManagedFile, Operation, ResourceId},
     };
     use anyhow::{Context, bail};
+    use chrono::Utc;
+    use serde::Deserialize;
     use serde_json::Value;
     use std::{collections::BTreeMap, fs, path::Path};
 

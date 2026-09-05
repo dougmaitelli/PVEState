@@ -1,8 +1,8 @@
 use crate::{
     client::{PbsClient, PveClient},
-    command::plan::{ApiMethod, ApiTarget, Operation, PlanBuilder},
     config::LocalState,
     model::{PruneJob, SyncJob, VerifyJob},
+    reconcile::{ApiMethod, ApiTarget, Domain, Operation, PlanBuilder},
 };
 use anyhow::{Context, Result};
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
@@ -68,7 +68,7 @@ fn pve_jobs(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation>) 
                 operations,
                 ApiTarget::Pve,
                 method,
-                crate::command::plan::Domain::Backup,
+                Domain::Backup,
                 &format!("pve/{id}"),
                 if method == ApiMethod::Post {
                     "/cluster/backup".into()
@@ -85,7 +85,7 @@ fn pve_jobs(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation>) 
                 operations,
                 ApiTarget::Pve,
                 ApiMethod::Delete,
-                crate::command::plan::Domain::Backup,
+                Domain::Backup,
                 &format!("pve/{id}"),
                 format!("/cluster/backup/{}", encoded(id)),
                 BTreeMap::new(),
@@ -120,7 +120,7 @@ fn datastore(
             operations,
             ApiTarget::Pbs,
             ApiMethod::Post,
-            crate::command::plan::Domain::Pbs,
+            Domain::Pbs,
             &format!("datastore/{}", desired.name),
             "/config/datastore".into(),
             BTreeMap::from([
@@ -159,7 +159,7 @@ fn datastore(
             operations,
             ApiTarget::Pbs,
             ApiMethod::Put,
-            crate::command::plan::Domain::Pbs,
+            Domain::Pbs,
             &format!("datastore/{}", desired.name),
             format!("/config/datastore/{}", encoded(&desired.name)),
             changes,
@@ -177,7 +177,7 @@ fn s3_endpoint(
         operations.push(Operation::ApiMutation {
             target: ApiTarget::Pbs,
             method: ApiMethod::Post,
-            domain: crate::command::plan::Domain::Pbs,
+            domain: Domain::Pbs,
             resource: format!("s3/{}", desired.id).into(),
             endpoint: "/config/s3".into(),
             changes: BTreeMap::from([
@@ -212,7 +212,7 @@ fn s3_endpoint(
             operations,
             ApiTarget::Pbs,
             ApiMethod::Put,
-            crate::command::plan::Domain::Pbs,
+            Domain::Pbs,
             &format!("s3/{}", desired.id),
             format!("/config/s3/{}", encoded(&desired.id)),
             changes,
@@ -285,7 +285,7 @@ fn reconcile_job(
             operations,
             ApiTarget::Pbs,
             method,
-            crate::command::plan::Domain::Pbs,
+            Domain::Pbs,
             &format!("{}/{id}", root.trim_start_matches("/config/")),
             if method == ApiMethod::Post {
                 root.into()
@@ -304,7 +304,7 @@ fn absent_jobs(actual: &Value, absent: &[String], root: &str, operations: &mut V
                 operations,
                 ApiTarget::Pbs,
                 ApiMethod::Delete,
-                crate::command::plan::Domain::Pbs,
+                Domain::Pbs,
                 &format!("{}/{id}", root.trim_start_matches("/config/")),
                 format!("{root}/{}", encoded(id)),
                 BTreeMap::new(),
@@ -362,7 +362,7 @@ fn push(
     operations: &mut Vec<Operation>,
     target: ApiTarget,
     method: ApiMethod,
-    domain: crate::command::plan::Domain,
+    domain: Domain,
     resource: &str,
     endpoint: String,
     changes: BTreeMap<String, String>,

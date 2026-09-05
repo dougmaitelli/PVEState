@@ -1,7 +1,6 @@
 use crate::resource::native_paths;
 use crate::utility::yaml_patch::Segment;
 use crate::{
-    command::plan::{Domain, Operation},
     config::{AdoptionCandidate, ConfigDocument, LocalPatch, LocalState},
     discovery::CapturedNative,
     model::{
@@ -9,6 +8,7 @@ use crate::{
         FirewallIpSetEntry, FirewallLogLevel, FirewallPolicy, FirewallProtocol, FirewallRule,
         FirewallSecurityGroup, Interface, Network,
     },
+    reconcile::{Domain, Operation},
 };
 use anyhow::{Context, Result, bail};
 use std::collections::BTreeSet;

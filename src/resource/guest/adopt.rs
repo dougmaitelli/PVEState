@@ -1,11 +1,11 @@
 use super::agent::QemuAgentOptions;
 use crate::{
-    command::plan::Operation,
     config::{AdoptionCandidate, ConfigDocument, LocalPatch, LocalState},
     discovery::CapturedState,
     model::{
         BindMount, DiskInterface, EfiSlot, GuestKind, GuestRef, NetworkSlot, Nic, UsbSlot, VmNic,
     },
+    reconcile::Operation,
     utility::yaml_patch::Segment,
 };
 use anyhow::{Context, Result};

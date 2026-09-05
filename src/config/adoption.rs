@@ -1,5 +1,5 @@
 use super::LocalPatch;
-use crate::command::plan::ResourceId;
+use crate::reconcile::ResourceId;
 
 #[derive(Debug)]
 pub(crate) struct AdoptionCandidate {

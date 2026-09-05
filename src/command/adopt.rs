@@ -1,9 +1,9 @@
 mod transaction;
 
 use crate::{
-    command::plan::{Domain, Operation, Plan},
     config::{AdoptionCandidate, ConfigDocument, LocalPatch, LocalState},
     discovery::CapturedState,
+    reconcile::{Domain, Operation, Plan},
     resource::{backup, guest, native, network},
     utility::{progress::EventSink, runtime_security, yaml_patch},
 };
@@ -187,7 +187,7 @@ mod tests {
     use super::*;
     use crate::{
         client::{PbsClient, PveClient},
-        command::plan::ResourceId,
+        reconcile::ResourceId,
     };
     use anyhow::{Result, bail};
     use serde_json::Value;

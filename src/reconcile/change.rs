@@ -313,7 +313,7 @@ pub(crate) fn validate_operation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::command::plan::ApiTarget;
+    use crate::reconcile::ApiTarget;
 
     #[test]
     fn rejects_pbs_target_labeled_as_guest_domain() {
