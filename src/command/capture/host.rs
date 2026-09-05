@@ -1,12 +1,16 @@
 use crate::{
     client::RemoteHost,
     config::LocalState,
-    utility::{atomic_file, progress},
+    utility::{atomic_file, progress::EventSink},
 };
 use anyhow::Result;
 use std::collections::BTreeMap;
 
-pub(super) fn capture(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<Vec<String>> {
+pub(super) fn capture(
+    repo: &LocalState,
+    ssh: &dyn RemoteHost,
+    events: &dyn EventSink,
+) -> Result<Vec<String>> {
     let pbs_vmid = repo.backup.pbs.guest.vmid;
     let cluster_command = if repo.node.node.standalone {
         "pvecm status 2>&1 || true"
@@ -52,7 +56,7 @@ pub(super) fn capture(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<Vec<Str
             format!("pct exec {pbs_vmid} -- findmnt --json --bytes -o TARGET,SOURCE,FSTYPE,OPTIONS,SIZE,USED,AVAIL"),
         ),
     ] {
-        progress::operation(format!("probe {name}"));
+        events.operation(&format!("probe {name}"));
         host.insert(name, ssh.probe(&command)?);
     }
     let failures = host
@@ -113,7 +117,11 @@ mod tests {
         let repo = config::open(&root).unwrap();
         fs::create_dir_all(repo.runtime()).unwrap();
 
-        assert!(capture(&repo, &FakeSsh).unwrap().is_empty());
+        assert!(
+            capture(&repo, &FakeSsh, &crate::utility::progress::NullEventSink)
+                .unwrap()
+                .is_empty()
+        );
         assert!(
             repo.runtime()
                 .join(crate::config::artifacts::HOST_LATEST)

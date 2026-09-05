@@ -200,16 +200,26 @@ impl PlanEnvelope for Plan {
     }
 }
 
-pub(crate) fn run(repo: &LocalState) -> Result<Plan> {
-    progress::section("Comparing local configuration with live state");
+pub(crate) fn run(repo: &LocalState, events: &dyn progress::EventSink) -> Result<Plan> {
+    events.section("Comparing local configuration with live state");
     runtime_security::prepare(&repo.runtime())?;
-    validation::validate(repo)?;
+    validation::validate(repo, events)?;
     let captured = CapturedState::load(repo, chrono::Duration::minutes(30))?;
-    build_captured(repo, &captured)
+    build_captured(repo, &captured, events)
 }
 
-fn build_captured(repo: &LocalState, captured: &CapturedState) -> Result<Plan> {
-    build(repo, &captured.pve, &captured.pbs, captured.id().as_str())
+fn build_captured(
+    repo: &LocalState,
+    captured: &CapturedState,
+    events: &dyn progress::EventSink,
+) -> Result<Plan> {
+    build(
+        repo,
+        &captured.pve,
+        &captured.pbs,
+        captured.id().as_str(),
+        events,
+    )
 }
 
 fn build(
@@ -217,6 +227,7 @@ fn build(
     api: &dyn PveClient,
     pbs: &dyn PbsClient,
     capture_id: &str,
+    events: &dyn progress::EventSink,
 ) -> Result<Plan> {
     let mut builder = PlanBuilder::new(capture_id, api.endpoint(), pbs.endpoint());
 
@@ -376,9 +387,9 @@ fn build(
 
     let plan = builder.finish()?;
     for operation in &plan.operations {
-        progress::operation(operation.description());
+        events.operation(&operation.description());
     }
-    progress::detail(format!("{} blocker(s)", plan.blockers.len()));
+    events.detail(&format!("{} blocker(s)", plan.blockers.len()));
     atomic_file::write_json(
         &repo
             .runtime()
@@ -722,7 +733,14 @@ mod tests {
             responses: &fixture.pbs,
         };
 
-        let plan = build(&repo, &pve, &pbs, "fixture-capture").unwrap();
+        let plan = build(
+            &repo,
+            &pve,
+            &pbs,
+            "fixture-capture",
+            &crate::utility::progress::NullEventSink,
+        )
+        .unwrap();
         assert!(plan.blockers.is_empty());
         let actual = plan
             .operations

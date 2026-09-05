@@ -1,16 +1,23 @@
 use console::{style, user_attended_stderr};
 use indicatif::{HumanDuration, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::{
+    cell::RefCell,
     env,
-    sync::{
-        LazyLock, Mutex,
-        atomic::{AtomicU8, Ordering},
-    },
     time::{Duration, Instant},
 };
 
-static VERBOSITY: AtomicU8 = AtomicU8::new(0);
-static ACTIVE: LazyLock<Mutex<Option<Stage>>> = LazyLock::new(|| Mutex::new(None));
+pub(crate) trait EventSink {
+    fn section(&self, message: &str);
+    fn operation(&self, message: &str);
+    fn detail(&self, message: &str);
+    fn finish(&self, success: bool);
+    fn output(&self, message: &str);
+}
+
+pub(crate) struct TerminalEventSink {
+    verbosity: u8,
+    active: RefCell<Option<Stage>>,
+}
 
 struct Stage {
     bar: ProgressBar,
@@ -19,112 +26,157 @@ struct Stage {
     operations: u64,
 }
 
-pub(crate) fn set(level: u8) {
-    VERBOSITY.store(level, Ordering::Relaxed);
-}
+impl TerminalEventSink {
+    pub(crate) fn new(verbosity: u8) -> Self {
+        Self {
+            verbosity,
+            active: RefCell::new(None),
+        }
+    }
 
-pub(crate) fn section(message: impl Into<String>) {
-    let message = message.into();
-    let mut active = ACTIVE.lock().unwrap_or_else(|error| error.into_inner());
-    finish_stage(active.take(), true);
-
-    if interactive() {
-        let bar = ProgressBar::with_draw_target(None, ProgressDrawTarget::stderr());
-        bar.set_style(
-            ProgressStyle::with_template("{spinner:.cyan} {msg}")
-                .expect("static progress template")
-                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+    fn finish_stage(stage: Option<Stage>, success: bool) {
+        let Some(stage) = stage else { return };
+        let marker = if success {
+            style("✓").green().bold()
+        } else {
+            style("✗").red().bold()
+        };
+        let operations = match stage.operations {
+            0 => String::new(),
+            1 => " · 1 operation".into(),
+            count => format!(" · {count} operations"),
+        };
+        stage.bar.finish_and_clear();
+        eprintln!(
+            "{marker} {}{operations} · {}",
+            stage.message,
+            HumanDuration(stage.started.elapsed())
         );
-        bar.set_message(message.clone());
-        bar.enable_steady_tick(Duration::from_millis(80));
-        *active = Some(Stage {
-            bar,
-            message,
-            started: Instant::now(),
-            operations: 0,
-        });
-    } else {
-        eprintln!("{message}");
     }
 }
 
-pub(crate) fn operation(message: impl AsRef<str>) {
-    if VERBOSITY.load(Ordering::Relaxed) == 0 {
-        count_operation();
-        return;
+impl EventSink for TerminalEventSink {
+    fn section(&self, message: &str) {
+        Self::finish_stage(self.active.borrow_mut().take(), true);
+        if interactive() {
+            let bar = ProgressBar::with_draw_target(None, ProgressDrawTarget::stderr());
+            bar.set_style(
+                ProgressStyle::with_template("{spinner:.cyan} {msg}")
+                    .expect("static progress template")
+                    .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+            );
+            bar.set_message(message.to_owned());
+            bar.enable_steady_tick(Duration::from_millis(80));
+            *self.active.borrow_mut() = Some(Stage {
+                bar,
+                message: message.to_owned(),
+                started: Instant::now(),
+                operations: 0,
+            });
+        } else {
+            eprintln!("{message}");
+        }
     }
 
-    let message = format!("  {} {}", style("→").cyan(), message.as_ref());
-    let mut active = ACTIVE.lock().unwrap_or_else(|error| error.into_inner());
-    if let Some(stage) = active.as_mut() {
-        stage.operations += 1;
-        update_message(stage);
-        stage.bar.println(message);
-    } else {
-        eprintln!("{message}");
+    fn operation(&self, message: &str) {
+        let mut active = self.active.borrow_mut();
+        if let Some(stage) = active.as_mut() {
+            stage.operations += 1;
+            let suffix = if stage.operations == 1 { "" } else { "s" };
+            stage.bar.set_message(format!(
+                "{} · {} operation{suffix}",
+                stage.message, stage.operations
+            ));
+            if self.verbosity > 0 {
+                stage
+                    .bar
+                    .println(format!("  {} {message}", style("→").cyan()));
+            }
+        } else if self.verbosity > 0 {
+            eprintln!("  {} {message}", style("→").cyan());
+        }
+    }
+
+    fn detail(&self, message: &str) {
+        if self.verbosity < 2 {
+            return;
+        }
+        let message = format!("    {}", style(message).dim());
+        if let Some(stage) = self.active.borrow().as_ref() {
+            stage.bar.println(message);
+        } else {
+            eprintln!("{message}");
+        }
+    }
+
+    fn finish(&self, success: bool) {
+        Self::finish_stage(self.active.borrow_mut().take(), success);
+    }
+
+    fn output(&self, message: &str) {
+        println!("{message}");
     }
 }
 
-pub(crate) fn detail(message: impl AsRef<str>) {
-    if VERBOSITY.load(Ordering::Relaxed) < 2 {
-        return;
-    }
-
-    let message = format!("    {}", style(message.as_ref()).dim());
-    let active = ACTIVE.lock().unwrap_or_else(|error| error.into_inner());
-    if let Some(stage) = active.as_ref() {
-        stage.bar.println(message);
-    } else {
-        eprintln!("{message}");
+impl Drop for TerminalEventSink {
+    fn drop(&mut self) {
+        Self::finish_stage(self.active.get_mut().take(), false);
     }
 }
 
-pub(crate) fn finish(success: bool) {
-    let stage = ACTIVE
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
-        .take();
-    finish_stage(stage, success);
-}
+#[cfg(test)]
+pub(crate) struct NullEventSink;
 
-fn count_operation() {
-    let mut active = ACTIVE.lock().unwrap_or_else(|error| error.into_inner());
-    if let Some(stage) = active.as_mut() {
-        stage.operations += 1;
-        update_message(stage);
-    }
-}
-
-fn update_message(stage: &Stage) {
-    stage.bar.set_message(if stage.operations == 1 {
-        format!("{} · 1 operation", stage.message)
-    } else {
-        format!("{} · {} operations", stage.message, stage.operations)
-    });
-}
-
-fn finish_stage(stage: Option<Stage>, success: bool) {
-    let Some(stage) = stage else { return };
-    let marker = if success {
-        style("✓").green().bold()
-    } else {
-        style("✗").red().bold()
-    };
-    let operations = match stage.operations {
-        0 => String::new(),
-        1 => " · 1 operation".into(),
-        count => format!(" · {count} operations"),
-    };
-    stage.bar.finish_and_clear();
-    eprintln!(
-        "{marker} {}{operations} · {}",
-        stage.message,
-        HumanDuration(stage.started.elapsed())
-    );
+#[cfg(test)]
+impl EventSink for NullEventSink {
+    fn section(&self, _: &str) {}
+    fn operation(&self, _: &str) {}
+    fn detail(&self, _: &str) {}
+    fn finish(&self, _: bool) {}
+    fn output(&self, _: &str) {}
 }
 
 fn interactive() -> bool {
     user_attended_stderr()
         && env::var_os("CI").is_none()
         && env::var_os("TERM").is_none_or(|term| term != "dumb")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    #[derive(Default)]
+    struct RecordingSink(Mutex<Vec<String>>);
+
+    impl EventSink for RecordingSink {
+        fn section(&self, message: &str) {
+            self.0.lock().unwrap().push(format!("section:{message}"));
+        }
+        fn operation(&self, message: &str) {
+            self.0.lock().unwrap().push(format!("operation:{message}"));
+        }
+        fn detail(&self, message: &str) {
+            self.0.lock().unwrap().push(format!("detail:{message}"));
+        }
+        fn finish(&self, success: bool) {
+            self.0.lock().unwrap().push(format!("finish:{success}"));
+        }
+        fn output(&self, message: &str) {
+            self.0.lock().unwrap().push(format!("output:{message}"));
+        }
+    }
+
+    #[test]
+    fn injected_sink_records_business_events_without_a_terminal() {
+        let sink = RecordingSink::default();
+        sink.section("capture");
+        sink.operation("GET /version");
+        sink.finish(true);
+        assert_eq!(
+            *sink.0.lock().unwrap(),
+            ["section:capture", "operation:GET /version", "finish:true"]
+        );
+    }
 }

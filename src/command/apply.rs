@@ -6,7 +6,7 @@ use crate::{
     command::plan::{ApiMethod, ApiTarget, Operation, Plan},
     config::LocalState,
     settings::{ApplySettings, Settings},
-    utility::{authorization, progress, remote_file, runtime_security, shell},
+    utility::{authorization, progress::EventSink, remote_file, runtime_security, shell},
 };
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
@@ -38,18 +38,22 @@ impl MutationClients {
     }
 }
 
-pub(crate) fn run(repo: &LocalState, settings: &Settings) -> Result<()> {
-    run_with_factory(repo, &settings.apply, || {
-        MutationClients::configured(settings)
-    })
+pub(crate) fn run(repo: &LocalState, settings: &Settings, events: &dyn EventSink) -> Result<()> {
+    run_with_factory(
+        repo,
+        &settings.apply,
+        || MutationClients::configured(settings),
+        events,
+    )
 }
 
 fn run_with_factory(
     repo: &LocalState,
     settings: &ApplySettings,
     factory: impl FnOnce() -> Result<MutationClients>,
+    events: &dyn EventSink,
 ) -> Result<()> {
-    progress::section("Applying local configuration to live system");
+    events.section("Applying local configuration to live system");
     runtime_security::prepare(&repo.runtime())?;
     let plan = authorize(repo, settings)?;
     let mut journal = ApplyJournal::new(&repo.runtime(), &plan);
@@ -63,14 +67,15 @@ fn run_with_factory(
             clients.pbs.as_deref(),
             clients.ssh.as_deref(),
             &mut journal,
+            events,
         )
     });
     match result {
         Ok(()) => {
             journal.succeed();
             journal.persist()?;
-            progress::finish(true);
-            println!("{}", serde_json::to_string_pretty(&journal)?);
+            events.finish(true);
+            events.output(&serde_json::to_string_pretty(&journal)?);
             Ok(())
         },
         Err(error) => {
@@ -143,12 +148,13 @@ fn execute(
     pbs: Option<&dyn PbsClient>,
     ssh: Option<&dyn RemoteHost>,
     journal: &mut ApplyJournal,
+    events: &dyn EventSink,
 ) -> Result<()> {
     if api.endpoint() != plan.target {
         bail!("mutation API endpoint differs from plan target")
     }
     for (index, op) in plan.operations.iter().enumerate() {
-        progress::operation(format!(
+        events.operation(&format!(
             "[{}/{}] {}",
             index + 1,
             plan.operations.len(),
@@ -262,12 +268,12 @@ fn execute(
         })();
         match result {
             Ok(()) => {
-                progress::detail("completed");
+                events.detail("completed");
                 journal.applied(index)?;
                 journal.persist()?;
             },
             Err(error) => {
-                progress::detail(format!("failed: {error:#}"));
+                events.detail(&format!("failed: {error:#}"));
                 journal.operation_failed(index, &error)?;
                 journal.persist()?;
                 return Err(error);
@@ -466,10 +472,15 @@ mod tests {
         settings.enabled = false;
         let factory_called = Cell::new(false);
 
-        let error = run_with_factory(&repo, &settings, || -> Result<MutationClients> {
-            factory_called.set(true);
-            bail!("factory must not run")
-        })
+        let error = run_with_factory(
+            &repo,
+            &settings,
+            || -> Result<MutationClients> {
+                factory_called.set(true);
+                bail!("factory must not run")
+            },
+            &crate::utility::progress::NullEventSink,
+        )
         .unwrap_err();
 
         assert!(format!("{error:#}").contains("PVES_ENABLE_PRODUCTION_APPLY"));
@@ -486,9 +497,12 @@ mod tests {
     fn client_initialization_failure_is_persisted_in_apply_journal() {
         let (_temp, repo, settings) = authorized_apply();
 
-        let error = run_with_factory(&repo, &settings, || -> Result<MutationClients> {
-            bail!("injected client initialization failure")
-        })
+        let error = run_with_factory(
+            &repo,
+            &settings,
+            || -> Result<MutationClients> { bail!("injected client initialization failure") },
+            &crate::utility::progress::NullEventSink,
+        )
         .unwrap_err();
 
         assert!(format!("{error:#}").contains("injected client initialization failure"));
@@ -532,7 +546,16 @@ mod tests {
         let mut journal = ApplyJournal::new(temp.path(), &plan);
         journal.persist().unwrap();
 
-        let error = execute(&plan, &settings, &client, None, None, &mut journal).unwrap_err();
+        let error = execute(
+            &plan,
+            &settings,
+            &client,
+            None,
+            None,
+            &mut journal,
+            &crate::utility::progress::NullEventSink,
+        )
+        .unwrap_err();
         assert!(format!("{error:#}").contains("injected second-operation failure"));
         journal.persist().unwrap();
         let value: Value = serde_json::from_slice(&fs::read(journal.path()).unwrap()).unwrap();
@@ -584,7 +607,16 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let mut journal = ApplyJournal::new(temp.path(), &plan);
 
-        execute(&plan, &settings, &pve, Some(&pbs), None, &mut journal).unwrap();
+        execute(
+            &plan,
+            &settings,
+            &pve,
+            Some(&pbs),
+            None,
+            &mut journal,
+            &crate::utility::progress::NullEventSink,
+        )
+        .unwrap();
 
         assert_eq!(*calls.lock().unwrap(), expected);
     }

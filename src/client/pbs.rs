@@ -1,9 +1,8 @@
 use super::{PbsClient, transport::JsonApiClient};
 use crate::{
-    discovery::{
-        ApiObject, ObjectResponse, ObjectsResponse, RawResponse, capture as capture_response,
-    },
+    discovery::{ApiObject, ObjectResponse, ObjectsResponse, RawResponse, capture_with_events},
     settings::{ApiCredential, PbsSettings},
+    utility::progress::EventSink,
 };
 use anyhow::Result;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
@@ -92,17 +91,17 @@ impl Pbs {
     }
 }
 
-pub(crate) fn capture(client: &dyn PbsClient) -> Snapshot {
+pub(crate) fn capture(client: &dyn PbsClient, events: &dyn EventSink) -> Snapshot {
     let requests = Responses {
-        version: get(client, "/version"),
-        datastore_usage: get(client, "/status/datastore-usage"),
-        datastores: get(client, "/config/datastore"),
-        s3_endpoints: get(client, "/config/s3"),
-        remotes: get(client, "/config/remote"),
-        sync_jobs: get(client, "/config/sync"),
-        prune_jobs: get(client, "/config/prune"),
-        verify_jobs: get(client, "/config/verify"),
-        node_status: get(client, "/nodes/localhost/status"),
+        version: get(client, "/version", events),
+        datastore_usage: get(client, "/status/datastore-usage", events),
+        datastores: get(client, "/config/datastore", events),
+        s3_endpoints: get(client, "/config/s3", events),
+        remotes: get(client, "/config/remote", events),
+        sync_jobs: get(client, "/config/sync", events),
+        prune_jobs: get(client, "/config/prune", events),
+        verify_jobs: get(client, "/config/verify", events),
+        node_status: get(client, "/nodes/localhost/status", events),
     };
 
     let mut datastores = BTreeMap::new();
@@ -121,9 +120,9 @@ pub(crate) fn capture(client: &dyn PbsClient) -> Snapshot {
                 name.into(),
                 Datastore {
                     config: config.clone(),
-                    status: get(client, &format!("{root}/status")),
-                    groups: get(client, &format!("{root}/groups")),
-                    snapshots: get(client, &format!("{root}/snapshots")),
+                    status: get(client, &format!("{root}/status"), events),
+                    groups: get(client, &format!("{root}/groups"), events),
+                    snapshots: get(client, &format!("{root}/snapshots"), events),
                 },
             );
         }
@@ -142,8 +141,9 @@ pub(crate) fn capture(client: &dyn PbsClient) -> Snapshot {
 fn get<T: serde::de::DeserializeOwned>(
     client: &dyn PbsClient,
     path: &str,
+    events: &dyn EventSink,
 ) -> crate::discovery::CapturedResponse<T> {
-    capture_response(path, || client.get(path))
+    capture_with_events(path, || client.get(path), events)
 }
 
 impl PbsClient for Pbs {
@@ -260,7 +260,7 @@ mod tests {
 
     #[test]
     fn discovery_accepts_an_injected_pbs_client() {
-        let snapshot = capture(&FakePbs);
+        let snapshot = capture(&FakePbs, &crate::utility::progress::NullEventSink);
         assert_eq!(snapshot.endpoint, "https://pbs.test:8007");
         assert_eq!(snapshot.requests.datastores.path, "/config/datastore");
         assert!(snapshot.failures().is_empty());

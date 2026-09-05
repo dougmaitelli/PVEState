@@ -8,7 +8,7 @@ use crate::{
         CaptureManifest, CaptureStatus, SourceEvidence, capture_pve, collect_artifacts,
         write_snapshot,
     },
-    utility::{atomic_file, progress, runtime_security},
+    utility::{atomic_file, progress::EventSink, runtime_security},
 };
 use anyhow::{Result, anyhow, bail};
 use chrono::Utc;
@@ -20,9 +20,10 @@ pub(crate) fn run(
     pve: &dyn PveClient,
     pbs: &dyn PbsClient,
     ssh: &dyn RemoteHost,
+    events: &dyn EventSink,
 ) -> Result<()> {
-    progress::section("Capturing live state");
-    progress::detail(format!("configuration: {}", repo.root().display()));
+    events.section("Capturing live state");
+    events.detail(&format!("configuration: {}", repo.root().display()));
     runtime_security::prepare(&repo.runtime())?;
     fs::create_dir_all(repo.root().join("observed"))?;
     let staging = tempfile::Builder::new()
@@ -42,7 +43,7 @@ pub(crate) fn run(
     );
     write_runtime_manifest(repo, &initial)?;
 
-    let sources = match perform(repo, &staged_observed, pve, pbs, ssh) {
+    let sources = match perform(repo, &staged_observed, pve, pbs, ssh, events) {
         Ok(sources) => sources,
         Err(error) => {
             let failed = CaptureManifest::new(
@@ -64,10 +65,13 @@ pub(crate) fn run(
         bail!("capture is partial: {}", manifest.failures.join("; "))
     }
     write_observed_manifest(&staged_observed, &manifest)?;
-    publish_observed(repo, &staged_observed, &manifest.capture_id)?;
+    publish_observed(repo, &staged_observed, &manifest.capture_id, events)?;
     write_runtime_manifest(repo, &manifest)?;
-    progress::finish(true);
-    println!("captured live state into {}", repo.root().display());
+    events.finish(true);
+    events.output(&format!(
+        "captured live state into {}",
+        repo.root().display()
+    ));
     Ok(())
 }
 
@@ -77,11 +81,12 @@ fn perform(
     pve: &dyn PveClient,
     pbs: &dyn PbsClient,
     ssh: &dyn RemoteHost,
+    events: &dyn EventSink,
 ) -> Result<BTreeMap<String, SourceEvidence>> {
     let mut sources = BTreeMap::new();
 
-    progress::section("Proxmox VE API");
-    let pve_snapshot = capture_pve(pve);
+    events.section("Proxmox VE API");
+    let pve_snapshot = capture_pve(pve, events);
     write_snapshot(
         "pve",
         pve_snapshot.collected_at,
@@ -90,11 +95,11 @@ fn perform(
         &observed.join("api"),
     )?;
     let pve_failures = pve_snapshot.failures();
-    progress::finish(pve_failures.is_empty());
+    events.finish(pve_failures.is_empty());
     sources.insert("pve-api".into(), source(pve.endpoint(), pve_failures));
 
-    progress::section("Proxmox Backup Server API");
-    let pbs_snapshot = capture_pbs(pbs);
+    events.section("Proxmox Backup Server API");
+    let pbs_snapshot = capture_pbs(pbs, events);
     write_snapshot(
         "pbs",
         pbs_snapshot.collected_at,
@@ -103,21 +108,21 @@ fn perform(
         &observed.join("api"),
     )?;
     let pbs_failures = pbs_snapshot.failures();
-    progress::finish(pbs_failures.is_empty());
+    events.finish(pbs_failures.is_empty());
     sources.insert("pbs-api".into(), source(pbs.endpoint(), pbs_failures));
 
-    progress::section("Native configuration files");
-    let native_failures = native::export(repo, observed, ssh, &pve_snapshot)
+    events.section("Native configuration files");
+    let native_failures = native::export(repo, observed, ssh, &pve_snapshot, events)
         .err()
         .map(|error| vec![format!("{error:#}")])
         .unwrap_or_default();
-    progress::finish(native_failures.is_empty());
+    events.finish(native_failures.is_empty());
     sources.insert("native-ssh".into(), source(pve.endpoint(), native_failures));
 
-    progress::section("Host and PBS diagnostics");
-    let host_failures =
-        host::capture(repo, ssh).map_err(|error| anyhow!("host evidence capture: {error:#}"))?;
-    progress::finish(host_failures.is_empty());
+    events.section("Host and PBS diagnostics");
+    let host_failures = host::capture(repo, ssh, events)
+        .map_err(|error| anyhow!("host evidence capture: {error:#}"))?;
+    events.finish(host_failures.is_empty());
     sources.insert("host-ssh".into(), source(pve.endpoint(), host_failures));
     Ok(sources)
 }
@@ -150,7 +155,12 @@ fn write_runtime_manifest(repo: &LocalState, manifest: &CaptureManifest) -> Resu
     Ok(())
 }
 
-fn publish_observed(repo: &LocalState, staged: &Path, capture_id: &str) -> Result<()> {
+fn publish_observed(
+    repo: &LocalState,
+    staged: &Path,
+    capture_id: &str,
+    events: &dyn EventSink,
+) -> Result<()> {
     let current = repo.observed();
     let previous = repo
         .root()
@@ -167,7 +177,7 @@ fn publish_observed(repo: &LocalState, staged: &Path, capture_id: &str) -> Resul
         return Err(error.into());
     }
     if had_current && let Err(error) = fs::remove_dir_all(&previous) {
-        progress::detail(format!(
+        events.detail(&format!(
             "could not remove previous capture {}: {error}",
             previous.display()
         ));
@@ -175,21 +185,25 @@ fn publish_observed(repo: &LocalState, staged: &Path, capture_id: &str) -> Resul
     Ok(())
 }
 
-pub(crate) fn validate(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
+pub(crate) fn validate(
+    repo: &LocalState,
+    ssh: &dyn RemoteHost,
+    events: &dyn EventSink,
+) -> Result<()> {
     runtime_security::prepare(&repo.runtime())?;
     let mut failures = Vec::new();
     let mut report = Vec::new();
-    progress::section("Running recovery validation checks");
+    events.section("Running recovery validation checks");
     for check in &repo.recovery_checks.checks {
-        progress::operation(format!("{}: {}", check.id, check.description));
+        events.operation(&format!("{}: {}", check.id, check.description));
         match ssh.run(&check.command) {
             Ok(_) => {
-                progress::detail("passed");
+                events.detail("passed");
                 report
                     .push(json!({"id":check.id,"description":check.description,"status":"passed"}))
             },
             Err(error) => {
-                progress::detail(format!("failed: {error:#}"));
+                events.detail(&format!("failed: {error:#}"));
                 failures.push(format!("{}: {error}", check.id));
                 report
                     .push(json!({"id":check.id,"description":check.description,"status":"failed"}));
@@ -201,8 +215,8 @@ pub(crate) fn validate(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
         &serde_json::to_vec_pretty(&report)?,
     )?;
     if failures.is_empty() {
-        progress::finish(true);
-        println!("validation passed: {} checks", report.len());
+        events.finish(true);
+        events.output(&format!("validation passed: {} checks", report.len()));
         Ok(())
     } else {
         bail!(failures.join("\n"))
@@ -229,7 +243,13 @@ mod tests {
         fs::create_dir(&staged).unwrap();
         fs::write(staged.join("current.txt"), "current").unwrap();
 
-        publish_observed(&repo, &staged, "fixture").unwrap();
+        publish_observed(
+            &repo,
+            &staged,
+            "fixture",
+            &crate::utility::progress::NullEventSink,
+        )
+        .unwrap();
 
         assert_eq!(
             fs::read_to_string(repo.observed().join("current.txt")).unwrap(),

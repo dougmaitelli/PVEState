@@ -1,8 +1,8 @@
-use crate::{config::LocalState, model::FirewallPolicy};
+use crate::{config::LocalState, model::FirewallPolicy, utility::progress::EventSink};
 use anyhow::{Result, bail};
 use std::collections::BTreeSet;
 
-pub(super) fn validate(repo: &LocalState) -> Result<()> {
+pub(super) fn validate(repo: &LocalState, events: &dyn EventSink) -> Result<()> {
     let bridges: BTreeSet<_> = repo
         .network
         .bridges
@@ -89,11 +89,11 @@ pub(super) fn validate(repo: &LocalState) -> Result<()> {
             validate_firewall(&resource, policy)?;
         }
     }
-    println!(
+    events.output(&format!(
         "configuration structurally valid: {} guests, {} NICs; management scope is documented in management-scope.json",
         managed.len(),
         macs.len()
-    );
+    ));
     Ok(())
 }
 

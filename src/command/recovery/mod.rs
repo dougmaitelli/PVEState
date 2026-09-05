@@ -9,7 +9,7 @@ use crate::{
     client::RemoteHost,
     config::LocalState,
     settings::RecoverySettings,
-    utility::{progress, runtime_security},
+    utility::{progress::EventSink, runtime_security},
 };
 use anyhow::{Context, Result};
 
@@ -29,12 +29,13 @@ pub(crate) fn run(
     target: &str,
     settings: &RecoverySettings,
     ssh: Option<&dyn RemoteHost>,
+    events: &dyn EventSink,
 ) -> Result<()> {
-    progress::section(format!("Recovery: {}", stage.name()));
+    events.section(&format!("Recovery: {}", stage.name()));
     runtime_security::prepare(&repo.runtime())?;
 
     if matches!(stage, Stage::Plan) {
-        return plan::create(repo, target);
+        return plan::create(repo, target, events);
     }
 
     let recovery_plan = plan::load(repo)?;
@@ -43,14 +44,14 @@ pub(crate) fn run(
     identity::verify(ssh, &recovery_plan)?;
 
     match stage {
-        Stage::BootstrapPve => bootstrap_pve::run(repo, ssh),
-        Stage::BootstrapPbs => bootstrap_pbs::run(repo, ssh),
-        Stage::Restore => restore::run(repo, ssh),
+        Stage::BootstrapPve => bootstrap_pve::run(repo, ssh, events),
+        Stage::BootstrapPbs => bootstrap_pbs::run(repo, ssh, events),
+        Stage::Restore => restore::run(repo, ssh, events),
         Stage::Configure => configure::run(repo, ssh),
         Stage::All => {
-            bootstrap_pve::run(repo, ssh)?;
-            bootstrap_pbs::run(repo, ssh)?;
-            restore::run(repo, ssh)?;
+            bootstrap_pve::run(repo, ssh, events)?;
+            bootstrap_pbs::run(repo, ssh, events)?;
+            restore::run(repo, ssh, events)?;
             configure::run(repo, ssh)
         },
         Stage::Plan => unreachable!(),

@@ -1,5 +1,5 @@
-use super::{ApiObject, ObjectResponse, ObjectsResponse, RawResponse, capture as capture_response};
-use crate::{client::PveClient, model::GuestKind};
+use super::{ApiObject, ObjectResponse, ObjectsResponse, RawResponse, capture_with_events};
+use crate::{client::PveClient, model::GuestKind, utility::progress::EventSink};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
@@ -51,19 +51,19 @@ pub(crate) struct Guest {
     pub(crate) firewall_rules: ObjectsResponse,
 }
 
-pub(crate) fn capture_pve(client: &dyn PveClient) -> PveSnapshot {
+pub(crate) fn capture_pve(client: &dyn PveClient, events: &dyn EventSink) -> PveSnapshot {
     let requests = ClusterResponses {
-        version: get(client, "/version"),
-        cluster_status: get(client, "/cluster/status"),
-        cluster_resources: get(client, "/cluster/resources"),
-        backup_jobs: get(client, "/cluster/backup"),
-        ha_status: get(client, "/cluster/ha/status/current"),
-        pools: get(client, "/pools"),
-        storage: get(client, "/storage"),
-        firewall_options: get(client, "/cluster/firewall/options"),
-        firewall_rules: get(client, "/cluster/firewall/rules"),
-        firewall_groups: get(client, "/cluster/firewall/groups"),
-        firewall_aliases: get(client, "/cluster/firewall/aliases"),
+        version: get(client, "/version", events),
+        cluster_status: get(client, "/cluster/status", events),
+        cluster_resources: get(client, "/cluster/resources", events),
+        backup_jobs: get(client, "/cluster/backup", events),
+        ha_status: get(client, "/cluster/ha/status/current", events),
+        pools: get(client, "/pools", events),
+        storage: get(client, "/storage", events),
+        firewall_options: get(client, "/cluster/firewall/options", events),
+        firewall_rules: get(client, "/cluster/firewall/rules", events),
+        firewall_groups: get(client, "/cluster/firewall/groups", events),
+        firewall_aliases: get(client, "/cluster/firewall/aliases", events),
     };
 
     let mut node_names: Vec<String> = requests
@@ -79,19 +79,19 @@ pub(crate) fn capture_pve(client: &dyn PveClient) -> PveSnapshot {
 
     let mut nodes = BTreeMap::new();
     for node in node_names {
-        let lxc_list = get(client, &format!("/nodes/{node}/lxc"));
-        let qemu_list = get(client, &format!("/nodes/{node}/qemu"));
+        let lxc_list = get(client, &format!("/nodes/{node}/lxc"), events);
+        let qemu_list = get(client, &format!("/nodes/{node}/qemu"), events);
         nodes.insert(
             node.clone(),
             Node {
-                status: get(client, &format!("/nodes/{node}/status")),
-                network: get(client, &format!("/nodes/{node}/network")),
-                dns: get(client, &format!("/nodes/{node}/dns")),
-                storage: get(client, &format!("/nodes/{node}/storage")),
-                firewall_options: get(client, &format!("/nodes/{node}/firewall/options")),
-                firewall_rules: get(client, &format!("/nodes/{node}/firewall/rules")),
-                lxcs: capture_guests(client, &node, GuestKind::Lxc, &lxc_list),
-                vms: capture_guests(client, &node, GuestKind::Qemu, &qemu_list),
+                status: get(client, &format!("/nodes/{node}/status"), events),
+                network: get(client, &format!("/nodes/{node}/network"), events),
+                dns: get(client, &format!("/nodes/{node}/dns"), events),
+                storage: get(client, &format!("/nodes/{node}/storage"), events),
+                firewall_options: get(client, &format!("/nodes/{node}/firewall/options"), events),
+                firewall_rules: get(client, &format!("/nodes/{node}/firewall/rules"), events),
+                lxcs: capture_guests(client, &node, GuestKind::Lxc, &lxc_list, events),
+                vms: capture_guests(client, &node, GuestKind::Qemu, &qemu_list, events),
             },
         );
     }
@@ -146,6 +146,7 @@ fn capture_guests(
     node: &str,
     kind: GuestKind,
     list: &ObjectsResponse,
+    events: &dyn EventSink,
 ) -> BTreeMap<String, Guest> {
     let mut guests = BTreeMap::new();
     let Some(items) = list.data.as_ref() else {
@@ -160,10 +161,10 @@ fn capture_guests(
             vmid.to_string(),
             Guest {
                 summary: summary.clone(),
-                config: get(client, &format!("{base}/config")),
-                snapshots: get(client, &format!("{base}/snapshot")),
-                firewall_options: get(client, &format!("{base}/firewall/options")),
-                firewall_rules: get(client, &format!("{base}/firewall/rules")),
+                config: get(client, &format!("{base}/config"), events),
+                snapshots: get(client, &format!("{base}/snapshot"), events),
+                firewall_options: get(client, &format!("{base}/firewall/options"), events),
+                firewall_rules: get(client, &format!("{base}/firewall/rules"), events),
             },
         );
     }
@@ -173,8 +174,9 @@ fn capture_guests(
 fn get<T: serde::de::DeserializeOwned>(
     client: &dyn PveClient,
     path: &str,
+    events: &dyn EventSink,
 ) -> super::CapturedResponse<T> {
-    capture_response(path, || client.get(path))
+    capture_with_events(path, || client.get(path), events)
 }
 
 fn add_failure<T>(prefix: &str, response: &super::CapturedResponse<T>, failures: &mut Vec<String>) {

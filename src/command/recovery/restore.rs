@@ -2,11 +2,11 @@ use crate::{
     client::RemoteHost,
     config::LocalState,
     resource::{firewall, native_paths},
-    utility::{progress, remote_file, shell},
+    utility::{progress::EventSink, remote_file, shell},
 };
 use anyhow::{Context, Result, bail};
 
-pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
+pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost, events: &dyn EventSink) -> Result<()> {
     for id in &repo.restore.restore_order {
         let id = *id;
         let archive = repo
@@ -15,7 +15,7 @@ pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
             .get(&id)
             .and_then(Option::as_deref)
             .context("archive")?;
-        progress::operation(format!("restore VMID {id} from {archive}"));
+        events.operation(&format!("restore VMID {id} from {archive}"));
         if ssh
             .run(&format!(
                 "qm status {id} 2>/dev/null || pct status {id} 2>/dev/null"
@@ -40,7 +40,7 @@ pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
     }
 
     for mount in &repo.restore.reattach_mounts {
-        progress::operation(format!(
+        events.operation(&format!(
             "reattach VMID {} mount {}",
             mount.vmid, mount.index
         ));

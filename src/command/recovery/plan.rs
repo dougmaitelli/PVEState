@@ -4,7 +4,8 @@ use crate::{
     utility::{
         atomic_file, authorization,
         plan_envelope::{self, PlanEnvelope},
-        progress, runtime_security,
+        progress::EventSink,
+        runtime_security,
     },
 };
 use anyhow::{Context, Result};
@@ -39,7 +40,7 @@ impl PlanEnvelope for RecoveryPlan {
     }
 }
 
-pub(super) fn create(repo: &LocalState, target: &str) -> Result<()> {
+pub(super) fn create(repo: &LocalState, target: &str, events: &dyn EventSink) -> Result<()> {
     let mut blockers = Vec::new();
     if repo.restore.target.expected_host_key_sha256.is_none() {
         blockers.push("target.expected_host_key_sha256".into());
@@ -88,8 +89,8 @@ pub(super) fn create(repo: &LocalState, target: &str) -> Result<()> {
         &repo.runtime().join(crate::config::artifacts::RECOVERY_PLAN),
         &plan,
     )?;
-    progress::finish(true);
-    println!("{}", serde_json::to_string_pretty(&plan)?);
+    events.finish(true);
+    events.output(&serde_json::to_string_pretty(&plan)?);
     Ok(())
 }
 

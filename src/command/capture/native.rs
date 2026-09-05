@@ -3,7 +3,7 @@ use crate::{
     config::LocalState,
     discovery::PveSnapshot,
     resource::native_paths,
-    utility::{progress, shell},
+    utility::{progress::EventSink, shell},
 };
 use anyhow::{Context, Result, bail};
 use std::{collections::BTreeSet, fs, path::Path};
@@ -13,6 +13,7 @@ pub(super) fn export(
     observed: &Path,
     ssh: &dyn RemoteHost,
     snapshot: &PveSnapshot,
+    events: &dyn EventSink,
 ) -> Result<()> {
     for (local, remote) in [
         (native_paths::NETWORK_ARTIFACT, native_paths::NETWORK_REMOTE),
@@ -22,12 +23,13 @@ pub(super) fn export(
         ("pve/jobs.cfg", "/etc/pve/jobs.cfg"),
         ("pve/datacenter.cfg", "/etc/pve/datacenter.cfg"),
     ] {
-        required(ssh, remote, &observed.join(local))?;
+        required(ssh, remote, &observed.join(local), events)?;
     }
     optional_file(
         ssh,
         native_paths::CLUSTER_FIREWALL_REMOTE,
         &observed.join(native_paths::CLUSTER_FIREWALL_ARTIFACT),
+        events,
     )?;
 
     let mut guest_ids = BTreeSet::new();
@@ -36,6 +38,7 @@ pub(super) fn export(
             ssh,
             &native_paths::node_firewall_remote(node_name),
             &observed.join(native_paths::node_firewall_artifact(node_name)),
+            events,
         )?;
         for id in node.lxcs.keys() {
             guest_ids.insert(id.clone());
@@ -48,6 +51,7 @@ pub(super) fn export(
                 ssh,
                 &format!("/etc/pve/nodes/{node_name}/lxc/{id}.conf"),
                 &local,
+                events,
             )?;
         }
         for id in node.vms.keys() {
@@ -61,6 +65,7 @@ pub(super) fn export(
                 ssh,
                 &format!("/etc/pve/nodes/{node_name}/qemu-server/{id}.conf"),
                 &local,
+                events,
             )?;
         }
     }
@@ -69,6 +74,7 @@ pub(super) fn export(
             ssh,
             &native_paths::guest_firewall_remote(&id),
             &observed.join(native_paths::guest_firewall_artifact(&id)),
+            events,
         )?;
     }
 
@@ -83,24 +89,35 @@ pub(super) fn export(
             "/etc/proxmox-backup/verification.cfg",
         ),
     ] {
-        optional_container_file(ssh, pbs_vmid, remote, &observed.join(local))?;
+        optional_container_file(ssh, pbs_vmid, remote, &observed.join(local), events)?;
     }
     Ok(())
 }
 
-fn required(ssh: &dyn RemoteHost, remote: &str, local: &Path) -> Result<()> {
-    progress::operation(format!("read {remote}"));
+fn required(
+    ssh: &dyn RemoteHost,
+    remote: &str,
+    local: &Path,
+    events: &dyn EventSink,
+) -> Result<()> {
+    events.operation(&format!("read {remote}"));
     let command = format!("cat {remote}");
     let data = ssh.run(&command).with_context(|| remote.to_string())?;
     write(local, &data)
 }
 
-fn optional_file(ssh: &dyn RemoteHost, remote: &str, local: &Path) -> Result<()> {
+fn optional_file(
+    ssh: &dyn RemoteHost,
+    remote: &str,
+    local: &Path,
+    events: &dyn EventSink,
+) -> Result<()> {
     let remote = shell::quote(remote);
     optional_command(
         ssh,
         &format!("if test -e {remote}; then cat {remote}; else exit 44; fi"),
         local,
+        events,
     )
 }
 
@@ -109,6 +126,7 @@ fn optional_container_file(
     vmid: u32,
     remote: &str,
     local: &Path,
+    events: &dyn EventSink,
 ) -> Result<()> {
     let remote = shell::quote(remote);
     let command = format!("if test -e {remote}; then cat {remote}; else exit 44; fi");
@@ -116,11 +134,17 @@ fn optional_container_file(
         ssh,
         &format!("pct exec {vmid} -- sh -c {}", shell::quote(&command)),
         local,
+        events,
     )
 }
 
-fn optional_command(ssh: &dyn RemoteHost, command: &str, local: &Path) -> Result<()> {
-    progress::operation(format!("read {}", local.display()));
+fn optional_command(
+    ssh: &dyn RemoteHost,
+    command: &str,
+    local: &Path,
+    events: &dyn EventSink,
+) -> Result<()> {
+    events.operation(&format!("read {}", local.display()));
     let output = ssh.probe(command)?;
     if output.ok {
         return write(local, &output.stdout);
@@ -225,7 +249,13 @@ mod tests {
         let local = temp.path().join("guest.fw");
         fs::write(&local, "previous").unwrap();
 
-        optional_file(&output(false, 44, "", ""), "/guest.fw", &local).unwrap();
+        optional_file(
+            &output(false, 44, "", ""),
+            "/guest.fw",
+            &local,
+            &crate::utility::progress::NullEventSink,
+        )
+        .unwrap();
 
         assert!(!local.exists());
     }
@@ -240,6 +270,7 @@ mod tests {
             &output(false, 255, "", "Permission denied"),
             "/guest.fw",
             &local,
+            &crate::utility::progress::NullEventSink,
         )
         .unwrap_err();
 

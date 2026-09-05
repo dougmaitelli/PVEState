@@ -6,7 +6,7 @@ use crate::{
     discovery::CapturedState,
     model::{GuestField, GuestKind, GuestRef},
     resource::native,
-    utility::{progress, runtime_security, yaml_patch},
+    utility::{progress::EventSink, runtime_security, yaml_patch},
 };
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
@@ -30,8 +30,14 @@ pub(crate) struct Candidate {
     patches: Vec<LocalPatch>,
 }
 
-pub(crate) fn run(repo: &LocalState, preview: bool, all: bool, requested: &[String]) -> Result<()> {
-    progress::section(if preview {
+pub(crate) fn run(
+    repo: &LocalState,
+    preview: bool,
+    all: bool,
+    requested: &[String],
+    events: &dyn EventSink,
+) -> Result<()> {
+    events.section(if preview {
         "Previewing captured drift"
     } else {
         "Adopting captured state into local configuration"
@@ -57,8 +63,8 @@ pub(crate) fn run(repo: &LocalState, preview: bool, all: bool, requested: &[Stri
     let candidates = candidates(repo, &captured, &plan)?;
 
     if preview {
-        progress::finish(true);
-        println!("{}", serde_json::to_string_pretty(&candidates)?);
+        events.finish(true);
+        events.output(&serde_json::to_string_pretty(&candidates)?);
         return Ok(());
     }
     let selected = selection(&candidates, all, requested)?;
@@ -76,7 +82,7 @@ pub(crate) fn run(repo: &LocalState, preview: bool, all: bool, requested: &[Stri
         .iter()
         .filter(|candidate| selected.contains(&candidate.id))
     {
-        progress::operation(format!(
+        events.operation(&format!(
             "{}: {} -> {}",
             candidate.id, candidate.local, candidate.captured
         ));
@@ -92,12 +98,12 @@ pub(crate) fn run(repo: &LocalState, preview: bool, all: bool, requested: &[Stri
     let documents = apply_local_patches(repo, patches)?;
     transaction::validate(repo, &documents)?;
     transaction::publish(repo, &documents)?;
-    progress::finish(true);
-    println!(
+    events.finish(true);
+    events.output(&format!(
         "adopted {} captured value(s) into {}",
         selected.len(),
         documents.keys().cloned().collect::<Vec<_>>().join(", ")
-    );
+    ));
     Ok(())
 }
 

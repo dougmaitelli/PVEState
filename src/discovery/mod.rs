@@ -7,7 +7,7 @@ mod state;
 pub(crate) use evidence::{CaptureManifest, CaptureStatus, SourceEvidence, collect_artifacts};
 pub(crate) use pve::{PveSnapshot, capture_pve};
 pub(crate) use response::{
-    ApiObject, CapturedResponse, ObjectResponse, ObjectsResponse, RawResponse, capture,
+    ApiObject, CapturedResponse, ObjectResponse, ObjectsResponse, RawResponse, capture_with_events,
 };
 pub(crate) use snapshot::write_snapshot;
 pub(crate) use state::{CapturedNative, CapturedState};

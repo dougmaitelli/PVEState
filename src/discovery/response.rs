@@ -1,4 +1,6 @@
-use crate::utility::progress;
+use crate::utility::progress::EventSink;
+#[cfg(test)]
+use crate::utility::progress::NullEventSink;
 use anyhow::Result;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
@@ -54,11 +56,23 @@ impl<T> CapturedResponse<T> {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn capture<T>(path: &str, request: impl FnOnce() -> Result<Value>) -> CapturedResponse<T>
 where
     T: DeserializeOwned,
 {
-    progress::operation(format!("GET {path}"));
+    capture_with_events(path, request, &NullEventSink)
+}
+
+pub(crate) fn capture_with_events<T>(
+    path: &str,
+    request: impl FnOnce() -> Result<Value>,
+    events: &dyn EventSink,
+) -> CapturedResponse<T>
+where
+    T: DeserializeOwned,
+{
+    events.operation(&format!("GET {path}"));
 
     let result = request().and_then(|value| {
         serde_json::from_value(value)
@@ -74,7 +88,7 @@ where
             error: None,
         },
         Err(error) => {
-            progress::detail(format!("failed: {error:#}"));
+            events.detail(&format!("failed: {error:#}"));
             CapturedResponse {
                 ok: false,
                 path: path.into(),

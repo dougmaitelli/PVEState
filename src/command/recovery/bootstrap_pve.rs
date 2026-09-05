@@ -2,12 +2,12 @@ use crate::{
     client::RemoteHost,
     config::LocalState,
     resource::{firewall, native_paths, network},
-    utility::{progress, remote_file, shell},
+    utility::{progress::EventSink, remote_file, shell},
 };
 use anyhow::Result;
 
-pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
-    progress::operation("verify replacement PVE host");
+pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost, events: &dyn EventSink) -> Result<()> {
+    events.operation("verify replacement PVE host");
     ssh.run("pveversion")?;
 
     for pool in &repo.storage.pools {
@@ -47,8 +47,10 @@ pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
             "0640",
         )?;
     }
-    progress::finish(true);
-    println!("replacement PVE configuration staged; activate networking only with console access");
+    events.finish(true);
+    events.output(
+        "replacement PVE configuration staged; activate networking only with console access",
+    );
     Ok(())
 }
 

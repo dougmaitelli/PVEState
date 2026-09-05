@@ -3,12 +3,12 @@ use crate::{
     config::LocalState,
     model::RestoreMount,
     resource::guest,
-    utility::{progress, shell},
+    utility::{progress::EventSink, shell},
 };
 use anyhow::{Context, Result};
 
-pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
-    progress::operation("create and provision PBS guest");
+pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost, events: &dyn EventSink) -> Result<()> {
+    events.operation("create and provision PBS guest");
     let bootstrap = &repo.restore.pbs_bootstrap;
     let id = bootstrap.vmid;
     let template = bootstrap.lxc_template.as_deref().context("PBS template")?;

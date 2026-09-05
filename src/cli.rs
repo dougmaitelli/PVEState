@@ -3,6 +3,7 @@ use crate::{
     command::{adopt, apply, capture, plan, recovery},
     config,
     settings::Settings,
+    utility::progress::{EventSink, TerminalEventSink},
 };
 use anyhow::Result;
 use clap::{ArgAction, Parser, Subcommand};
@@ -68,19 +69,22 @@ enum Recovery {
 
 pub fn run_cli() -> Result<()> {
     let cli = Cli::parse();
-    crate::utility::progress::set(cli.verbose);
-    let result = run(cli);
-    crate::utility::progress::finish(result.is_ok());
+    let events = TerminalEventSink::new(cli.verbose);
+    let result = run(cli, &events);
+    events.finish(result.is_ok());
     result
 }
 
-fn run(cli: Cli) -> Result<()> {
+fn run(cli: Cli, events: &dyn EventSink) -> Result<()> {
     match cli.command {
         Command::Init { path } => {
-            crate::utility::progress::section("Initializing configuration repository");
+            events.section("Initializing configuration repository");
             config::scaffold::initialize(&path)?;
-            crate::utility::progress::finish(true);
-            println!("initialized configuration repository: {}", path.display());
+            events.finish(true);
+            events.output(&format!(
+                "initialized configuration repository: {}",
+                path.display()
+            ));
             Ok(())
         },
         Command::Capture => {
@@ -89,12 +93,12 @@ fn run(cli: Cli) -> Result<()> {
             let pve = Pve::discovery(&settings.pve)?;
             let pbs = Pbs::discovery(&settings.pbs)?;
             let ssh = Ssh::new(&settings.ssh.discovery);
-            capture::run(&repo, &pve, &pbs, &ssh)
+            capture::run(&repo, &pve, &pbs, &ssh, events)
         },
         Command::Plan { json } => {
             let repo = config::open(&cli.config_dir)?;
-            let p = plan::run(&repo)?;
-            crate::utility::progress::finish(true);
+            let p = plan::run(&repo, events)?;
+            events.finish(true);
             if json {
                 println!("{}", serde_json::to_string_pretty(&p)?);
             } else {
@@ -104,18 +108,18 @@ fn run(cli: Cli) -> Result<()> {
         },
         Command::Adopt { preview, all, ids } => {
             let repo = config::open(&cli.config_dir)?;
-            adopt::run(&repo, preview, all, &ids)
+            adopt::run(&repo, preview, all, &ids, events)
         },
         Command::Apply => {
             let repo = config::open(&cli.config_dir)?;
             let settings = Settings::load(&cli.config_dir)?;
-            apply::run(&repo, &settings)
+            apply::run(&repo, &settings, events)
         },
         Command::Validate => {
             let repo = config::open(&cli.config_dir)?;
             let settings = Settings::load(&cli.config_dir)?;
             let ssh = Ssh::new(&settings.ssh.discovery);
-            capture::validate(&repo, &ssh)
+            capture::validate(&repo, &ssh, events)
         },
         Command::Recover { action } => {
             let (stage, target) = match action {
@@ -139,12 +143,13 @@ fn run(cli: Cli) -> Result<()> {
                 &target,
                 &settings.recovery,
                 ssh.as_ref().map(|client| client as _),
+                events,
             )
         },
         Command::Schema { output } => {
-            crate::utility::progress::section("Generating configuration schemas");
+            events.section("Generating configuration schemas");
             config::schema::write(output.as_deref())?;
-            crate::utility::progress::finish(true);
+            events.finish(true);
             println!(
                 "wrote configuration schemas to {}",
                 output
