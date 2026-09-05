@@ -31,10 +31,6 @@ impl std::fmt::Display for SyncDirection {
         })
     }
 }
-fn pull() -> SyncDirection {
-    SyncDirection::Pull
-}
-
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum BackupMode {
@@ -68,8 +64,10 @@ pub(crate) struct PbsBackup {
     pub(crate) endpoint: String,
     pub(crate) version: String,
     pub(crate) guest: BackupGuest,
-    pub(crate) datastore: Datastore,
-    pub(crate) s3_endpoint: S3Endpoint,
+    #[serde(default)]
+    pub(crate) datastore: Option<Datastore>,
+    #[serde(default)]
+    pub(crate) s3_endpoint: Option<S3Endpoint>,
     pub(crate) jobs: BackupJobs,
 }
 
@@ -87,8 +85,10 @@ pub(crate) struct Datastore {
     pub(crate) name: String,
     pub(crate) backend: DatastoreBackend,
     pub(crate) local_cache_path: String,
-    pub(crate) bucket: String,
-    pub(crate) s3_endpoint_id: String,
+    #[serde(default)]
+    pub(crate) bucket: Option<String>,
+    #[serde(default)]
+    pub(crate) s3_endpoint_id: Option<String>,
     pub(crate) garbage_collection_schedule: String,
 }
 
@@ -131,8 +131,10 @@ pub(crate) struct PruneJob {
 pub(crate) struct VerifyJob {
     pub(crate) store: String,
     pub(crate) schedule: String,
-    pub(crate) ignore_verified: bool,
-    pub(crate) outdated_after_days: u32,
+    #[serde(default)]
+    pub(crate) ignore_verified: Option<bool>,
+    #[serde(default)]
+    pub(crate) outdated_after_days: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -145,9 +147,9 @@ pub(crate) struct SyncJob {
     #[serde(default)]
     pub(crate) schedule: Option<String>,
     #[serde(default)]
-    pub(crate) remove_vanished: bool,
-    #[serde(default = "pull")]
-    pub(crate) direction: SyncDirection,
+    pub(crate) remove_vanished: Option<bool>,
+    #[serde(default)]
+    pub(crate) direction: Option<SyncDirection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -163,7 +165,8 @@ pub(crate) struct PveBackupJob {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Retention {
-    pub(crate) keep_last: u32,
+    #[serde(default)]
+    pub(crate) keep_last: Option<u32>,
 }
 
 #[cfg(test)]

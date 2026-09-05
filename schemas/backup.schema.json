@@ -92,14 +92,26 @@
       },
       "additionalProperties": false
     },
+    "BackupMode": {
+      "type": "string",
+      "enum": [
+        "snapshot",
+        "suspend",
+        "stop"
+      ]
+    },
     "Datastore": {
       "type": "object",
       "properties": {
         "backend": {
-          "type": "string"
+          "$ref": "#/$defs/DatastoreBackend"
         },
         "bucket": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "garbage_collection_schedule": {
           "type": "string"
@@ -111,7 +123,11 @@
           "type": "string"
         },
         "s3_endpoint_id": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false,
@@ -119,16 +135,29 @@
         "name",
         "backend",
         "local_cache_path",
-        "bucket",
-        "s3_endpoint_id",
         "garbage_collection_schedule"
+      ]
+    },
+    "DatastoreBackend": {
+      "type": "string",
+      "enum": [
+        "local",
+        "s3"
       ]
     },
     "PbsBackup": {
       "type": "object",
       "properties": {
         "datastore": {
-          "$ref": "#/$defs/Datastore"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Datastore"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "endpoint": {
           "type": "string"
@@ -140,7 +169,15 @@
           "$ref": "#/$defs/BackupJobs"
         },
         "s3_endpoint": {
-          "$ref": "#/$defs/S3Endpoint"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/S3Endpoint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "version": {
           "type": "string"
@@ -151,8 +188,6 @@
         "endpoint",
         "version",
         "guest",
-        "datastore",
-        "s3_endpoint",
         "jobs"
       ]
     },
@@ -193,7 +228,7 @@
           }
         },
         "mode": {
-          "type": "string"
+          "$ref": "#/$defs/BackupMode"
         },
         "retention": {
           "$ref": "#/$defs/Retention"
@@ -218,15 +253,16 @@
       "type": "object",
       "properties": {
         "keep_last": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint32",
+          "default": null,
           "minimum": 0
         }
       },
-      "additionalProperties": false,
-      "required": [
-        "keep_last"
-      ]
+      "additionalProperties": false
     },
     "S3Endpoint": {
       "type": "object",
@@ -248,12 +284,26 @@
         "region"
       ]
     },
+    "SyncDirection": {
+      "type": "string",
+      "enum": [
+        "pull",
+        "push"
+      ]
+    },
     "SyncJob": {
       "type": "object",
       "properties": {
         "direction": {
-          "type": "string",
-          "default": "pull"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SyncDirection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "remote": {
           "type": [
@@ -266,8 +316,11 @@
           "type": "string"
         },
         "remove_vanished": {
-          "type": "boolean",
-          "default": false
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
         },
         "schedule": {
           "type": [
@@ -290,11 +343,19 @@
       "type": "object",
       "properties": {
         "ignore_verified": {
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
         },
         "outdated_after_days": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint32",
+          "default": null,
           "minimum": 0
         },
         "schedule": {
@@ -307,9 +368,7 @@
       "additionalProperties": false,
       "required": [
         "store",
-        "schedule",
-        "ignore_verified",
-        "outdated_after_days"
+        "schedule"
       ]
     }
   }

@@ -328,4 +328,76 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn adopting_fixture_patches_then_reloading_converges() {
+        #[derive(serde::Deserialize)]
+        struct Fixture {
+            pve: BTreeMap<String, Value>,
+            pbs: BTreeMap<String, Value>,
+        }
+
+        let temp = tempfile::tempdir().unwrap();
+        crate::config::scaffold::initialize(temp.path()).unwrap();
+        let local = crate::config::open(temp.path()).unwrap();
+        let fixture: Fixture =
+            serde_json::from_str(include_str!("../../tests/fixtures/planner/live.json")).unwrap();
+        let pve = FixtureClient {
+            endpoint: "https://pve.test:8006",
+            responses: &fixture.pve,
+        };
+        let pbs = FixtureClient {
+            endpoint: "https://pbs.test:8007",
+            responses: &fixture.pbs,
+        };
+        let plan = super::super::plan::build(
+            &local,
+            &pve,
+            &pbs,
+            "fixture-capture",
+            &crate::utility::progress::NullEventSink,
+        )
+        .unwrap();
+        let captured = CapturedState::fixture(
+            "fixture-capture",
+            pve.endpoint,
+            fixture.pve.clone(),
+            pbs.endpoint,
+            fixture.pbs.clone(),
+            local.observed(),
+        );
+        let mut patches = Vec::new();
+        for operation in plan
+            .operations
+            .iter()
+            .filter(|operation| matches!(operation.domain(), Domain::Backup | Domain::Pbs))
+        {
+            for candidate in backup::adopt::candidates(&local, &captured, operation).unwrap() {
+                patches.extend_from_slice(candidate.patches().unwrap());
+            }
+        }
+        let documents = apply_local_patches(&local, patches).unwrap();
+        for (path, content) in documents {
+            fs::write(temp.path().join(path), content).unwrap();
+        }
+        let adopted = crate::config::open(temp.path()).unwrap();
+        assert!(adopted.backup.pbs.datastore.is_some());
+        assert!(adopted.backup.pbs.s3_endpoint.is_none());
+
+        let replanned = super::super::plan::build(
+            &adopted,
+            &pve,
+            &pbs,
+            "fixture-capture",
+            &crate::utility::progress::NullEventSink,
+        )
+        .unwrap();
+
+        let backup_operations = replanned
+            .operations
+            .iter()
+            .filter(|operation| matches!(operation.domain(), Domain::Backup | Domain::Pbs))
+            .collect::<Vec<_>>();
+        assert!(backup_operations.is_empty(), "{backup_operations:#?}");
+    }
 }

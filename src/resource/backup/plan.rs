@@ -23,8 +23,12 @@ pub(crate) fn plan(
     let verify = pbs.get("/config/verify")?;
     let sync = pbs.get("/config/sync")?;
 
-    datastore(repo, &datastores, operations, blockers)?;
-    s3_endpoint(repo, &s3, operations)?;
+    if let Some(desired) = &repo.backup.pbs.datastore {
+        datastore(desired, &datastores, operations, blockers)?;
+    }
+    if let Some(desired) = &repo.backup.pbs.s3_endpoint {
+        s3_endpoint(desired, &s3, operations)?;
+    }
     prune_jobs(repo, &prune, operations)?;
     verify_jobs(repo, &verify, operations)?;
     sync_jobs(repo, &sync, operations)?;
@@ -47,11 +51,10 @@ fn pve_jobs(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation>) 
                     .collect::<Vec<_>>()
                     .join(","),
             ),
-            (
-                "prune-backups".into(),
-                format!("keep-last={}", desired.retention.keep_last),
-            ),
         ]);
+        if let Some(keep_last) = desired.retention.keep_last {
+            changes.insert("prune-backups".into(), format!("keep-last={keep_last}"));
+        }
         let method = if let Some(current) = current {
             changes.retain(|key, wanted| !same_pve_job_value(current, key, wanted));
             ApiMethod::Put
@@ -93,16 +96,25 @@ fn pve_jobs(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation>) 
 }
 
 fn datastore(
-    repo: &LocalState,
+    desired: &crate::resource::backup::Datastore,
     actual: &Value,
     operations: &mut Vec<Operation>,
     blockers: &mut Vec<String>,
 ) -> Result<()> {
-    let desired = &repo.backup.pbs.datastore;
-    let wanted_backend = format!(
-        "type={},client={},bucket={}",
-        desired.backend, desired.s3_endpoint_id, desired.bucket
-    );
+    let wanted_backend = match desired.backend {
+        crate::resource::backup::DatastoreBackend::Local => "type=local".into(),
+        crate::resource::backup::DatastoreBackend::S3 => format!(
+            "type=s3,client={},bucket={}",
+            desired
+                .s3_endpoint_id
+                .as_deref()
+                .context("S3 datastore requires s3_endpoint_id")?,
+            desired
+                .bucket
+                .as_deref()
+                .context("S3 datastore requires bucket")?
+        ),
+    };
     let Some(current) = find(actual, "name", &desired.name) else {
         push(
             operations,
@@ -156,8 +168,11 @@ fn datastore(
     Ok(())
 }
 
-fn s3_endpoint(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation>) -> Result<()> {
-    let desired = &repo.backup.pbs.s3_endpoint;
+fn s3_endpoint(
+    desired: &crate::resource::backup::S3Endpoint,
+    actual: &Value,
+    operations: &mut Vec<Operation>,
+) -> Result<()> {
     let Some(current) = find(actual, "id", &desired.id) else {
         operations.push(Operation::ApiMutation {
             target: ApiTarget::Pbs,
@@ -310,21 +325,30 @@ fn prune_data(job: &PruneJob) -> BTreeMap<String, String> {
 }
 
 fn verify_data(job: &VerifyJob) -> BTreeMap<String, String> {
-    BTreeMap::from([
+    let mut data = BTreeMap::from([
         ("store".into(), job.store.clone()),
         ("schedule".into(), job.schedule.clone()),
-        ("ignore-verified".into(), job.ignore_verified.to_string()),
-        ("outdated-after".into(), job.outdated_after_days.to_string()),
-    ])
+    ]);
+    if let Some(value) = job.ignore_verified {
+        data.insert("ignore-verified".into(), value.to_string());
+    }
+    if let Some(value) = job.outdated_after_days {
+        data.insert("outdated-after".into(), value.to_string());
+    }
+    data
 }
 
 fn sync_data(job: &SyncJob) -> BTreeMap<String, String> {
     let mut data = BTreeMap::from([
         ("store".into(), job.store.clone()),
         ("remote-store".into(), job.remote_store.clone()),
-        ("remove-vanished".into(), job.remove_vanished.to_string()),
-        ("sync-direction".into(), job.direction.to_string()),
     ]);
+    if let Some(value) = job.remove_vanished {
+        data.insert("remove-vanished".into(), value.to_string());
+    }
+    if let Some(value) = job.direction {
+        data.insert("sync-direction".into(), value.to_string());
+    }
     if let Some(value) = &job.remote {
         data.insert("remote".into(), value.clone());
     }

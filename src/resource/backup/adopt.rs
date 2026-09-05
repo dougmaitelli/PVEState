@@ -3,14 +3,14 @@ use crate::{
     config::{AdoptionCandidate, ConfigDocument, LocalPatch, LocalState},
     discovery::CapturedState,
     model::{PruneJob, SyncJob, VerifyJob},
-    resource::backup::{BackupMode, Datastore, PveBackupJob, Retention, S3Endpoint, SyncDirection},
+    resource::backup::{BackupMode, Datastore, PveBackupJob, Retention, S3Endpoint},
     utility::yaml_patch::Segment,
 };
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 pub(crate) fn candidates(
-    local: &LocalState,
+    _local: &LocalState,
     captured: &CapturedState,
     operation: &Operation,
 ) -> Result<Vec<AdoptionCandidate>> {
@@ -25,23 +25,23 @@ pub(crate) fn candidates(
     };
     let name = resource.to_string();
     let patches = if let Some(id) = name.strip_prefix("pve/") {
-        pve_job(captured, id)?
+        pve_job(captured, id)
     } else if let Some(id) = name.strip_prefix("prune/") {
-        pbs_job(captured, "prune", id)?
+        pbs_job(captured, "prune", id)
     } else if let Some(id) = name.strip_prefix("verify/") {
-        pbs_job(captured, "verify", id)?
+        pbs_job(captured, "verify", id)
     } else if let Some(id) = name.strip_prefix("sync/") {
-        pbs_job(captured, "sync", id)?
-    } else if name.starts_with("datastore/") {
-        fixed_pbs_resource(local, captured, "datastore")?
-    } else if name.starts_with("s3/") {
-        fixed_pbs_resource(local, captured, "s3")?
+        pbs_job(captured, "sync", id)
+    } else if let Some(id) = name.strip_prefix("datastore/") {
+        fixed_pbs_resource(captured, "datastore", id)
+    } else if let Some(id) = name.strip_prefix("s3/") {
+        fixed_pbs_resource(captured, "s3", id)
     } else {
-        None
+        Ok(None)
     };
     let field = changes.keys().cloned().collect::<Vec<_>>().join(",");
     Ok(vec![match patches {
-        Some(patches) => AdoptionCandidate::adoptable(
+        Ok(Some(patches)) => AdoptionCandidate::adoptable(
             resource,
             if field.is_empty() {
                 method_name(*method)
@@ -52,7 +52,7 @@ pub(crate) fn candidates(
             "captured backup state",
             patches,
         ),
-        None => AdoptionCandidate::blocked(
+        Ok(None) => AdoptionCandidate::blocked(
             resource,
             if field.is_empty() {
                 method_name(*method)
@@ -61,14 +61,25 @@ pub(crate) fn candidates(
             },
             "local backup state",
             "absent from captured state",
-            "this required singleton cannot be removed from the local schema",
+            "captured backup resource cannot be represented safely",
+        ),
+        Err(error) => AdoptionCandidate::blocked(
+            resource,
+            if field.is_empty() {
+                method_name(*method)
+            } else {
+                &field
+            },
+            "local backup state",
+            "invalid captured backup state",
+            format!("captured backup resource cannot be represented safely: {error:#}"),
         ),
     }])
 }
 
 fn pve_job(captured: &CapturedState, id: &str) -> Result<Option<Vec<LocalPatch>>> {
     let actual = captured.pve.response("/cluster/backup")?;
-    let item = find(&actual, "id", id);
+    let item = find(&actual, "id", id)?;
     let resource_path = ["pve_backup_jobs", id];
     let resource = if let Some(item) = item {
         replace(&resource_path, parse_pve_job(item)?)?
@@ -83,7 +94,7 @@ fn pve_job(captured: &CapturedState, id: &str) -> Result<Option<Vec<LocalPatch>>
 
 fn pbs_job(captured: &CapturedState, kind: &str, id: &str) -> Result<Option<Vec<LocalPatch>>> {
     let actual = captured.pbs.response(&format!("/config/{kind}"))?;
-    let item = find(&actual, "id", id);
+    let item = find(&actual, "id", id)?;
     let (resource, absent) = match kind {
         "prune" => (
             item.map(parse_prune)
@@ -118,26 +129,22 @@ fn pbs_job(captured: &CapturedState, kind: &str, id: &str) -> Result<Option<Vec<
 }
 
 fn fixed_pbs_resource(
-    local: &LocalState,
     captured: &CapturedState,
     kind: &str,
+    id: &str,
 ) -> Result<Option<Vec<LocalPatch>>> {
-    let (path, key, id) = match kind {
-        "datastore" => (
-            "/config/datastore",
-            "name",
-            local.backup.pbs.datastore.name.as_str(),
-        ),
-        "s3" => ("/config/s3", "id", local.backup.pbs.s3_endpoint.id.as_str()),
+    let (path, key) = match kind {
+        "datastore" => ("/config/datastore", "name"),
+        "s3" => ("/config/s3", "id"),
         _ => bail!("unsupported PBS resource kind {kind}"),
     };
     let actual = captured.pbs.response(path)?;
-    let Some(item) = find(&actual, key, id) else {
-        return Ok(None);
-    };
-    let patch = match kind {
-        "datastore" => replace(&["pbs", "datastore"], parse_datastore(item, local)?)?,
-        "s3" => replace(&["pbs", "s3_endpoint"], parse_s3(item)?)?,
+    let item = find(&actual, key, id)?;
+    let patch = match (kind, item) {
+        ("datastore", Some(item)) => replace(&["pbs", "datastore"], parse_datastore(item)?)?,
+        ("s3", Some(item)) => replace(&["pbs", "s3_endpoint"], parse_s3(item)?)?,
+        ("datastore", None) => remove(&["pbs", "datastore"]),
+        ("s3", None) => remove(&["pbs", "s3_endpoint"]),
         _ => unreachable!(),
     };
     Ok(Some(vec![patch]))
@@ -145,47 +152,53 @@ fn fixed_pbs_resource(
 
 fn parse_pve_job(value: &Value) -> Result<PveBackupJob> {
     let mode: BackupMode = serde_yaml::from_str(text(value, "mode")?)?;
-    let keep_last = value
-        .get("prune-backups")
-        .and_then(|v| v.get("keep-last"))
-        .and_then(Value::as_u64)
-        .or_else(|| {
-            value
-                .get("prune-backups")
-                .and_then(Value::as_str)
-                .and_then(|v| option(v, "keep-last"))
-                .and_then(|v| v.parse().ok())
-        })
-        .unwrap_or(0) as u32;
+    let keep_last = match value.get("prune-backups") {
+        None | Some(Value::Null) => None,
+        Some(Value::Object(options)) => options
+            .get("keep-last")
+            .map(|value| required_number_value(value, "prune-backups.keep-last"))
+            .transpose()?,
+        Some(Value::String(options)) => option(options, "keep-last")
+            .map(|value| parse_u32(value, "prune-backups.keep-last"))
+            .transpose()?,
+        Some(_) => bail!("captured PVE field prune-backups has an invalid type"),
+    };
+    let guest_ids = text(value, "vmid")?
+        .split(',')
+        .map(|id| parse_u32(id, "vmid"))
+        .collect::<Result<Vec<_>>>()?;
+    if guest_ids.is_empty() {
+        bail!("captured PVE field vmid is empty")
+    }
     Ok(PveBackupJob {
         storage: text(value, "storage")?.into(),
         schedule: text(value, "schedule")?.into(),
         mode,
-        guest_ids: text(value, "vmid")?
-            .split(',')
-            .filter_map(|id| id.parse().ok())
-            .collect(),
+        guest_ids,
         retention: Retention { keep_last },
     })
 }
 
-fn parse_datastore(value: &Value, local: &LocalState) -> Result<Datastore> {
+fn parse_datastore(value: &Value) -> Result<Datastore> {
     let backend = text(value, "backend")?;
-    let options = options(backend);
+    let options = options(backend)?;
+    let backend = options
+        .get("type")
+        .context("captured PBS backend field type")?;
+    let backend = serde_yaml::from_str(backend)?;
+    let (bucket, s3_endpoint_id) = match backend {
+        crate::resource::backup::DatastoreBackend::Local => (None, None),
+        crate::resource::backup::DatastoreBackend::S3 => (
+            Some(required_option(&options, "bucket")?.into()),
+            Some(required_option(&options, "client")?.into()),
+        ),
+    };
     Ok(Datastore {
         name: text(value, "name")?.into(),
-        backend: serde_yaml::from_str(options.get("type").copied().unwrap_or("local"))?,
+        backend,
         local_cache_path: text(value, "path")?.into(),
-        bucket: options
-            .get("bucket")
-            .copied()
-            .unwrap_or(&local.backup.pbs.datastore.bucket)
-            .into(),
-        s3_endpoint_id: options
-            .get("client")
-            .copied()
-            .unwrap_or(&local.backup.pbs.datastore.s3_endpoint_id)
-            .into(),
+        bucket,
+        s3_endpoint_id,
         garbage_collection_schedule: text(value, "gc-schedule")?.into(),
     })
 }
@@ -202,7 +215,7 @@ fn parse_prune(value: &Value) -> Result<PruneJob> {
     Ok(PruneJob {
         store: text(value, "store")?.into(),
         schedule: text(value, "schedule")?.into(),
-        keep_last: number(value, "keep-last"),
+        keep_last: number(value, "keep-last")?,
     })
 }
 
@@ -210,24 +223,21 @@ fn parse_verify(value: &Value) -> Result<VerifyJob> {
     Ok(VerifyJob {
         store: text(value, "store")?.into(),
         schedule: text(value, "schedule")?.into(),
-        ignore_verified: boolean(value, "ignore-verified"),
-        outdated_after_days: number(value, "outdated-after").unwrap_or(0),
+        ignore_verified: boolean(value, "ignore-verified")?,
+        outdated_after_days: number(value, "outdated-after")?,
     })
 }
 
 fn parse_sync(value: &Value) -> Result<SyncJob> {
-    let direction: SyncDirection = serde_yaml::from_str(
-        value
-            .get("sync-direction")
-            .and_then(Value::as_str)
-            .unwrap_or("pull"),
-    )?;
+    let direction = string(value, "sync-direction")?
+        .map(|value| serde_yaml::from_str(&value))
+        .transpose()?;
     Ok(SyncJob {
         store: text(value, "store")?.into(),
         remote_store: text(value, "remote-store")?.into(),
-        remote: string(value, "remote"),
-        schedule: string(value, "schedule"),
-        remove_vanished: boolean(value, "remove-vanished"),
+        remote: string(value, "remote")?,
+        schedule: string(value, "schedule")?,
+        remove_vanished: boolean(value, "remove-vanished")?,
         direction,
     })
 }
@@ -255,11 +265,24 @@ fn remove_absent(path: &[&str], id: &str) -> LocalPatch {
     }
 }
 
-fn find<'a>(items: &'a Value, key: &str, wanted: &str) -> Option<&'a Value> {
-    items
-        .as_array()?
-        .iter()
-        .find(|item| item.get(key).and_then(Value::as_str) == Some(wanted))
+fn find<'a>(items: &'a Value, key: &str, wanted: &str) -> Result<Option<&'a Value>> {
+    let mut found = None;
+    for item in items
+        .as_array()
+        .context("captured backup collection is not an array")?
+    {
+        let identity = item
+            .as_object()
+            .context("captured backup collection entry is not an object")?
+            .get(key)
+            .with_context(|| format!("captured backup collection entry has no {key}"))?
+            .as_str()
+            .with_context(|| format!("captured backup collection field {key} is not a string"))?;
+        if identity == wanted && found.replace(item).is_some() {
+            bail!("captured backup collection has duplicate {key} `{wanted}`")
+        }
+    }
+    Ok(found)
 }
 
 fn text<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
@@ -269,22 +292,37 @@ fn text<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
         .with_context(|| format!("captured PBS field {key}"))
 }
 
-fn string(value: &Value, key: &str) -> Option<String> {
-    value.get(key).and_then(Value::as_str).map(str::to_owned)
-}
-
-fn number(value: &Value, key: &str) -> Option<u32> {
+fn string(value: &Value, key: &str) -> Result<Option<String>> {
     value
         .get(key)
-        .and_then(|v| v.as_u64().or_else(|| v.as_str()?.parse().ok()))
-        .map(|v| v as u32)
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::to_owned)
+                .with_context(|| format!("captured PBS field {key} is not a string"))
+        })
+        .transpose()
 }
 
-fn boolean(value: &Value, key: &str) -> bool {
-    value.get(key).is_some_and(|v| {
-        v.as_bool()
-            .unwrap_or_else(|| matches!(v.as_str(), Some("1" | "true")))
-    })
+fn number(value: &Value, key: &str) -> Result<Option<u32>> {
+    value
+        .get(key)
+        .map(|value| required_number_value(value, key))
+        .transpose()
+}
+
+fn boolean(value: &Value, key: &str) -> Result<Option<bool>> {
+    value
+        .get(key)
+        .map(|value| match value {
+            Value::Bool(value) => Ok(*value),
+            Value::Number(value) if value.as_u64() == Some(0) => Ok(false),
+            Value::Number(value) if value.as_u64() == Some(1) => Ok(true),
+            Value::String(value) if matches!(value.as_str(), "0" | "false") => Ok(false),
+            Value::String(value) if matches!(value.as_str(), "1" | "true") => Ok(true),
+            _ => bail!("captured PBS field {key} is not a boolean"),
+        })
+        .transpose()
 }
 
 fn option<'a>(value: &'a str, key: &str) -> Option<&'a str> {
@@ -294,11 +332,51 @@ fn option<'a>(value: &'a str, key: &str) -> Option<&'a str> {
         .find_map(|(name, value)| (name == key).then_some(value))
 }
 
-fn options(value: &str) -> std::collections::BTreeMap<&str, &str> {
+fn options(value: &str) -> Result<std::collections::BTreeMap<&str, &str>> {
+    let mut result = std::collections::BTreeMap::new();
+    for part in value.split(',') {
+        let (key, value) = part
+            .split_once('=')
+            .with_context(|| format!("invalid PBS backend option `{part}`"))?;
+        if key.is_empty() || value.is_empty() {
+            bail!("invalid PBS backend option `{part}`")
+        }
+        if result.insert(key, value).is_some() {
+            bail!("duplicate PBS backend option `{key}`")
+        }
+    }
+    Ok(result)
+}
+
+fn required_option<'a>(
+    options: &'a std::collections::BTreeMap<&str, &str>,
+    key: &str,
+) -> Result<&'a str> {
+    options
+        .get(key)
+        .copied()
+        .with_context(|| format!("captured PBS backend field {key}"))
+}
+
+fn required_number_value(value: &Value, key: &str) -> Result<u32> {
+    if let Some(value) = value.as_u64() {
+        return u32::try_from(value).with_context(|| format!("captured field {key} exceeds u32"));
+    }
+    parse_u32(
+        value
+            .as_str()
+            .with_context(|| format!("captured field {key} is not a number"))?,
+        key,
+    )
+}
+
+fn parse_u32(value: &str, key: &str) -> Result<u32> {
+    if value.is_empty() {
+        bail!("captured field {key} is empty")
+    }
     value
-        .split(',')
-        .filter_map(|part| part.split_once('='))
-        .collect()
+        .parse()
+        .with_context(|| format!("captured field {key} has invalid number `{value}`"))
 }
 
 const fn method_name(method: ApiMethod) -> &'static str {
@@ -324,7 +402,7 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(job.guest_ids, [201, 101]);
-        assert_eq!(job.retention.keep_last, 3);
+        assert_eq!(job.retention.keep_last, Some(3));
 
         let sync = parse_sync(&serde_json::json!({
             "store": "primary",
@@ -333,7 +411,85 @@ mod tests {
             "remove-vanished": true
         }))
         .unwrap();
-        assert_eq!(sync.direction, SyncDirection::Push);
-        assert!(sync.remove_vanished);
+        assert_eq!(
+            sync.direction,
+            Some(crate::resource::backup::SyncDirection::Push)
+        );
+        assert_eq!(sync.remove_vanished, Some(true));
+    }
+
+    #[test]
+    fn rejects_invalid_vmids_and_malformed_booleans() {
+        let invalid_job = serde_json::json!({
+            "storage": "pbs",
+            "schedule": "daily",
+            "mode": "snapshot",
+            "vmid": "201,not-a-vmid"
+        });
+        assert!(parse_pve_job(&invalid_job).is_err());
+
+        let invalid_verify = serde_json::json!({
+            "store": "primary",
+            "schedule": "daily",
+            "ignore-verified": "sometimes"
+        });
+        assert!(parse_verify(&invalid_verify).is_err());
+    }
+
+    #[test]
+    fn preserves_missing_values_distinct_from_zero_and_false() {
+        let missing = parse_pve_job(&serde_json::json!({
+            "storage": "pbs",
+            "schedule": "daily",
+            "mode": "snapshot",
+            "vmid": "201"
+        }))
+        .unwrap();
+        let zero = parse_pve_job(&serde_json::json!({
+            "storage": "pbs",
+            "schedule": "daily",
+            "mode": "snapshot",
+            "vmid": "201",
+            "prune-backups": {"keep-last": 0}
+        }))
+        .unwrap();
+        assert_eq!(missing.retention.keep_last, None);
+        assert_eq!(zero.retention.keep_last, Some(0));
+
+        let verify = parse_verify(&serde_json::json!({
+            "store": "primary",
+            "schedule": "daily"
+        }))
+        .unwrap();
+        assert_eq!(verify.ignore_verified, None);
+        assert_eq!(verify.outdated_after_days, None);
+    }
+
+    #[test]
+    fn requires_complete_s3_backend_but_accepts_unknown_upstream_fields() {
+        for backend in [
+            "type=s3",
+            "type=s3,bucket=archive",
+            "bucket=archive,client=s3",
+        ] {
+            let value = serde_json::json!({
+                "name": "primary",
+                "path": "/mnt/cache",
+                "backend": backend,
+                "gc-schedule": "daily"
+            });
+            assert!(parse_datastore(&value).is_err(), "{backend}");
+        }
+
+        let parsed = parse_datastore(&serde_json::json!({
+            "name": "primary",
+            "path": "/mnt/cache",
+            "backend": "type=s3,bucket=archive,client=s3,future-option=value",
+            "gc-schedule": "daily",
+            "future-field": "accepted"
+        }))
+        .unwrap();
+        assert_eq!(parsed.bucket.as_deref(), Some("archive"));
+        assert_eq!(parsed.s3_endpoint_id.as_deref(), Some("s3"));
     }
 }
