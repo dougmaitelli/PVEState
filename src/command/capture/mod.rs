@@ -133,7 +133,10 @@ fn source(endpoint: &str, failures: Vec<String>) -> SourceEvidence {
 
 fn write_observed_manifest(observed: &Path, manifest: &CaptureManifest) -> Result<()> {
     let content = serde_json::to_vec_pretty(manifest)?;
-    atomic_file::write(&observed.join("manifest.json"), &content)
+    atomic_file::write(
+        &observed.join(crate::config::artifacts::CAPTURE_MANIFEST),
+        &content,
+    )
 }
 
 fn write_runtime_manifest(repo: &LocalState, manifest: &CaptureManifest) -> Result<()> {
@@ -194,7 +197,7 @@ pub(crate) fn validate(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
         }
     }
     atomic_file::write(
-        &repo.runtime().join("validation.json"),
+        &repo.runtime().join(crate::config::artifacts::VALIDATION),
         &serde_json::to_vec_pretty(&report)?,
     )?;
     if failures.is_empty() {

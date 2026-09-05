@@ -151,7 +151,7 @@ mod tests {
 
         let temp = tempfile::tempdir().unwrap();
         let runtime = temp.path().join(".runtime");
-        let artifact = runtime.join("production-plan.json");
+        let artifact = runtime.join(crate::config::artifacts::PRODUCTION_PLAN);
         prepare(&runtime).unwrap();
         fs::write(&artifact, "plan").unwrap();
         fs::set_permissions(&artifact, fs::Permissions::from_mode(0o644)).unwrap();
@@ -171,7 +171,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let runtime = temp.path().join(".runtime");
         let victim = temp.path().join("victim");
-        let artifact = runtime.join("production-plan.json");
+        let artifact = runtime.join(crate::config::artifacts::PRODUCTION_PLAN);
         prepare(&runtime).unwrap();
         fs::write(&victim, "plan").unwrap();
         symlink(victim, &artifact).unwrap();

@@ -92,8 +92,12 @@ fn run_with_factory(
 
 fn authorize(repo: &LocalState, settings: &ApplySettings) -> Result<Plan> {
     let plan: Plan = serde_json::from_slice(
-        &runtime_security::read(&repo.runtime().join("production-plan.json"))
-            .context("run plan first")?,
+        &runtime_security::read(
+            &repo
+                .runtime()
+                .join(crate::config::artifacts::PRODUCTION_PLAN),
+        )
+        .context("run plan first")?,
     )?;
     plan.verify()?;
     let target = settings
@@ -108,7 +112,7 @@ fn authorize(repo: &LocalState, settings: &ApplySettings) -> Result<Plan> {
         &plan.blockers,
         authorization::Policy {
             enabled: settings.enabled,
-            enabled_error: "PVES_ENABLE_PRODUCTION_APPLY must equal YES",
+            enabled_error: crate::settings::env::ENABLE_PRODUCTION_APPLY_ERROR,
             confirmation: settings.confirm_plan_sha.as_deref(),
             confirmation_error: "plan SHA confirmation mismatch",
             requested_target: target,
@@ -211,7 +215,7 @@ fn execute(
                     ..
                 } => {
                     let s = ssh.context("plan requires apply SSH settings")?;
-                    let mode = if path == "/etc/network/interfaces" {
+                    let mode = if path == crate::resource::native_paths::NETWORK_REMOTE {
                         "0644"
                     } else {
                         "0640"
@@ -439,7 +443,9 @@ mod tests {
         };
         plan.plan_sha256 = plan.calculate_hash().unwrap();
         crate::utility::atomic_file::write_json(
-            &repo.runtime().join("production-plan.json"),
+            &repo
+                .runtime()
+                .join(crate::config::artifacts::PRODUCTION_PLAN),
             &plan,
         )
         .unwrap();
@@ -468,7 +474,12 @@ mod tests {
 
         assert!(format!("{error:#}").contains("PVES_ENABLE_PRODUCTION_APPLY"));
         assert!(!factory_called.get());
-        assert!(!repo.runtime().join("apply-latest.json").exists());
+        assert!(
+            !repo
+                .runtime()
+                .join(crate::config::artifacts::APPLY_LATEST)
+                .exists()
+        );
     }
 
     #[test]
@@ -481,9 +492,10 @@ mod tests {
         .unwrap_err();
 
         assert!(format!("{error:#}").contains("injected client initialization failure"));
-        let journal: Value =
-            serde_json::from_slice(&fs::read(repo.runtime().join("apply-latest.json")).unwrap())
-                .unwrap();
+        let journal: Value = serde_json::from_slice(
+            &fs::read(repo.runtime().join(crate::config::artifacts::APPLY_LATEST)).unwrap(),
+        )
+        .unwrap();
         assert_eq!(journal["status"], "failed");
         assert!(
             journal["failure"]

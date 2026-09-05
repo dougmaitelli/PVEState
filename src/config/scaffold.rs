@@ -6,7 +6,10 @@ pub(crate) fn initialize(path: &Path) -> Result<()> {
     fs::create_dir_all(path.join("config"))?;
     fs::create_dir_all(path.join("observed/production"))?;
     runtime_security::prepare(&path.join(".runtime"))?;
-    fs::write(path.join("pves.yml"), "schema_version: 1\n")?;
+    fs::write(
+        path.join(crate::config::artifacts::REPOSITORY_MANIFEST),
+        "schema_version: 1\n",
+    )?;
     fs::write(path.join(".gitignore"), ".pves.env\n.secrets/\n.runtime/\n")?;
 
     for (name, content) in [

@@ -257,7 +257,7 @@ fn build(
         builder.operations().push(Operation::ApiMutation {
             target: ApiTarget::Pve,
             method: ApiMethod::Put,
-            domain: "dns".into(),
+            domain: Domain::Dns,
             resource: ResourceId::Named(repo.guests.node.clone()),
             endpoint: format!("/nodes/{}/dns", repo.guests.node).into(),
             changes,
@@ -269,7 +269,10 @@ fn build(
     let (operations, blockers) = builder.parts();
     backup::plan(repo, api, pbs, operations, blockers)?;
 
-    if let Ok(captured_network) = fs::read_to_string(repo.observed().join("network/interfaces")) {
+    if let Ok(captured_network) = fs::read_to_string(
+        repo.observed()
+            .join(crate::resource::native_paths::NETWORK_ARTIFACT),
+    ) {
         builder
             .blockers()
             .extend(network_safety_blockers(&captured_network, &repo.network)?);
@@ -283,8 +286,11 @@ fn build(
     }
     file::operation(
         repo,
-        ("network", &repo.guests.node),
-        ("network/interfaces", "/etc/network/interfaces"),
+        (Domain::Network, &repo.guests.node),
+        (
+            crate::resource::native_paths::NETWORK_ARTIFACT,
+            crate::resource::native_paths::NETWORK_REMOTE,
+        ),
         network::render::render(&repo.network),
         true,
         builder.operations(),
@@ -292,8 +298,11 @@ fn build(
     if let Some(policy) = &repo.cluster.firewall {
         file::operation(
             repo,
-            ("firewall", "cluster"),
-            ("pve/firewall/cluster.fw", "/etc/pve/firewall/cluster.fw"),
+            (Domain::Firewall, "cluster"),
+            (
+                crate::resource::native_paths::CLUSTER_FIREWALL_ARTIFACT,
+                crate::resource::native_paths::CLUSTER_FIREWALL_REMOTE,
+            ),
             firewall::render::render(policy),
             false,
             builder.operations(),
@@ -301,8 +310,11 @@ fn build(
     } else {
         file::deletion(
             repo,
-            ("firewall", "cluster"),
-            ("pve/firewall/cluster.fw", "/etc/pve/firewall/cluster.fw"),
+            (Domain::Firewall, "cluster"),
+            (
+                crate::resource::native_paths::CLUSTER_FIREWALL_ARTIFACT,
+                crate::resource::native_paths::CLUSTER_FIREWALL_REMOTE,
+            ),
             builder.operations(),
         )?;
     }
@@ -320,13 +332,13 @@ fn build(
     for (id, policy) in guest_firewalls {
         let id = id.to_string();
         let paths = (
-            format!("pve/firewall/{id}.fw"),
-            format!("/etc/pve/firewall/{id}.fw"),
+            crate::resource::native_paths::guest_firewall_artifact(&id),
+            crate::resource::native_paths::guest_firewall_remote(&id),
         );
         if let Some(policy) = policy {
             file::operation(
                 repo,
-                ("firewall", &id),
+                (Domain::Firewall, &id),
                 (&paths.0, &paths.1),
                 firewall::render::render(policy),
                 false,
@@ -335,19 +347,19 @@ fn build(
         } else {
             file::deletion(
                 repo,
-                ("firewall", &id),
+                (Domain::Firewall, &id),
                 (&paths.0, &paths.1),
                 builder.operations(),
             )?;
         }
     }
     let node = &repo.node.node.name;
-    let local = format!("pve/firewall/{node}-host.fw");
-    let remote = format!("/etc/pve/nodes/{node}/host.fw");
+    let local = crate::resource::native_paths::node_firewall_artifact(node);
+    let remote = crate::resource::native_paths::node_firewall_remote(node);
     if let Some(policy) = &repo.node.firewall {
         file::operation(
             repo,
-            ("firewall", &format!("node/{node}")),
+            (Domain::Firewall, &format!("node/{node}")),
             (&local, &remote),
             firewall::render::render(policy),
             false,
@@ -356,7 +368,7 @@ fn build(
     } else {
         file::deletion(
             repo,
-            ("firewall", &format!("node/{node}")),
+            (Domain::Firewall, &format!("node/{node}")),
             (&local, &remote),
             builder.operations(),
         )?;
@@ -367,7 +379,12 @@ fn build(
         progress::operation(operation.description());
     }
     progress::detail(format!("{} blocker(s)", plan.blockers.len()));
-    atomic_file::write_json(&repo.runtime().join("production-plan.json"), &plan)?;
+    atomic_file::write_json(
+        &repo
+            .runtime()
+            .join(crate::config::artifacts::PRODUCTION_PLAN),
+        &plan,
+    )?;
     Ok(plan)
 }
 
@@ -400,10 +417,13 @@ fn network_safety_blockers(content: &str, current: &crate::model::Network) -> Re
 
 fn firewall_artifacts(repo: &LocalState) -> Vec<(String, String)> {
     let mut artifacts = vec![
-        ("cluster".into(), "pve/firewall/cluster.fw".into()),
+        (
+            "cluster".into(),
+            crate::resource::native_paths::CLUSTER_FIREWALL_ARTIFACT.into(),
+        ),
         (
             format!("node/{}", repo.guests.node),
-            format!("pve/firewall/{}-host.fw", repo.guests.node),
+            crate::resource::native_paths::node_firewall_artifact(&repo.guests.node),
         ),
     ];
     artifacts.extend(
@@ -411,7 +431,12 @@ fn firewall_artifacts(repo: &LocalState) -> Vec<(String, String)> {
             .lxcs
             .keys()
             .chain(repo.guests.vms.keys())
-            .map(|id| (id.to_string(), format!("pve/firewall/{id}.fw"))),
+            .map(|id| {
+                (
+                    id.to_string(),
+                    crate::resource::native_paths::guest_firewall_artifact(id),
+                )
+            }),
     );
     artifacts
 }

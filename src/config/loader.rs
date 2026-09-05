@@ -10,7 +10,9 @@ pub(crate) fn open(root: &Path) -> Result<LocalState> {
         guests: read(&layout, "guests.yml")?,
         network: read(&layout, "network.yml")?,
         recovery_checks: read(&layout, "recovery-checks.yml")?,
-        manifest: serde_yaml::from_str(&fs::read_to_string(root.join("pves.yml"))?)?,
+        manifest: serde_yaml::from_str(&fs::read_to_string(
+            root.join(crate::config::artifacts::REPOSITORY_MANIFEST),
+        )?)?,
         cluster: read(&layout, "cluster.yml")?,
         node: read(&layout, "node.yml")?,
         storage: read(&layout, "storage.yml")?,

@@ -6,6 +6,44 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub(crate) mod env {
+    pub(crate) const PVE_HOST: &str = "PVE_HOST";
+    pub(crate) const PVE_API_SCHEME: &str = "PVE_API_SCHEME";
+    pub(crate) const PVE_API_PORT: &str = "PVE_API_PORT";
+    pub(crate) const PVE_SSH_PORT: &str = "PVE_SSH_PORT";
+    pub(crate) const PVE_SSH_USER: &str = "PVE_SSH_USER";
+    pub(crate) const PVE_VERIFY_TLS: &str = "PVE_VERIFY_TLS";
+    pub(crate) const PVE_CA_FILE: &str = "PVE_CA_FILE";
+    pub(crate) const PVE_API_TOKEN_ID: &str = "PVE_API_TOKEN_ID";
+    pub(crate) const PVE_API_TOKEN_SECRET: &str = "PVE_API_TOKEN_SECRET";
+    pub(crate) const PVE_APPLY_API_TOKEN_ID: &str = "PVE_APPLY_API_TOKEN_ID";
+    pub(crate) const PVE_APPLY_API_TOKEN_SECRET: &str = "PVE_APPLY_API_TOKEN_SECRET";
+    pub(crate) const PBS_ENDPOINT: &str = "PBS_ENDPOINT";
+    pub(crate) const PBS_VERIFY_TLS: &str = "PBS_VERIFY_TLS";
+    pub(crate) const PBS_CA_FILE: &str = "PBS_CA_FILE";
+    pub(crate) const PBS_API_TOKEN_ID: &str = "PBS_API_TOKEN_ID";
+    pub(crate) const PBS_API_TOKEN_SECRET: &str = "PBS_API_TOKEN_SECRET";
+    pub(crate) const PBS_APPLY_API_TOKEN_ID: &str = "PBS_APPLY_API_TOKEN_ID";
+    pub(crate) const PBS_APPLY_API_TOKEN_SECRET: &str = "PBS_APPLY_API_TOKEN_SECRET";
+    pub(crate) const PBS_APPLY_S3_ACCESS_KEY: &str = "PBS_APPLY_S3_ACCESS_KEY";
+    pub(crate) const PBS_APPLY_S3_SECRET_KEY: &str = "PBS_APPLY_S3_SECRET_KEY";
+    pub(crate) const APPLY_SSH_KEY: &str = "PVES_APPLY_SSH_KEY";
+    pub(crate) const APPLY_KNOWN_HOSTS: &str = "PVES_APPLY_KNOWN_HOSTS";
+    pub(crate) const TARGET_SSH_PORT: &str = "PVES_TARGET_SSH_PORT";
+    pub(crate) const TARGET_SSH_KEY: &str = "PVES_TARGET_SSH_KEY";
+    pub(crate) const TARGET_KNOWN_HOSTS: &str = "PVES_TARGET_KNOWN_HOSTS";
+    pub(crate) const TARGET_SSH_USER: &str = "PVES_TARGET_SSH_USER";
+    pub(crate) const ENABLE_PRODUCTION_APPLY: &str = "PVES_ENABLE_PRODUCTION_APPLY";
+    pub(crate) const ENABLE_RECOVERY: &str = "PVES_ENABLE_RECOVERY";
+    pub(crate) const CONFIRM_PLAN_SHA: &str = "PVES_CONFIRM_PLAN_SHA";
+    pub(crate) const APPLY_TARGET: &str = "PVES_APPLY_TARGET";
+    pub(crate) const APPLY_DOMAINS: &str = "PVES_APPLY_DOMAINS";
+    pub(crate) const APPLY_NETWORK_NOW: &str = "PVES_APPLY_NETWORK_NOW";
+    pub(crate) const ENABLE_PRODUCTION_APPLY_ERROR: &str =
+        "PVES_ENABLE_PRODUCTION_APPLY must equal YES";
+    pub(crate) const ENABLE_RECOVERY_ERROR: &str = "PVES_ENABLE_RECOVERY must equal YES";
+}
+
 #[derive(Clone)]
 pub(crate) struct Settings {
     pub(crate) pve: PveSettings,
@@ -81,19 +119,19 @@ pub(crate) struct RecoverySettings {
 
 impl Settings {
     pub(crate) fn load(root: &Path) -> Result<Self> {
-        dotenvy::from_path(root.join(".pves.env")).ok();
-        let host = required("PVE_HOST")?;
-        let api_scheme = value("PVE_API_SCHEME").unwrap_or_else(|| "https".into());
+        dotenvy::from_path(root.join(crate::config::artifacts::ENV_FILE)).ok();
+        let host = required(env::PVE_HOST)?;
+        let api_scheme = value(env::PVE_API_SCHEME).unwrap_or_else(|| "https".into());
         if !matches!(api_scheme.as_str(), "http" | "https") {
             bail!("PVE_API_SCHEME must be http or https")
         }
-        let api_port = port("PVE_API_PORT", 8006)?;
-        let ssh_port = port("PVE_SSH_PORT", 22)?;
-        let ssh_user = value("PVE_SSH_USER").unwrap_or_else(|| "root".into());
+        let api_port = port(env::PVE_API_PORT, 8006)?;
+        let ssh_port = port(env::PVE_SSH_PORT, 22)?;
+        let ssh_user = value(env::PVE_SSH_USER).unwrap_or_else(|| "root".into());
         let pve_endpoint = Url::parse(&format!("{api_scheme}://{host}:{api_port}"))
             .context("invalid PVE endpoint")?;
         let pbs_endpoint =
-            Url::parse(&required("PBS_ENDPOINT")?).context("invalid PBS_ENDPOINT")?;
+            Url::parse(&required(env::PBS_ENDPOINT)?).context("invalid PBS_ENDPOINT")?;
 
         let discovery_ssh = SshTarget {
             host: host.clone(),
@@ -102,7 +140,7 @@ impl Settings {
             key: root.join(".secrets/pve_discovery"),
             known_hosts: root.join(".secrets/known_hosts"),
         };
-        let mutation_ssh = optional_paths("PVES_APPLY_SSH_KEY", "PVES_APPLY_KNOWN_HOSTS")?.map(
+        let mutation_ssh = optional_paths(env::APPLY_SSH_KEY, env::APPLY_KNOWN_HOSTS)?.map(
             |(key, known_hosts)| SshTarget {
                 host: host.clone(),
                 port: ssh_port,
@@ -111,17 +149,17 @@ impl Settings {
                 known_hosts,
             },
         );
-        let recovery_port = port("PVES_TARGET_SSH_PORT", 22)?;
-        let recovery_ssh = optional_paths("PVES_TARGET_SSH_KEY", "PVES_TARGET_KNOWN_HOSTS")?.map(
+        let recovery_port = port(env::TARGET_SSH_PORT, 22)?;
+        let recovery_ssh = optional_paths(env::TARGET_SSH_KEY, env::TARGET_KNOWN_HOSTS)?.map(
             |(key, known_hosts)| SshTargetTemplate {
                 port: recovery_port,
-                user: value("PVES_TARGET_SSH_USER").unwrap_or_else(|| "root".into()),
+                user: value(env::TARGET_SSH_USER).unwrap_or_else(|| "root".into()),
                 key,
                 known_hosts,
             },
         );
 
-        let secrets = ["PBS_APPLY_S3_ACCESS_KEY", "PBS_APPLY_S3_SECRET_KEY"]
+        let secrets = [env::PBS_APPLY_S3_ACCESS_KEY, env::PBS_APPLY_S3_SECRET_KEY]
             .into_iter()
             .filter_map(|name| value(name).map(|secret| (name.into(), secret)))
             .collect();
@@ -129,17 +167,17 @@ impl Settings {
         Ok(Self {
             pve: PveSettings {
                 endpoint: pve_endpoint,
-                verify_tls: boolean("PVE_VERIFY_TLS", true)?,
-                ca_file: value("PVE_CA_FILE").map(PathBuf::from),
-                discovery: credential("PVE_API_TOKEN_ID", "PVE_API_TOKEN_SECRET")?,
-                mutation: credential("PVE_APPLY_API_TOKEN_ID", "PVE_APPLY_API_TOKEN_SECRET")?,
+                verify_tls: boolean(env::PVE_VERIFY_TLS, true)?,
+                ca_file: value(env::PVE_CA_FILE).map(PathBuf::from),
+                discovery: credential(env::PVE_API_TOKEN_ID, env::PVE_API_TOKEN_SECRET)?,
+                mutation: credential(env::PVE_APPLY_API_TOKEN_ID, env::PVE_APPLY_API_TOKEN_SECRET)?,
             },
             pbs: PbsSettings {
                 endpoint: pbs_endpoint,
-                verify_tls: boolean("PBS_VERIFY_TLS", true)?,
-                ca_file: value("PBS_CA_FILE").map(PathBuf::from),
-                discovery: credential("PBS_API_TOKEN_ID", "PBS_API_TOKEN_SECRET")?,
-                mutation: credential("PBS_APPLY_API_TOKEN_ID", "PBS_APPLY_API_TOKEN_SECRET")?,
+                verify_tls: boolean(env::PBS_VERIFY_TLS, true)?,
+                ca_file: value(env::PBS_CA_FILE).map(PathBuf::from),
+                discovery: credential(env::PBS_API_TOKEN_ID, env::PBS_API_TOKEN_SECRET)?,
+                mutation: credential(env::PBS_APPLY_API_TOKEN_ID, env::PBS_APPLY_API_TOKEN_SECRET)?,
             },
             ssh: SshSettings {
                 discovery: discovery_ssh,
@@ -147,12 +185,12 @@ impl Settings {
                 recovery: recovery_ssh,
             },
             apply: ApplySettings {
-                enabled: yes("PVES_ENABLE_PRODUCTION_APPLY"),
-                confirm_plan_sha: value("PVES_CONFIRM_PLAN_SHA"),
-                target: value("PVES_APPLY_TARGET")
+                enabled: yes(env::ENABLE_PRODUCTION_APPLY),
+                confirm_plan_sha: value(env::CONFIRM_PLAN_SHA),
+                target: value(env::APPLY_TARGET)
                     .map(|target| Url::parse(&target).context("invalid PVES_APPLY_TARGET"))
                     .transpose()?,
-                domains: value("PVES_APPLY_DOMAINS")
+                domains: value(env::APPLY_DOMAINS)
                     .unwrap_or_default()
                     .split(',')
                     .map(str::trim)
@@ -160,12 +198,12 @@ impl Settings {
                     .map(str::parse)
                     .collect::<Result<_, _>>()
                     .context("invalid PVES_APPLY_DOMAINS")?,
-                activate_network: yes("PVES_APPLY_NETWORK_NOW"),
+                activate_network: yes(env::APPLY_NETWORK_NOW),
                 secrets,
             },
             recovery: RecoverySettings {
-                enabled: yes("PVES_ENABLE_RECOVERY"),
-                confirm_plan_sha: value("PVES_CONFIRM_PLAN_SHA"),
+                enabled: yes(env::ENABLE_RECOVERY),
+                confirm_plan_sha: value(env::CONFIRM_PLAN_SHA),
             },
         })
     }

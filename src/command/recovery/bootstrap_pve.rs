@@ -1,7 +1,7 @@
 use crate::{
     client::RemoteHost,
     config::LocalState,
-    resource::{firewall, network},
+    resource::{firewall, native_paths, network},
     utility::{progress, remote_file, shell},
 };
 use anyhow::Result;
@@ -27,14 +27,14 @@ pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
 
     write(
         ssh,
-        "/etc/network/interfaces",
+        native_paths::NETWORK_REMOTE,
         &network::render::render(&repo.network),
         "0644",
     )?;
     if let Some(policy) = &repo.cluster.firewall {
         write(
             ssh,
-            "/etc/pve/firewall/cluster.fw",
+            native_paths::CLUSTER_FIREWALL_REMOTE,
             &firewall::render::render(policy),
             "0640",
         )?;
@@ -42,7 +42,7 @@ pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
     if let Some(policy) = &repo.node.firewall {
         write(
             ssh,
-            &format!("/etc/pve/nodes/{}/host.fw", repo.node.node.name),
+            &native_paths::node_firewall_remote(&repo.node.node.name),
             &firewall::render::render(policy),
             "0640",
         )?;

@@ -49,16 +49,17 @@ impl CapturedState {
     pub(crate) fn load(local: &LocalState, max_age: Duration) -> Result<Self> {
         let observed = local.observed();
         let manifest: CaptureManifest = serde_json::from_slice(
-            &fs::read(observed.join("manifest.json")).context("run capture first")?,
+            &fs::read(observed.join(crate::config::artifacts::CAPTURE_MANIFEST))
+                .context("run capture first")?,
         )?;
         manifest.verify(&observed, max_age)?;
         let id = CaptureId(manifest.capture_id.clone());
         let pve = CapturedPve(CapturedApi::load(
-            &observed.join("api/pve.json"),
+            &observed.join(crate::config::artifacts::PVE_SNAPSHOT),
             source_endpoint(&manifest, "pve-api")?,
         )?);
         let pbs = CapturedPbs(CapturedApi::load(
-            &observed.join("api/pbs.json"),
+            &observed.join(crate::config::artifacts::PBS_SNAPSHOT),
             source_endpoint(&manifest, "pbs-api")?,
         )?);
 

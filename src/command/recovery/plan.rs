@@ -84,7 +84,10 @@ pub(super) fn create(repo: &LocalState, target: &str) -> Result<()> {
         plan_sha256: String::new(),
     };
     plan_envelope::sign(&mut plan)?;
-    atomic_file::write_json(&repo.runtime().join("recovery-plan.json"), &plan)?;
+    atomic_file::write_json(
+        &repo.runtime().join(crate::config::artifacts::RECOVERY_PLAN),
+        &plan,
+    )?;
     progress::finish(true);
     println!("{}", serde_json::to_string_pretty(&plan)?);
     Ok(())
@@ -92,7 +95,7 @@ pub(super) fn create(repo: &LocalState, target: &str) -> Result<()> {
 
 pub(super) fn load(repo: &LocalState) -> Result<RecoveryPlan> {
     Ok(serde_json::from_slice(
-        &runtime_security::read(&repo.runtime().join("recovery-plan.json"))
+        &runtime_security::read(&repo.runtime().join(crate::config::artifacts::RECOVERY_PLAN))
             .context("run recover plan first")?,
     )?)
 }
@@ -110,7 +113,7 @@ pub(super) fn authorize(
         &plan.blockers,
         authorization::Policy {
             enabled: settings.enabled,
-            enabled_error: "PVES_ENABLE_RECOVERY must equal YES",
+            enabled_error: crate::settings::env::ENABLE_RECOVERY_ERROR,
             confirmation: settings.confirm_plan_sha.as_deref(),
             confirmation_error: "recovery plan SHA mismatch",
             requested_target: target,

@@ -134,7 +134,7 @@ pub(crate) fn collect_artifacts(observed: &Path) -> Result<BTreeMap<String, Arti
     visit(observed, observed, &mut files)?;
     let mut artifacts = BTreeMap::new();
     for (relative, path) in files {
-        if relative == "manifest.json" {
+        if relative == crate::config::artifacts::CAPTURE_MANIFEST {
             continue;
         }
         let content = fs::read(&path).with_context(|| format!("read {}", path.display()))?;

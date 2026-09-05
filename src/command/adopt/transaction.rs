@@ -53,7 +53,7 @@ impl Journal {
             &runtime.join(format!("adopt-{}.json", self.adoption_id)),
             self,
         )?;
-        atomic_file::write_json(&runtime.join("adopt-latest.json"), self)
+        atomic_file::write_json(&runtime.join(crate::config::artifacts::ADOPT_LATEST), self)
     }
 }
 
@@ -239,9 +239,10 @@ mod tests {
         assert!(format!("{error:#}").contains("injected second-file failure"));
         assert_eq!(fs::read(repo.root().join(paths[0])).unwrap(), before[0]);
         assert_eq!(fs::read(repo.root().join(paths[1])).unwrap(), before[1]);
-        let journal: serde_json::Value =
-            serde_json::from_slice(&fs::read(repo.runtime().join("adopt-latest.json")).unwrap())
-                .unwrap();
+        let journal: serde_json::Value = serde_json::from_slice(
+            &fs::read(repo.runtime().join(crate::config::artifacts::ADOPT_LATEST)).unwrap(),
+        )
+        .unwrap();
         assert_eq!(journal["status"], "failed");
         assert_eq!(journal["documents"][0]["status"], "rolled-back");
     }
@@ -255,7 +256,12 @@ mod tests {
 
         assert!(validate(&repo, &documents).is_err());
         assert_eq!(fs::read(repo.root().join(path)).unwrap(), before);
-        assert!(!repo.runtime().join("adopt-latest.json").exists());
+        assert!(
+            !repo
+                .runtime()
+                .join(crate::config::artifacts::ADOPT_LATEST)
+                .exists()
+        );
     }
 
     #[test]
@@ -283,9 +289,10 @@ mod tests {
             fs::read_to_string(repo.root().join("config/node.yml")).unwrap(),
             node
         );
-        let journal: serde_json::Value =
-            serde_json::from_slice(&fs::read(repo.runtime().join("adopt-latest.json")).unwrap())
-                .unwrap();
+        let journal: serde_json::Value = serde_json::from_slice(
+            &fs::read(repo.runtime().join(crate::config::artifacts::ADOPT_LATEST)).unwrap(),
+        )
+        .unwrap();
         assert_eq!(journal["status"], "succeeded");
     }
 }

@@ -1,0 +1,11 @@
+pub(crate) const ENV_FILE: &str = ".pves.env";
+pub(crate) const REPOSITORY_MANIFEST: &str = "pves.yml";
+pub(crate) const CAPTURE_MANIFEST: &str = "manifest.json";
+pub(crate) const PVE_SNAPSHOT: &str = "api/pve.json";
+pub(crate) const PBS_SNAPSHOT: &str = "api/pbs.json";
+pub(crate) const PRODUCTION_PLAN: &str = "production-plan.json";
+pub(crate) const RECOVERY_PLAN: &str = "recovery-plan.json";
+pub(crate) const APPLY_LATEST: &str = "apply-latest.json";
+pub(crate) const ADOPT_LATEST: &str = "adopt-latest.json";
+pub(crate) const HOST_LATEST: &str = "host-latest.json";
+pub(crate) const VALIDATION: &str = "validation.json";

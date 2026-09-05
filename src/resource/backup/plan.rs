@@ -65,7 +65,7 @@ fn pve_jobs(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation>) 
                 operations,
                 ApiTarget::Pve,
                 method,
-                "backup",
+                crate::command::plan::Domain::Backup,
                 &format!("pve/{id}"),
                 if method == ApiMethod::Post {
                     "/cluster/backup".into()
@@ -82,7 +82,7 @@ fn pve_jobs(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation>) 
                 operations,
                 ApiTarget::Pve,
                 ApiMethod::Delete,
-                "backup",
+                crate::command::plan::Domain::Backup,
                 &format!("pve/{id}"),
                 format!("/cluster/backup/{}", encoded(id)),
                 BTreeMap::new(),
@@ -108,7 +108,7 @@ fn datastore(
             operations,
             ApiTarget::Pbs,
             ApiMethod::Post,
-            "pbs",
+            crate::command::plan::Domain::Pbs,
             &format!("datastore/{}", desired.name),
             "/config/datastore".into(),
             BTreeMap::from([
@@ -147,7 +147,7 @@ fn datastore(
             operations,
             ApiTarget::Pbs,
             ApiMethod::Put,
-            "pbs",
+            crate::command::plan::Domain::Pbs,
             &format!("datastore/{}", desired.name),
             format!("/config/datastore/{}", encoded(&desired.name)),
             changes,
@@ -162,7 +162,7 @@ fn s3_endpoint(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation
         operations.push(Operation::ApiMutation {
             target: ApiTarget::Pbs,
             method: ApiMethod::Post,
-            domain: "pbs".into(),
+            domain: crate::command::plan::Domain::Pbs,
             resource: format!("s3/{}", desired.id).into(),
             endpoint: "/config/s3".into(),
             changes: BTreeMap::from([
@@ -171,8 +171,14 @@ fn s3_endpoint(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation
                 ("region".into(), desired.region.clone()),
             ]),
             environment_changes: BTreeMap::from([
-                ("access-key".into(), "PBS_APPLY_S3_ACCESS_KEY".into()),
-                ("secret-key".into(), "PBS_APPLY_S3_SECRET_KEY".into()),
+                (
+                    "access-key".into(),
+                    crate::settings::env::PBS_APPLY_S3_ACCESS_KEY.into(),
+                ),
+                (
+                    "secret-key".into(),
+                    crate::settings::env::PBS_APPLY_S3_SECRET_KEY.into(),
+                ),
             ]),
             digest: None,
         });
@@ -191,7 +197,7 @@ fn s3_endpoint(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation
             operations,
             ApiTarget::Pbs,
             ApiMethod::Put,
-            "pbs",
+            crate::command::plan::Domain::Pbs,
             &format!("s3/{}", desired.id),
             format!("/config/s3/{}", encoded(&desired.id)),
             changes,
@@ -264,7 +270,7 @@ fn reconcile_job(
             operations,
             ApiTarget::Pbs,
             method,
-            "pbs",
+            crate::command::plan::Domain::Pbs,
             &format!("{}/{id}", root.trim_start_matches("/config/")),
             if method == ApiMethod::Post {
                 root.into()
@@ -283,7 +289,7 @@ fn absent_jobs(actual: &Value, absent: &[String], root: &str, operations: &mut V
                 operations,
                 ApiTarget::Pbs,
                 ApiMethod::Delete,
-                "pbs",
+                crate::command::plan::Domain::Pbs,
                 &format!("{}/{id}", root.trim_start_matches("/config/")),
                 format!("{root}/{}", encoded(id)),
                 BTreeMap::new(),
@@ -332,7 +338,7 @@ fn push(
     operations: &mut Vec<Operation>,
     target: ApiTarget,
     method: ApiMethod,
-    domain: &str,
+    domain: crate::command::plan::Domain,
     resource: &str,
     endpoint: String,
     changes: BTreeMap<String, String>,
@@ -340,7 +346,7 @@ fn push(
     operations.push(Operation::ApiMutation {
         target,
         method,
-        domain: domain.into(),
+        domain,
         resource: resource.into(),
         endpoint: endpoint.into(),
         changes,

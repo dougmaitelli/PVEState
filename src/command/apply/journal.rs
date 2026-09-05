@@ -59,7 +59,7 @@ impl ApplyJournal {
         Self {
             schema_version: 1,
             path: runtime.join(format!("apply-{apply_id}.json")),
-            latest: runtime.join("apply-latest.json"),
+            latest: runtime.join(crate::config::artifacts::APPLY_LATEST),
             apply_id,
             plan_sha256: plan.plan_sha256.clone(),
             target: plan.target.clone(),
@@ -191,7 +191,11 @@ mod tests {
         let value: serde_json::Value =
             serde_json::from_slice(&fs::read(journal.path()).unwrap()).unwrap();
         assert_eq!(value["status"], "succeeded");
-        assert!(temp.path().join("apply-latest.json").is_file());
+        assert!(
+            temp.path()
+                .join(crate::config::artifacts::APPLY_LATEST)
+                .is_file()
+        );
     }
 
     #[test]

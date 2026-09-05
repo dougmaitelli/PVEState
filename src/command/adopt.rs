@@ -39,8 +39,12 @@ pub(crate) fn run(repo: &LocalState, preview: bool, all: bool, requested: &[Stri
     runtime_security::prepare(&repo.runtime())?;
     let captured = CapturedState::load(repo, chrono::Duration::minutes(30))?;
     let plan: Plan = serde_json::from_slice(
-        &runtime_security::read(&repo.runtime().join("production-plan.json"))
-            .context("run plan first")?,
+        &runtime_security::read(
+            &repo
+                .runtime()
+                .join(crate::config::artifacts::PRODUCTION_PLAN),
+        )
+        .context("run plan first")?,
     )?;
     plan.verify()?;
     if plan.capture_id != captured.id().as_str() {
@@ -132,7 +136,7 @@ fn candidates(repo: &LocalState, captured: &CapturedState, plan: &Plan) -> Resul
         else {
             continue;
         };
-        if *target != ApiTarget::Pve || domain != "guests" {
+        if *target != ApiTarget::Pve || *domain != crate::command::plan::Domain::Guest {
             for (field, desired) in changes {
                 result.push(candidate(
                     resource,
@@ -220,8 +224,12 @@ fn candidates(repo: &LocalState, captured: &CapturedState, plan: &Plan) -> Resul
             }
             | Operation::DeleteFile {
                 domain, resource, ..
-            } if domain == "network" || domain == "firewall" => {
-                let target = if domain == "network" {
+            } if matches!(
+                domain,
+                crate::command::plan::Domain::Network | crate::command::plan::Domain::Firewall
+            ) =>
+            {
+                let target = if *domain == crate::command::plan::Domain::Network {
                     native::Target::Network
                 } else {
                     native::Target::Firewall {

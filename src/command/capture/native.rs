@@ -2,6 +2,7 @@ use crate::{
     client::RemoteHost,
     config::LocalState,
     discovery::PveSnapshot,
+    resource::native_paths,
     utility::{progress, shell},
 };
 use anyhow::{Context, Result, bail};
@@ -14,7 +15,7 @@ pub(super) fn export(
     snapshot: &PveSnapshot,
 ) -> Result<()> {
     for (local, remote) in [
-        ("network/interfaces", "/etc/network/interfaces"),
+        (native_paths::NETWORK_ARTIFACT, native_paths::NETWORK_REMOTE),
         ("network/hosts", "/etc/hosts"),
         ("storage/fstab", "/etc/fstab"),
         ("pve/storage.cfg", "/etc/pve/storage.cfg"),
@@ -25,16 +26,16 @@ pub(super) fn export(
     }
     optional_file(
         ssh,
-        "/etc/pve/firewall/cluster.fw",
-        &observed.join("pve/firewall/cluster.fw"),
+        native_paths::CLUSTER_FIREWALL_REMOTE,
+        &observed.join(native_paths::CLUSTER_FIREWALL_ARTIFACT),
     )?;
 
     let mut guest_ids = BTreeSet::new();
     for (node_name, node) in &snapshot.nodes {
         optional_file(
             ssh,
-            &format!("/etc/pve/nodes/{node_name}/host.fw"),
-            &observed.join(format!("pve/firewall/{node_name}-host.fw")),
+            &native_paths::node_firewall_remote(node_name),
+            &observed.join(native_paths::node_firewall_artifact(node_name)),
         )?;
         for id in node.lxcs.keys() {
             guest_ids.insert(id.clone());
@@ -66,8 +67,8 @@ pub(super) fn export(
     for id in guest_ids {
         optional_file(
             ssh,
-            &format!("/etc/pve/firewall/{id}.fw"),
-            &observed.join(format!("pve/firewall/{id}.fw")),
+            &native_paths::guest_firewall_remote(&id),
+            &observed.join(native_paths::guest_firewall_artifact(&id)),
         )?;
     }
 

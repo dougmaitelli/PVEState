@@ -1,3 +1,4 @@
+pub(crate) mod artifacts;
 mod layout;
 mod loader;
 mod local_patch;

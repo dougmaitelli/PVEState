@@ -67,7 +67,7 @@ pub(super) fn capture(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<Vec<Str
         })
         .collect();
     atomic_file::write(
-        &repo.runtime().join("host-latest.json"),
+        &repo.runtime().join(crate::config::artifacts::HOST_LATEST),
         &serde_json::to_vec_pretty(&host)?,
     )?;
     Ok(failures)
@@ -114,6 +114,10 @@ mod tests {
         fs::create_dir_all(repo.runtime()).unwrap();
 
         assert!(capture(&repo, &FakeSsh).unwrap().is_empty());
-        assert!(repo.runtime().join("host-latest.json").is_file());
+        assert!(
+            repo.runtime()
+                .join(crate::config::artifacts::HOST_LATEST)
+                .is_file()
+        );
     }
 }

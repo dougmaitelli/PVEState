@@ -1,3 +1,4 @@
+use crate::resource::native_paths;
 use crate::utility::yaml_patch::Segment;
 use crate::{
     config::{ConfigDocument, LocalPatch, LocalState},
@@ -51,7 +52,7 @@ pub(crate) fn adoption_patches(
 ) -> Result<Vec<LocalPatch>> {
     match target {
         Target::Network => {
-            let content = captured.read_to_string("network/interfaces")?;
+            let content = captured.read_to_string(native_paths::NETWORK_ARTIFACT)?;
             let parsed = parse_network(&content, &local.network)?;
             if !parsed.unmodeled.is_empty() {
                 bail!(
@@ -126,7 +127,7 @@ fn firewall_paths(
     captured: &CapturedNative,
     resource: &str,
 ) -> Result<(std::path::PathBuf, ConfigDocument, Vec<Segment>)> {
-    let observed = captured.path("pve/firewall");
+    let observed = captured.path(native_paths::FIREWALL_ARTIFACT_ROOT);
     if resource == "cluster" {
         return Ok((
             observed.join("cluster.fw"),

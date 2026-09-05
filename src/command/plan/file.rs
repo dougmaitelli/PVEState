@@ -9,7 +9,7 @@ use std::fs;
 
 pub(super) fn operation(
     repo: &LocalState,
-    identity: (&str, &str),
+    identity: (Domain, &str),
     paths: (&str, &str),
     wanted: String,
     activate: bool,
@@ -19,13 +19,12 @@ pub(super) fn operation(
     let (local, remote) = paths;
     let current = fs::read_to_string(repo.observed().join(local)).ok();
     let current_text = current.as_deref().unwrap_or_default();
-    let differs = if domain == "firewall" {
+    let differs = if domain == Domain::Firewall {
         firewall::render::semantic(&wanted) != firewall::render::semantic(current_text)
     } else {
         network::render::semantic_lines(&wanted) != network::render::semantic_lines(current_text)
     };
     if differs {
-        let domain = Domain::from(domain);
         let resource = ResourceId::parse(resource);
         let before_sha256 = current
             .as_ref()
@@ -45,14 +44,14 @@ pub(super) fn operation(
 
 pub(super) fn deletion(
     repo: &LocalState,
-    identity: (&str, &str),
+    identity: (Domain, &str),
     paths: (&str, &str),
     operations: &mut Vec<Operation>,
 ) -> Result<()> {
     let Some(current) = fs::read(repo.observed().join(paths.0)).ok() else {
         return Ok(());
     };
-    let domain = Domain::from(identity.0);
+    let domain = identity.0;
     let resource = ResourceId::parse(identity.1);
     operations.push(Operation::DeleteFile {
         domain,
