@@ -4,6 +4,7 @@ use serde_yaml::{Mapping, Value};
 #[derive(Debug, Clone)]
 pub(crate) enum Segment {
     Key(String),
+    #[allow(dead_code, reason = "supported by the generic YAML patch engine")]
     Index(usize),
 }
 
@@ -12,6 +13,7 @@ pub(crate) enum Patch {
     Set(Vec<Segment>, Value),
     #[allow(dead_code, reason = "used by collection adoption adapters")]
     Remove(Vec<Segment>),
+    RemoveSequenceValue(Vec<Segment>, Value),
 }
 
 /// Applies semantic YAML patches. Scalar replacements use the surgical editor so
@@ -45,10 +47,22 @@ pub(crate) fn apply_patches(input: &str, patches: &[Patch]) -> Result<String> {
         match patch {
             Patch::Set(path, value) => set_value(&mut document, path, value.clone())?,
             Patch::Remove(path) => remove_value(&mut document, path)?,
+            Patch::RemoveSequenceValue(path, value) => {
+                remove_sequence_value(&mut document, path, value)?;
+            },
         }
     }
     let serialized = serde_yaml::to_string(&document).context("serialize patched YAML")?;
     Ok(with_line_ending(serialized, newline))
+}
+
+fn remove_sequence_value(document: &mut Value, path: &[Segment], value: &Value) -> Result<()> {
+    let target = descend(document, path, false)?;
+    let Value::Sequence(sequence) = target else {
+        bail!("YAML patch target is not a sequence")
+    };
+    sequence.retain(|item| item != value);
+    Ok(())
 }
 
 fn replace_structure(input: &str, path: &[Segment], value: &Value) -> Result<String> {
@@ -467,5 +481,23 @@ mod tests {
         assert!(value["jobs"].get("old").is_none());
         assert_eq!(value["jobs"]["new"]["schedule"], "weekly");
         assert_eq!(value["items"].as_sequence().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn removes_sequence_members_by_value_without_index_shifts() {
+        let input = "absent: [first, second, third]\n";
+        let patches = [
+            Patch::RemoveSequenceValue(
+                vec![Segment::Key("absent".into())],
+                Value::String("first".into()),
+            ),
+            Patch::RemoveSequenceValue(
+                vec![Segment::Key("absent".into())],
+                Value::String("third".into()),
+            ),
+        ];
+        let output = apply_patches(input, &patches).unwrap();
+        let value: Value = serde_yaml::from_str(&output).unwrap();
+        assert_eq!(value["absent"], serde_yaml::to_value(["second"]).unwrap());
     }
 }

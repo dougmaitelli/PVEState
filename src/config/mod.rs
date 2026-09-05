@@ -1,3 +1,4 @@
+mod adoption;
 pub(crate) mod artifacts;
 mod layout;
 mod loader;
@@ -6,6 +7,7 @@ mod local_state;
 pub(crate) mod scaffold;
 pub(crate) mod schema;
 
+pub(crate) use adoption::AdoptionCandidate;
 pub(crate) use layout::RepositoryLayout;
 pub(crate) use loader::open;
 pub(crate) use local_patch::{ConfigDocument, LocalPatch};

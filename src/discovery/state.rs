@@ -76,6 +76,31 @@ impl CapturedState {
         debug_assert_eq!(self.id.as_str(), self.manifest.0.capture_id);
         &self.id
     }
+
+    #[cfg(test)]
+    pub(crate) fn fixture(
+        id: &str,
+        pve_endpoint: &str,
+        pve: BTreeMap<String, Value>,
+        pbs_endpoint: &str,
+        pbs: BTreeMap<String, Value>,
+        native_root: PathBuf,
+    ) -> Self {
+        let manifest = CaptureManifest::new(chrono::Utc::now(), BTreeMap::new(), BTreeMap::new());
+        Self {
+            id: CaptureId(id.into()),
+            manifest: VerifiedCaptureManifest(manifest),
+            pve: CapturedPve(CapturedApi {
+                endpoint: pve_endpoint.into(),
+                responses: pve,
+            }),
+            pbs: CapturedPbs(CapturedApi {
+                endpoint: pbs_endpoint.into(),
+                responses: pbs,
+            }),
+            native: CapturedNative { root: native_root },
+        }
+    }
 }
 
 impl CapturedApi {
@@ -110,6 +135,12 @@ impl CapturedApi {
 }
 
 impl CapturedPve {
+    pub(crate) fn response(&self, path: &str) -> Result<Value> {
+        self.0.response(path)
+    }
+}
+
+impl CapturedPbs {
     pub(crate) fn response(&self, path: &str) -> Result<Value> {
         self.0.response(path)
     }

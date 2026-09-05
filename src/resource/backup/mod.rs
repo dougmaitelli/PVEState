@@ -1,3 +1,4 @@
+pub(crate) mod adopt;
 mod model;
 pub(crate) mod plan;
 

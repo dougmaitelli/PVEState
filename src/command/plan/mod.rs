@@ -81,6 +81,15 @@ pub(crate) enum ApiMethod {
 }
 
 impl Operation {
+    pub(crate) const fn resource(&self) -> &ResourceId {
+        match self {
+            Self::ApiMutation { resource, .. }
+            | Self::GrowDisk { resource, .. }
+            | Self::WriteFile { resource, .. }
+            | Self::DeleteFile { resource, .. } => resource,
+        }
+    }
+
     pub(crate) fn domain(&self) -> Domain {
         match self {
             Self::ApiMutation { domain, .. }
@@ -222,7 +231,7 @@ fn build_captured(
     )
 }
 
-fn build(
+pub(super) fn build(
     repo: &LocalState,
     api: &dyn PveClient,
     pbs: &dyn PbsClient,

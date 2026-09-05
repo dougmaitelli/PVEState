@@ -80,7 +80,6 @@ impl FromStr for GuestRef {
 pub(crate) enum GuestField {
     Hostname,
     OsType,
-    Unprivileged,
     Name,
     Machine,
     Bios,
@@ -94,12 +93,8 @@ pub(crate) enum GuestField {
     Startup,
     RootFs,
     EfiDisk,
-    DiskSize,
-    BindMountBackup(u8),
     BindMount(u8),
     Network(u8),
-    Usb(u8),
-    Delete,
 }
 
 impl GuestField {
@@ -107,7 +102,6 @@ impl GuestField {
         match self {
             Self::Hostname => "hostname".into(),
             Self::OsType => "ostype".into(),
-            Self::Unprivileged => "unprivileged".into(),
             Self::Name => "name".into(),
             Self::Machine => "machine".into(),
             Self::Bios => "bios".into(),
@@ -121,38 +115,9 @@ impl GuestField {
             Self::Startup => "startup".into(),
             Self::RootFs => "rootfs".into(),
             Self::EfiDisk => "efidisk0".into(),
-            Self::DiskSize => "size_gb".into(),
-            Self::BindMountBackup(index) => format!("mp{index}.backed_up_by_pve"),
             Self::BindMount(index) => format!("mp{index}"),
             Self::Network(index) => format!("net{index}"),
-            Self::Usb(index) => format!("usb{index}"),
-            Self::Delete => "delete".into(),
         }
-    }
-
-    pub(crate) fn from_api(value: &str) -> Option<Self> {
-        let scalar = match value {
-            "hostname" => Self::Hostname,
-            "ostype" => Self::OsType,
-            "unprivileged" => Self::Unprivileged,
-            "name" => Self::Name,
-            "machine" => Self::Machine,
-            "bios" => Self::Bios,
-            "cores" => Self::Cores,
-            "sockets" => Self::Sockets,
-            "memory" => Self::Memory,
-            "swap" => Self::Swap,
-            "onboot" => Self::OnBoot,
-            "cpu" => Self::Cpu,
-            "agent" => Self::Agent,
-            "startup" => Self::Startup,
-            "rootfs" => Self::RootFs,
-            "efidisk0" => Self::EfiDisk,
-            "size_gb" => Self::DiskSize,
-            "delete" => Self::Delete,
-            _ => return numbered(value),
-        };
-        Some(scalar)
     }
 }
 
@@ -255,22 +220,6 @@ impl<'de> Deserialize<'de> for UsbSlot {
     }
 }
 
-fn numbered(value: &str) -> Option<GuestField> {
-    for (prefix, constructor) in [
-        ("mp", GuestField::BindMount as fn(u8) -> GuestField),
-        ("net", GuestField::Network),
-        ("usb", GuestField::Usb),
-    ] {
-        if let Some(index) = value
-            .strip_prefix(prefix)
-            .and_then(|value| value.parse().ok())
-        {
-            return Some(constructor(index));
-        }
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,14 +228,5 @@ mod tests {
     fn guest_references_generate_api_paths() {
         let guest: GuestRef = "qemu/201".parse().unwrap();
         assert_eq!(guest.config_endpoint("pve"), "/nodes/pve/qemu/201/config");
-    }
-
-    #[test]
-    fn numbered_fields_are_typed() {
-        assert_eq!(GuestField::from_api("mp3"), Some(GuestField::BindMount(3)));
-        assert_eq!(
-            GuestField::BindMountBackup(3).api_name(),
-            "mp3.backed_up_by_pve"
-        );
     }
 }

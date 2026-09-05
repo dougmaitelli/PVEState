@@ -9,6 +9,7 @@ pub(crate) enum ConfigDocument {
     Network,
     Cluster,
     Node,
+    Backup,
 }
 
 impl ConfigDocument {
@@ -18,6 +19,7 @@ impl ConfigDocument {
             Self::Network => "config/network.yml",
             Self::Cluster => "config/cluster.yml",
             Self::Node => "config/node.yml",
+            Self::Backup => "config/backup.yml",
         }
     }
 }
@@ -38,6 +40,11 @@ pub(crate) enum LocalPatch {
         document: ConfigDocument,
         path: ConfigPath,
     },
+    RemoveSequenceValue {
+        document: ConfigDocument,
+        path: ConfigPath,
+        value: Value,
+    },
 }
 
 impl LocalPatch {
@@ -45,7 +52,8 @@ impl LocalPatch {
         match self {
             Self::SetScalar { document, .. }
             | Self::ReplaceResource { document, .. }
-            | Self::RemoveResource { document, .. } => *document,
+            | Self::RemoveResource { document, .. }
+            | Self::RemoveSequenceValue { document, .. } => *document,
         }
     }
 
@@ -55,6 +63,9 @@ impl LocalPatch {
                 Patch::Set(path, value)
             },
             Self::RemoveResource { path, .. } => Patch::Remove(path),
+            Self::RemoveSequenceValue { path, value, .. } => {
+                Patch::RemoveSequenceValue(path, value)
+            },
         }
     }
 }

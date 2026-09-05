@@ -1,7 +1,8 @@
 use crate::resource::native_paths;
 use crate::utility::yaml_patch::Segment;
 use crate::{
-    config::{ConfigDocument, LocalPatch, LocalState},
+    command::plan::{Domain, Operation},
+    config::{AdoptionCandidate, ConfigDocument, LocalPatch, LocalState},
     discovery::CapturedNative,
     model::{
         Bridge, FirewallAction, FirewallAlias, FirewallDirection, FirewallIpSet,
@@ -709,6 +710,44 @@ pub(crate) fn parse_network(content: &str, current: &Network) -> Result<ParsedNe
         managed: adopted,
         unmodeled,
     })
+}
+
+pub(crate) fn adoption_candidate(
+    local: &LocalState,
+    captured: &crate::discovery::CapturedNative,
+    operation: &Operation,
+) -> Result<AdoptionCandidate> {
+    let target = match operation.domain() {
+        Domain::Network => Target::Network,
+        Domain::Firewall => Target::Firewall {
+            resource: operation.resource().to_string(),
+        },
+        domain => {
+            return Ok(AdoptionCandidate::blocked(
+                operation.resource(),
+                "file",
+                "local rendering",
+                "captured file",
+                format!("{domain} has no native adoption adapter"),
+            ));
+        },
+    };
+    match adoption_patches(local, captured, &target) {
+        Ok(patches) => Ok(AdoptionCandidate::adoptable(
+            operation.resource(),
+            "file",
+            "local rendering",
+            "captured file",
+            patches,
+        )),
+        Err(error) => Ok(AdoptionCandidate::blocked(
+            operation.resource(),
+            "file",
+            "local rendering",
+            "captured file",
+            format!("{error:#}"),
+        )),
+    }
 }
 
 #[cfg(test)]
