@@ -1,5 +1,5 @@
-use super::Operation;
-use anyhow::{Result, bail};
+use super::{Domain, Operation};
+use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +26,18 @@ impl Plan {
         if schema_version != 3 {
             bail!("unsupported plan schema {schema_version}; run plan again")
         }
+        if let Some(operations) = value
+            .get("operations")
+            .and_then(serde_json::Value::as_array)
+        {
+            for (index, operation) in operations.iter().enumerate() {
+                if let Some(domain) = operation.get("domain") {
+                    serde_json::from_value::<Domain>(domain.clone()).with_context(|| {
+                        format!("invalid plan field operations[{index}].domain")
+                    })?;
+                }
+            }
+        }
         Ok(serde_json::from_value(value)?)
     }
 
@@ -48,5 +60,39 @@ impl crate::utility::plan_envelope::PlanEnvelope for Plan {
 
     fn set_integrity(&mut self, value: String) {
         self.plan_sha256 = value;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plan_deserialization_reports_invalid_domain_field() {
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "schema_version": 3,
+            "created_at": "2026-09-05T00:00:00Z",
+            "capture_id": "capture-1",
+            "target": "https://pve.test:8006",
+            "pbs_target": "https://pbs.test:8007",
+            "operations": [{
+                "action": "api-mutation",
+                "target": "pve",
+                "method": "put",
+                "domain": "Guest",
+                "resource": "lxc/101",
+                "endpoint": "/nodes/pve/lxc/101/config",
+                "changes": {},
+                "digest": null
+            }],
+            "blockers": [],
+            "plan_sha256": "digest"
+        }))
+        .unwrap();
+
+        let error = Plan::from_slice(&bytes).unwrap_err();
+
+        assert!(format!("{error:#}").contains("operations[0].domain"));
+        assert!(format!("{error:#}").contains("unknown operation domain `Guest`"));
     }
 }

@@ -187,7 +187,7 @@ mod tests {
     fn plan_with_operation() -> Plan {
         let mut plan = plan();
         plan.operations.push(Operation::DeleteFile {
-            domain: "firewall".into(),
+            domain: crate::reconcile::Domain::Firewall,
             resource: "guest/101".into(),
             target: crate::reconcile::ManagedFile::GuestFirewall { vmid: 101 },
             before_content: "old firewall".into(),

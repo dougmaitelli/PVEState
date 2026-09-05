@@ -431,7 +431,7 @@ mod tests {
         Operation::ApiMutation {
             target: ApiTarget::Pve,
             method: ApiMethod::Put,
-            domain: "guests".into(),
+            domain: crate::reconcile::Domain::Guest,
             resource: resource.into(),
             endpoint: format!("/{resource}").into(),
             changes: BTreeMap::new(),
@@ -569,7 +569,7 @@ mod tests {
             enabled: true,
             confirm_plan_sha: Some("digest".into()),
             target: Some(Url::parse("https://pve.test:8006").unwrap()),
-            domains: BTreeSet::from(["guests".into()]),
+            domains: BTreeSet::from([crate::reconcile::Domain::Guest]),
             activate_network: false,
             secrets: BTreeMap::new(),
         };
@@ -630,7 +630,10 @@ mod tests {
             enabled: true,
             confirm_plan_sha: Some("fixture".into()),
             target: Some(Url::parse(&fixture.pve_target).unwrap()),
-            domains: BTreeSet::from(["guests".into(), "pbs".into()]),
+            domains: BTreeSet::from([
+                crate::reconcile::Domain::Guest,
+                crate::reconcile::Domain::Pbs,
+            ]),
             activate_network: false,
             secrets: BTreeMap::from([(
                 "PBS_APPLY_S3_ACCESS_KEY".into(),

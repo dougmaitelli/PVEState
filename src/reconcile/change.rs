@@ -6,7 +6,7 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::{fmt, ops::Deref};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Domain {
     #[serde(rename = "guests")]
@@ -109,19 +109,6 @@ impl fmt::Display for Domain {
     }
 }
 
-impl From<&str> for Domain {
-    fn from(value: &str) -> Self {
-        match value {
-            "guests" => Self::Guest,
-            "network" => Self::Network,
-            "firewall" => Self::Firewall,
-            "dns" => Self::Dns,
-            "backup" => Self::Backup,
-            "pbs" => Self::Pbs,
-            _ => panic!("unknown operation domain {value}"),
-        }
-    }
-}
 impl std::str::FromStr for Domain {
     type Err = anyhow::Error;
 
@@ -137,6 +124,23 @@ impl std::str::FromStr for Domain {
         }
     }
 }
+
+impl TryFrom<&str> for Domain {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self> {
+        value.parse()
+    }
+}
+
+impl<'de> Deserialize<'de> for Domain {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(de::Error::custom)
+    }
+}
+
 impl From<Domain> for String {
     fn from(value: Domain) -> Self {
         value.to_string()
@@ -377,5 +381,36 @@ mod tests {
         assert!(serde_json::from_str::<DiskId>("\"not-a-disk\"").is_err());
         assert!(serde_json::from_str::<SecretName>("\"lower-case\"").is_err());
         assert!("unknown".parse::<Domain>().is_err());
+    }
+
+    #[test]
+    fn domain_parses_every_serialized_spelling() {
+        for (spelling, expected) in [
+            ("guests", Domain::Guest),
+            ("network", Domain::Network),
+            ("firewall", Domain::Firewall),
+            ("dns", Domain::Dns),
+            ("backup", Domain::Backup),
+            ("pbs", Domain::Pbs),
+        ] {
+            assert_eq!(spelling.parse::<Domain>().unwrap(), expected);
+            assert_eq!(Domain::try_from(spelling).unwrap(), expected);
+            assert_eq!(
+                serde_json::to_string(&expected).unwrap(),
+                format!("\"{spelling}\"")
+            );
+            assert_eq!(
+                serde_json::from_str::<Domain>(&format!("\"{spelling}\"")).unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_and_case_mismatched_domains_are_errors() {
+        for spelling in ["unknown", "Guest", "GUESTS", "Network"] {
+            assert!(spelling.parse::<Domain>().is_err());
+            assert!(serde_json::from_str::<Domain>(&format!("\"{spelling}\"")).is_err());
+        }
     }
 }
