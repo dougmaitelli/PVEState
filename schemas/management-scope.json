@@ -1,140 +1,194 @@
-[
-  {
-    "document": "pves.yml",
-    "fields": "*",
-    "class": "metadata",
-    "behavior": "Repository format and tool compatibility metadata."
-  },
-  {
-    "document": "cluster.yml",
-    "fields": "{cluster,proxmox,workload_profile,backup}",
-    "class": "metadata",
-    "behavior": "Environment inventory and operator-facing context."
-  },
-  {
-    "document": "node.yml",
-    "fields": "node.*",
-    "class": "metadata",
-    "behavior": "Observed host identity and version expectations."
-  },
-  {
-    "document": "node.yml",
-    "fields": "storage_topology.*",
-    "class": "declared-only",
-    "behavior": "Documents storage prerequisites, but recovery does not currently consume them."
-  },
-  {
-    "document": "guests.yml",
-    "fields": "node",
-    "class": "production-managed",
-    "behavior": "Selects the PVE node used by guest planning and DNS reconciliation."
-  },
-  {
-    "document": "guests.yml",
-    "fields": "lxcs.*.{hostname,os,cores,memory_mb,swap_mb,networks,bind_mounts,start,firewall}",
-    "class": "production-managed",
-    "behavior": "Compared with the live LXC API; listed devices are updated and removed devices are deleted."
-  },
-  {
-    "document": "guests.yml",
-    "fields": "lxcs.*.rootfs",
-    "class": "production-managed",
-    "behavior": "Storage moves and shrinking are blocked; growth is applied."
-  },
-  {
-    "document": "guests.yml",
-    "fields": "lxcs.*.unprivileged",
-    "class": "declared-only",
-    "behavior": "Captured in desired state but not reconciled during production apply."
-  },
-  {
-    "document": "guests.yml",
-    "fields": "vms.*.{name,machine,bios,cpu,memory_mb,networks,usb_passthrough,qemu_guest_agent,start}",
-    "class": "production-managed",
-    "behavior": "Compared with the live QEMU API; listed NIC/USB devices are updated and removed devices are deleted."
-  },
-  {
-    "document": "guests.yml",
-    "fields": "vms.*.{disk,efi}",
-    "class": "production-managed",
-    "behavior": "Disk growth, discard, and EFI options are managed; storage moves and shrinking are blocked."
-  },
-  {
-    "document": "network.yml",
-    "fields": "dns.*",
-    "class": "production-managed",
-    "behavior": "Search domain and listed DNS servers are updated through the PVE API."
-  },
-  {
-    "document": "network.yml",
-    "fields": "{interfaces,bridges}",
-    "class": "production-managed",
-    "behavior": "Renders /etc/network/interfaces; activation requires an additional confirmation."
-  },
-  {
-    "document": "network.yml",
-    "fields": "{host,management_address,management_gateway}",
-    "class": "declared-only",
-    "behavior": "Describes the management endpoint but is not independently reconciled."
-  },
-  {
-    "document": "cluster.yml",
-    "fields": "firewall",
-    "class": "production-managed",
-    "behavior": "Creates, replaces, or removes the cluster firewall file with concurrent-change checks."
-  },
-  {
-    "document": "node.yml",
-    "fields": "firewall",
-    "class": "production-managed",
-    "behavior": "Creates, replaces, or removes the managed node firewall file with concurrent-change checks."
-  },
-  {
-    "document": "storage.yml",
-    "fields": "*",
-    "class": "declared-only",
-    "behavior": "Documents mounts, pools, and PVE storage definitions but is not consumed by apply or recovery."
-  },
-  {
-    "document": "backup.yml",
-    "fields": "{pbs.datastore,pbs.s3_endpoint,pbs.jobs,pve_backup_jobs,absent_pve_backup_jobs}",
-    "class": "production-managed",
-    "behavior": "Reconciles PVE backup jobs and PBS datastore, S3 endpoint, prune, verify, and sync jobs; removals require explicit absent IDs."
-  },
-  {
-    "document": "backup.yml",
-    "fields": "{pbs.endpoint,pbs.version,pbs.guest}",
-    "class": "metadata",
-    "behavior": "Describes the PBS deployment; connection settings and credentials come from the environment."
-  },
-  {
-    "document": "restore.yml",
-    "fields": "{target.expected_hostname,target.expected_host_key_sha256,target.production_address,pbs_bootstrap.lxc_template,pbs_bootstrap.storage_attached_to_pve,archives,restore_order,reattach_mounts,application.configure_command}",
-    "class": "recovery-only",
-    "behavior": "Controls guarded replacement-host recovery stages."
-  },
-  {
-    "document": "restore.yml",
-    "fields": "{target.plan_max_age_minutes,pbs_bootstrap.vmid,pbs_bootstrap.datastore,pbs_bootstrap.cache_path,pbs_bootstrap.s3_endpoint_id,pbs_bootstrap.bucket,pbs_bootstrap.region,protected_vmids,application.repository,application.docker_guest_vmid,application.configure_playbook}",
-    "class": "declared-only",
-    "behavior": "Accepted by the recovery model but not currently consumed by recovery execution."
-  },
-  {
-    "document": "recovery-checks.yml",
-    "fields": "*",
-    "class": "validation-only",
-    "behavior": "Commands executed read-only by pves validate."
-  },
-  {
-    "document": "services.yml",
-    "fields": "*",
-    "class": "declared-only",
-    "behavior": "Application inventory and persistence guidance; no command currently consumes it."
-  },
-  {
-    "document": "required-secrets.yml",
-    "fields": "*",
-    "class": "metadata",
-    "behavior": "Inventory of off-host secrets; values are never managed by PVE State."
-  }
-]
+{
+  "levels": [
+    {
+      "level": "archived",
+      "meaning": "Retained as evidence or inventory; no local reconciliation is promised."
+    },
+    {
+      "level": "declared",
+      "meaning": "Represented in typed local configuration but not reconciled."
+    },
+    {
+      "level": "planned",
+      "meaning": "Compared with captured state and emitted as drift, but not adoptable or applicable."
+    },
+    {
+      "level": "adoptable",
+      "meaning": "Captured drift can be written into local configuration, but local changes are not applicable."
+    },
+    {
+      "level": "applicable",
+      "meaning": "Participates in its named workflow through guarded execution."
+    }
+  ],
+  "entries": [
+    {
+      "document": "pves.yml",
+      "fields": "*",
+      "class": "metadata",
+      "level": "archived",
+      "behavior": "Repository format and tool compatibility metadata."
+    },
+    {
+      "document": "cluster.yml",
+      "fields": "{cluster,proxmox,workload_profile,backup}",
+      "class": "metadata",
+      "level": "archived",
+      "behavior": "Environment inventory and operator-facing context."
+    },
+    {
+      "document": "node.yml",
+      "fields": "node.*",
+      "class": "metadata",
+      "level": "archived",
+      "behavior": "Observed host identity and version expectations."
+    },
+    {
+      "document": "node.yml",
+      "fields": "storage_topology.*",
+      "class": "declared-only",
+      "level": "declared",
+      "behavior": "Documents storage prerequisites, but recovery does not currently consume them."
+    },
+    {
+      "document": "guests.yml",
+      "fields": "node",
+      "class": "production-managed",
+      "level": "applicable",
+      "behavior": "Selects the PVE node used by guest planning and DNS reconciliation."
+    },
+    {
+      "document": "guests.yml",
+      "fields": "{lxcs.*,vms.*} resource existence",
+      "class": "declared-only",
+      "level": "declared",
+      "behavior": "Locally declared guest IDs are owned. Missing declared guests are blocked because creation is unsupported; extra live guests are archived outside ownership and are never deleted."
+    },
+    {
+      "document": "guests.yml",
+      "fields": "lxcs.*.{hostname,os,cores,memory_mb,swap_mb,networks,bind_mounts,start,firewall}",
+      "class": "production-managed",
+      "level": "applicable",
+      "behavior": "Compared with the live LXC API; listed devices are updated and removed devices are deleted."
+    },
+    {
+      "document": "guests.yml",
+      "fields": "lxcs.*.rootfs",
+      "class": "production-managed",
+      "level": "applicable",
+      "behavior": "Storage moves and shrinking are blocked; growth is applied."
+    },
+    {
+      "document": "guests.yml",
+      "fields": "lxcs.*.unprivileged",
+      "class": "declared-only",
+      "level": "declared",
+      "behavior": "Captured in desired state but not reconciled during production apply."
+    },
+    {
+      "document": "guests.yml",
+      "fields": "vms.*.{name,machine,bios,cpu,memory_mb,networks,usb_passthrough,qemu_guest_agent,start}",
+      "class": "production-managed",
+      "level": "applicable",
+      "behavior": "Compared with the live QEMU API; listed NIC/USB devices are updated and removed devices are deleted."
+    },
+    {
+      "document": "guests.yml",
+      "fields": "vms.*.{disk,efi}",
+      "class": "production-managed",
+      "level": "applicable",
+      "behavior": "Disk growth, discard, and EFI options are managed; storage moves and shrinking are blocked."
+    },
+    {
+      "document": "network.yml",
+      "fields": "dns.*",
+      "class": "production-managed",
+      "level": "applicable",
+      "behavior": "Search domain and listed DNS servers are updated through the PVE API."
+    },
+    {
+      "document": "network.yml",
+      "fields": "{interfaces,bridges}",
+      "class": "production-managed",
+      "level": "applicable",
+      "behavior": "Renders /etc/network/interfaces; activation requires an additional confirmation."
+    },
+    {
+      "document": "network.yml",
+      "fields": "{host,management_address,management_gateway}",
+      "class": "declared-only",
+      "level": "declared",
+      "behavior": "Describes the management endpoint but is not independently reconciled."
+    },
+    {
+      "document": "cluster.yml",
+      "fields": "firewall",
+      "class": "production-managed",
+      "level": "applicable",
+      "behavior": "Creates, replaces, or removes the cluster firewall file with concurrent-change checks."
+    },
+    {
+      "document": "node.yml",
+      "fields": "firewall",
+      "class": "production-managed",
+      "level": "applicable",
+      "behavior": "Creates, replaces, or removes the managed node firewall file with concurrent-change checks."
+    },
+    {
+      "document": "storage.yml",
+      "fields": "*",
+      "class": "declared-only",
+      "level": "declared",
+      "behavior": "Documents mounts, pools, and PVE storage definitions but is not consumed by apply or recovery."
+    },
+    {
+      "document": "backup.yml",
+      "fields": "{pbs.datastore,pbs.s3_endpoint,pbs.jobs,pve_backup_jobs,absent_pve_backup_jobs}",
+      "class": "production-managed",
+      "level": "applicable",
+      "behavior": "Reconciles PVE backup jobs and PBS datastore, S3 endpoint, prune, verify, and sync jobs; removals require explicit absent IDs."
+    },
+    {
+      "document": "backup.yml",
+      "fields": "{pbs.endpoint,pbs.version,pbs.guest}",
+      "class": "metadata",
+      "level": "archived",
+      "behavior": "Describes the PBS deployment; connection settings and credentials come from the environment."
+    },
+    {
+      "document": "restore.yml",
+      "fields": "{target.expected_hostname,target.expected_host_key_sha256,target.production_address,pbs_bootstrap.lxc_template,pbs_bootstrap.storage_attached_to_pve,archives,restore_order,reattach_mounts,application.configure_command}",
+      "class": "recovery-only",
+      "level": "applicable",
+      "behavior": "Controls guarded replacement-host recovery stages."
+    },
+    {
+      "document": "restore.yml",
+      "fields": "{target.plan_max_age_minutes,pbs_bootstrap.vmid,pbs_bootstrap.datastore,pbs_bootstrap.cache_path,pbs_bootstrap.s3_endpoint_id,pbs_bootstrap.bucket,pbs_bootstrap.region,protected_vmids,application.repository,application.docker_guest_vmid,application.configure_playbook}",
+      "class": "declared-only",
+      "level": "declared",
+      "behavior": "Accepted by the recovery model but not currently consumed by recovery execution."
+    },
+    {
+      "document": "recovery-checks.yml",
+      "fields": "*",
+      "class": "validation-only",
+      "level": "applicable",
+      "behavior": "Commands executed read-only by pves validate."
+    },
+    {
+      "document": "services.yml",
+      "fields": "*",
+      "class": "declared-only",
+      "level": "declared",
+      "behavior": "Application inventory and persistence guidance; no command currently consumes it."
+    },
+    {
+      "document": "required-secrets.yml",
+      "fields": "*",
+      "class": "metadata",
+      "level": "archived",
+      "behavior": "Inventory of off-host secrets; values are never managed by PVE State."
+    }
+  ]
+}

@@ -19,10 +19,13 @@ use crate::{
         progress, runtime_security,
     },
 };
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fs};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "action", rename_all = "kebab-case")]
@@ -263,7 +266,26 @@ pub(super) fn build(
 ) -> Result<Plan> {
     let mut builder = PlanBuilder::new(capture_id, api.endpoint(), pbs.endpoint());
 
+    let live_lxcs = guest_ids(api.get(&format!("/nodes/{}/lxc", repo.guests.node))?)?;
+    let live_vms = guest_ids(api.get(&format!("/nodes/{}/qemu", repo.guests.node))?)?;
+
+    guest_existence_blockers(
+        crate::model::GuestKind::Lxc,
+        repo.guests.lxcs.keys().copied().collect(),
+        &live_lxcs,
+        builder.blockers(),
+    );
+    guest_existence_blockers(
+        crate::model::GuestKind::Qemu,
+        repo.guests.vms.keys().copied().collect(),
+        &live_vms,
+        builder.blockers(),
+    );
+
     for (id, desired) in &repo.guests.lxcs {
+        if !live_lxcs.contains(id) {
+            continue;
+        }
         let actual = api.get(
             &crate::model::GuestRef::new(crate::model::GuestKind::Lxc, *id)
                 .config_endpoint(&repo.guests.node),
@@ -279,6 +301,9 @@ pub(super) fn build(
         )?;
     }
     for (id, desired) in &repo.guests.vms {
+        if !live_vms.contains(id) {
+            continue;
+        }
         let actual = api.get(
             &crate::model::GuestRef::new(crate::model::GuestKind::Qemu, *id)
                 .config_endpoint(&repo.guests.node),
@@ -419,6 +444,34 @@ pub(super) fn build(
         &plan,
     )?;
     Ok(plan)
+}
+
+fn guest_ids(value: serde_json::Value) -> Result<BTreeSet<u32>> {
+    value
+        .as_array()
+        .context("guest list response is not an array")?
+        .iter()
+        .map(|guest| {
+            let vmid = guest.get("vmid").context("guest list entry has no vmid")?;
+            vmid.as_u64()
+                .or_else(|| vmid.as_str().and_then(|value| value.parse().ok()))
+                .and_then(|value| u32::try_from(value).ok())
+                .context("guest list entry has an invalid vmid")
+        })
+        .collect()
+}
+
+fn guest_existence_blockers(
+    kind: crate::model::GuestKind,
+    local: BTreeSet<u32>,
+    captured: &BTreeSet<u32>,
+    blockers: &mut Vec<String>,
+) {
+    blockers.extend(
+        local
+            .difference(captured)
+            .map(|vmid| format!("{kind}/{vmid}: guest creation is not managed")),
+    );
 }
 
 fn compare(
@@ -759,6 +812,29 @@ mod tests {
             serde_json::json!({"search":"example.test", "dns1":"1.1.1.1", "dns2":"8.8.8.8"});
         let changes = dns_changes("example.test", &["1.1.1.1".into()], &actual);
         assert_eq!(changes.get("delete").map(String::as_str), Some("dns2"));
+    }
+
+    #[test]
+    fn missing_local_guests_are_blocked_and_extra_live_guests_are_unowned() {
+        let mut blockers = Vec::new();
+        guest_existence_blockers(
+            crate::model::GuestKind::Qemu,
+            BTreeSet::from([201, 202]),
+            &BTreeSet::from([201, 203]),
+            &mut blockers,
+        );
+
+        assert_eq!(blockers, ["qemu/202: guest creation is not managed"]);
+    }
+
+    #[test]
+    fn guest_lists_require_valid_identifiers() {
+        assert_eq!(
+            guest_ids(serde_json::json!([{"vmid": 101}, {"vmid": "102"}])).unwrap(),
+            BTreeSet::from([101, 102])
+        );
+        assert!(guest_ids(serde_json::json!([{"name": "missing"}])).is_err());
+        assert!(guest_ids(serde_json::json!({"vmid": 101})).is_err());
     }
 
     #[test]

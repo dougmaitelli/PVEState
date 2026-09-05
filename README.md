@@ -144,19 +144,34 @@ the plan if a newer or different capture is currently selected.
 ### Configuration scope
 
 Loading and validating a configuration file does not by itself mean every field
-is changed by `apply`. PVE State classifies configuration as:
+is changed by `apply`. PVE State classifies configuration by workflow and by
+its highest implemented management level. The levels are:
+
+- `archived`: retained as evidence or inventory without reconciliation;
+- `declared`: represented in typed local configuration;
+- `planned`: compared and emitted as drift;
+- `adoptable`: captured drift can be written into local configuration;
+- `applicable`: guarded execution exists for the entry's named workflow.
+
+The workflow classes remain:
 
 - `production-managed`: compared with production and emitted into a guarded plan;
 - `recovery-only`: consumed only by replacement-host recovery or validation;
 - `declared-only`: represented in desired state but not yet reconciled;
 - `metadata`: descriptive repository or environment information.
 
-The field-level source of truth is `scope::entries()` in the tool. `pves schema`
+The field-level source of truth is `scope::manifest()` in the tool. `pves schema`
 publishes it as `management-scope.json`; the checked-in copy lives alongside the
 JSON Schemas. PVE/PBS backup jobs, node firewalls, embedded guest firewall policies,
-LXC bind mounts, and guest device removals are production-managed. Remaining
-gaps, such as privileged/unprivileged LXC conversion, are explicitly marked
-`declared-only`.
+LXC bind mounts, and guest device removals are production-managed and applicable.
+Remaining gaps, such as privileged/unprivileged LXC conversion, guest resource
+creation/deletion, storage topology, and host services, are explicitly marked
+`declared-only` and never advertised as applicable.
+
+Guest ownership is intentionally conservative: only IDs declared in `guests.yml`
+are reconciled. A declared guest missing from the capture blocks the plan because
+creation is unsupported. Extra live guests remain archived evidence, are outside
+ownership, and are never implicitly deleted.
 
 ### Safety model
 

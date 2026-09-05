@@ -2,6 +2,16 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
+pub(crate) enum ManagementLevel {
+    Archived,
+    Declared,
+    Planned,
+    Adoptable,
+    Applicable,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum ManagementClass {
     ProductionManaged,
     RecoveryOnly,
@@ -15,8 +25,44 @@ pub(crate) struct ScopeEntry {
     pub(crate) document: &'static str,
     pub(crate) fields: &'static str,
     pub(crate) class: ManagementClass,
+    pub(crate) level: ManagementLevel,
     pub(crate) behavior: &'static str,
 }
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub(crate) struct LevelDefinition {
+    pub(crate) level: ManagementLevel,
+    pub(crate) meaning: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ScopeManifest {
+    pub(crate) levels: &'static [LevelDefinition],
+    pub(crate) entries: &'static [ScopeEntry],
+}
+
+const LEVELS: &[LevelDefinition] = &[
+    LevelDefinition {
+        level: ManagementLevel::Archived,
+        meaning: "Retained as evidence or inventory; no local reconciliation is promised.",
+    },
+    LevelDefinition {
+        level: ManagementLevel::Declared,
+        meaning: "Represented in typed local configuration but not reconciled.",
+    },
+    LevelDefinition {
+        level: ManagementLevel::Planned,
+        meaning: "Compared with captured state and emitted as drift, but not adoptable or applicable.",
+    },
+    LevelDefinition {
+        level: ManagementLevel::Adoptable,
+        meaning: "Captured drift can be written into local configuration, but local changes are not applicable.",
+    },
+    LevelDefinition {
+        level: ManagementLevel::Applicable,
+        meaning: "Participates in its named workflow through guarded execution.",
+    },
+];
 
 const ENTRIES: &[ScopeEntry] = &[
     entry(
@@ -48,6 +94,12 @@ const ENTRIES: &[ScopeEntry] = &[
         "node",
         ManagementClass::ProductionManaged,
         "Selects the PVE node used by guest planning and DNS reconciliation.",
+    ),
+    entry(
+        "guests.yml",
+        "{lxcs.*,vms.*} resource existence",
+        ManagementClass::DeclaredOnly,
+        "Locally declared guest IDs are owned. Missing declared guests are blocked because creation is unsupported; extra live guests are archived outside ownership and are never deleted.",
     ),
     entry(
         "guests.yml",
@@ -169,12 +221,27 @@ const fn entry(
         document,
         fields,
         class,
+        level: match class {
+            ManagementClass::ProductionManaged
+            | ManagementClass::RecoveryOnly
+            | ManagementClass::ValidationOnly => ManagementLevel::Applicable,
+            ManagementClass::DeclaredOnly => ManagementLevel::Declared,
+            ManagementClass::Metadata => ManagementLevel::Archived,
+        },
         behavior,
     }
 }
 
+#[cfg(test)]
 pub(crate) fn entries() -> &'static [ScopeEntry] {
     ENTRIES
+}
+
+pub(crate) const fn manifest() -> ScopeManifest {
+    ScopeManifest {
+        levels: LEVELS,
+        entries: ENTRIES,
+    }
 }
 
 #[cfg(test)]
@@ -205,5 +272,42 @@ mod tests {
     #[test]
     fn every_scope_has_an_explanation() {
         assert!(entries().iter().all(|entry| !entry.behavior.is_empty()));
+    }
+
+    #[test]
+    fn captured_guest_existence_is_not_advertised_as_managed() {
+        let existence = entries()
+            .iter()
+            .find(|entry| entry.fields.contains("resource existence"))
+            .unwrap();
+        assert_eq!(existence.class, ManagementClass::DeclaredOnly);
+        assert_eq!(existence.level, ManagementLevel::Declared);
+        assert!(existence.behavior.contains("outside ownership"));
+    }
+
+    #[test]
+    fn every_management_level_is_defined_in_the_manifest() {
+        assert_eq!(manifest().levels.len(), 5);
+        assert!(
+            manifest()
+                .levels
+                .iter()
+                .all(|definition| !definition.meaning.is_empty())
+        );
+    }
+
+    #[test]
+    fn declared_and_production_classes_have_unambiguous_levels() {
+        assert!(entries().iter().all(|entry| match entry.class {
+            ManagementClass::DeclaredOnly => entry.level == ManagementLevel::Declared,
+            ManagementClass::ProductionManaged => entry.level == ManagementLevel::Applicable,
+            _ => true,
+        }));
+
+        let storage = entries()
+            .iter()
+            .find(|entry| entry.document == "storage.yml" && entry.fields == "*")
+            .unwrap();
+        assert_eq!(storage.level, ManagementLevel::Declared);
     }
 }

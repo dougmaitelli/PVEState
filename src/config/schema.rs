@@ -30,7 +30,7 @@ pub(crate) fn write(output: Option<&Path>) -> Result<()> {
     write!("required-secrets.schema.json", RequiredSecretsConfig);
     fs::write(
         dir.join("management-scope.json"),
-        serde_json::to_string_pretty(scope::entries())? + "\n",
+        serde_json::to_string_pretty(&scope::manifest())? + "\n",
     )?;
 
     Ok(())
