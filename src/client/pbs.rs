@@ -1,7 +1,9 @@
 use super::{PbsClient, transport::JsonApiClient};
 use crate::{
+    discovery::{
+        ApiObject, ObjectResponse, ObjectsResponse, RawResponse, capture as capture_response,
+    },
     settings::{ApiCredential, PbsSettings},
-    utility::progress,
 };
 use anyhow::Result;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
@@ -9,18 +11,6 @@ use reqwest::Method;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
-
-const ENDPOINTS: [(&str, &str); 9] = [
-    ("version", "/version"),
-    ("datastore_usage", "/status/datastore-usage"),
-    ("datastores", "/config/datastore"),
-    ("s3_endpoints", "/config/s3"),
-    ("remotes", "/config/remote"),
-    ("sync_jobs", "/config/sync"),
-    ("prune_jobs", "/config/prune"),
-    ("verify_jobs", "/config/verify"),
-    ("node_status", "/nodes/localhost/status"),
-];
 
 pub struct Pbs {
     transport: JsonApiClient,
@@ -32,26 +22,29 @@ pub struct Snapshot {
     pub collected_at: chrono::DateTime<chrono::Utc>,
     pub mode: &'static str,
     pub endpoint: String,
-    pub requests: BTreeMap<String, Response>,
+    pub requests: Responses,
     pub datastores: BTreeMap<String, Datastore>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct Response {
-    pub ok: bool,
-    pub path: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
+pub struct Responses {
+    pub version: RawResponse,
+    pub datastore_usage: ObjectsResponse,
+    pub datastores: ObjectsResponse,
+    pub s3_endpoints: ObjectsResponse,
+    pub remotes: ObjectsResponse,
+    pub sync_jobs: ObjectsResponse,
+    pub prune_jobs: ObjectsResponse,
+    pub verify_jobs: ObjectsResponse,
+    pub node_status: ObjectResponse,
 }
 
 #[derive(Debug, Serialize)]
 pub struct Datastore {
-    pub config: Value,
-    pub status: Response,
-    pub groups: Response,
-    pub snapshots: Response,
+    pub config: ApiObject,
+    pub status: ObjectResponse,
+    pub groups: ObjectsResponse,
+    pub snapshots: ObjectsResponse,
 }
 
 impl Pbs {
@@ -100,17 +93,20 @@ impl Pbs {
 }
 
 pub fn capture(client: &dyn PbsClient) -> Snapshot {
-    let mut requests = BTreeMap::new();
-    for (name, path) in ENDPOINTS {
-        requests.insert(name.into(), safe_get(client, path));
-    }
+    let requests = Responses {
+        version: get(client, "/version"),
+        datastore_usage: get(client, "/status/datastore-usage"),
+        datastores: get(client, "/config/datastore"),
+        s3_endpoints: get(client, "/config/s3"),
+        remotes: get(client, "/config/remote"),
+        sync_jobs: get(client, "/config/sync"),
+        prune_jobs: get(client, "/config/prune"),
+        verify_jobs: get(client, "/config/verify"),
+        node_status: get(client, "/nodes/localhost/status"),
+    };
 
     let mut datastores = BTreeMap::new();
-    if let Some(items) = requests
-        .get("datastores")
-        .and_then(|response| response.data.as_ref())
-        .and_then(Value::as_array)
-    {
+    if let Some(items) = requests.datastores.data.as_ref() {
         for config in items {
             let Some(name) = config
                 .get("name")
@@ -125,9 +121,9 @@ pub fn capture(client: &dyn PbsClient) -> Snapshot {
                 name.into(),
                 Datastore {
                     config: config.clone(),
-                    status: safe_get(client, &format!("{root}/status")),
-                    groups: safe_get(client, &format!("{root}/groups")),
-                    snapshots: safe_get(client, &format!("{root}/snapshots")),
+                    status: get(client, &format!("{root}/status")),
+                    groups: get(client, &format!("{root}/groups")),
+                    snapshots: get(client, &format!("{root}/snapshots")),
                 },
             );
         }
@@ -143,25 +139,11 @@ pub fn capture(client: &dyn PbsClient) -> Snapshot {
     }
 }
 
-fn safe_get(client: &dyn PbsClient, path: &str) -> Response {
-    progress::operation(format!("GET {path}"));
-    match client.get(path) {
-        Ok(data) => Response {
-            ok: true,
-            path: path.into(),
-            data: Some(data),
-            error: None,
-        },
-        Err(error) => {
-            progress::detail(format!("failed: {error:#}"));
-            Response {
-                ok: false,
-                path: path.into(),
-                data: None,
-                error: Some(format!("{error:#}")),
-            }
-        },
-    }
+fn get<T: serde::de::DeserializeOwned>(
+    client: &dyn PbsClient,
+    path: &str,
+) -> crate::discovery::CapturedResponse<T> {
+    capture_response(path, || client.get(path))
 }
 
 impl PbsClient for Pbs {
@@ -185,23 +167,47 @@ impl PbsClient for Pbs {
 impl Snapshot {
     pub fn failures(&self) -> Vec<String> {
         let mut failures = Vec::new();
-        for (name, response) in &self.requests {
-            if let Some(error) = &response.error {
-                failures.push(format!("{name}: {error}"));
-            }
-        }
+        add_failure("version", &self.requests.version, &mut failures);
+        add_failure(
+            "datastore_usage",
+            &self.requests.datastore_usage,
+            &mut failures,
+        );
+        add_failure("datastores", &self.requests.datastores, &mut failures);
+        add_failure("s3_endpoints", &self.requests.s3_endpoints, &mut failures);
+        add_failure("remotes", &self.requests.remotes, &mut failures);
+        add_failure("sync_jobs", &self.requests.sync_jobs, &mut failures);
+        add_failure("prune_jobs", &self.requests.prune_jobs, &mut failures);
+        add_failure("verify_jobs", &self.requests.verify_jobs, &mut failures);
+        add_failure("node_status", &self.requests.node_status, &mut failures);
         for (datastore, details) in &self.datastores {
-            for (name, response) in [
-                ("status", &details.status),
-                ("groups", &details.groups),
-                ("snapshots", &details.snapshots),
-            ] {
-                if let Some(error) = &response.error {
-                    failures.push(format!("{datastore}/{name}: {error}"));
-                }
-            }
+            add_failure(
+                &format!("{datastore}/status"),
+                &details.status,
+                &mut failures,
+            );
+            add_failure(
+                &format!("{datastore}/groups"),
+                &details.groups,
+                &mut failures,
+            );
+            add_failure(
+                &format!("{datastore}/snapshots"),
+                &details.snapshots,
+                &mut failures,
+            );
         }
         failures
+    }
+}
+
+fn add_failure<T>(
+    name: &str,
+    response: &crate::discovery::CapturedResponse<T>,
+    failures: &mut Vec<String>,
+) {
+    if let Some(error) = response.failure() {
+        failures.push(format!("{name}: {error}"));
     }
 }
 
@@ -218,10 +224,16 @@ mod tests {
         }
 
         fn get(&self, path: &str) -> Result<Value> {
-            if ENDPOINTS.iter().any(|(_, endpoint)| *endpoint == path) {
-                Ok(serde_json::json!([]))
-            } else {
-                bail!("unexpected fake endpoint {path}")
+            match path {
+                "/version" | "/nodes/localhost/status" => Ok(serde_json::json!({})),
+                "/status/datastore-usage"
+                | "/config/datastore"
+                | "/config/s3"
+                | "/config/remote"
+                | "/config/sync"
+                | "/config/prune"
+                | "/config/verify" => Ok(serde_json::json!([])),
+                _ => bail!("unexpected fake endpoint {path}"),
             }
         }
 
@@ -250,34 +262,46 @@ mod tests {
     fn discovery_accepts_an_injected_pbs_client() {
         let snapshot = capture(&FakePbs);
         assert_eq!(snapshot.endpoint, "https://pbs.test:8007");
-        assert_eq!(snapshot.requests.len(), ENDPOINTS.len());
+        assert_eq!(snapshot.requests.datastores.path, "/config/datastore");
         assert!(snapshot.failures().is_empty());
     }
 
     #[test]
     fn snapshot_reports_static_and_datastore_failures() {
-        let failed = |path: &str| Response {
-            ok: false,
-            path: path.into(),
-            data: None,
-            error: Some("denied".into()),
-        };
+        fn failed<T>(path: &str) -> crate::discovery::CapturedResponse<T> {
+            crate::discovery::CapturedResponse {
+                ok: false,
+                path: path.into(),
+                data: None,
+                error: Some("denied".into()),
+            }
+        }
         let snapshot = Snapshot {
             schema_version: 1,
             collected_at: chrono::Utc::now(),
             mode: "read-only",
             endpoint: "https://pbs.example.test:8007".into(),
-            requests: BTreeMap::from([("version".into(), failed("/version"))]),
+            requests: Responses {
+                version: failed("/version"),
+                datastore_usage: failed("/status/datastore-usage"),
+                datastores: failed("/config/datastore"),
+                s3_endpoints: failed("/config/s3"),
+                remotes: failed("/config/remote"),
+                sync_jobs: failed("/config/sync"),
+                prune_jobs: failed("/config/prune"),
+                verify_jobs: failed("/config/verify"),
+                node_status: failed("/nodes/localhost/status"),
+            },
             datastores: BTreeMap::from([(
                 "backup".into(),
                 Datastore {
-                    config: Value::Null,
+                    config: BTreeMap::new(),
                     status: failed("/status"),
                     groups: failed("/groups"),
                     snapshots: failed("/snapshots"),
                 },
             )]),
         };
-        assert_eq!(snapshot.failures().len(), 4);
+        assert_eq!(snapshot.failures().len(), 12);
     }
 }
