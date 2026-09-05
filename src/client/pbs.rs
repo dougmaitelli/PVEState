@@ -1,14 +1,14 @@
-use super::PbsClient;
+use super::{PbsClient, transport::JsonApiClient};
 use crate::{
     settings::{ApiCredential, PbsSettings},
     utility::progress,
 };
-use anyhow::{Context, Result};
+use anyhow::Result;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
-use reqwest::{Certificate, Method, blocking::Client};
+use reqwest::Method;
 use serde::Serialize;
 use serde_json::Value;
-use std::{collections::BTreeMap, fs, time::Duration};
+use std::collections::BTreeMap;
 
 const ENDPOINTS: [(&str, &str); 9] = [
     ("version", "/version"),
@@ -23,9 +23,7 @@ const ENDPOINTS: [(&str, &str); 9] = [
 ];
 
 pub struct Pbs {
-    base: String,
-    authorization: String,
-    http: Client,
+    transport: JsonApiClient,
 }
 
 #[derive(Debug, Serialize)]
@@ -66,42 +64,22 @@ impl Pbs {
     }
 
     fn new(settings: &PbsSettings, credential: &ApiCredential) -> Result<Self> {
-        let mut builder = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .danger_accept_invalid_certs(!settings.verify_tls);
-        if let Some(path) = &settings.ca_file {
-            let pem =
-                fs::read(path).with_context(|| format!("read PBS CA file {}", path.display()))?;
-            builder = builder.add_root_certificate(Certificate::from_pem(&pem)?);
-        }
         Ok(Self {
-            base: format!(
-                "{}/api2/json",
-                settings.endpoint.as_str().trim_end_matches('/')
-            ),
-            authorization: format!("PBSAPIToken {}:{}", credential.id, credential.secret),
-            http: builder.build()?,
+            transport: JsonApiClient::new(
+                &settings.endpoint,
+                settings.verify_tls,
+                settings.ca_file.as_deref(),
+                &format!("PBSAPIToken {}:{}", credential.id, credential.secret),
+            )?,
         })
     }
 
     pub fn endpoint(&self) -> &str {
-        self.base.trim_end_matches("/api2/json")
+        self.transport.endpoint()
     }
 
     pub fn get(&self, path: &str) -> Result<Value> {
-        let payload: Value = self
-            .http
-            .get(format!("{}{}", self.base, path))
-            .header("Authorization", &self.authorization)
-            .header("Accept", "application/json")
-            .header(
-                "User-Agent",
-                concat!("pvestate/", env!("CARGO_PKG_VERSION")),
-            )
-            .send()?
-            .error_for_status()?
-            .json()?;
-        Ok(payload.get("data").cloned().unwrap_or(Value::Null))
+        self.transport.get_data(path)
     }
 
     pub fn put(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
@@ -117,13 +95,7 @@ impl Pbs {
     }
 
     fn mutate(&self, method: Method, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
-        self.http
-            .request(method, format!("{}{}", self.base, path))
-            .header("Authorization", &self.authorization)
-            .form(data)
-            .send()?
-            .error_for_status()?;
-        Ok(())
+        self.transport.form(method, path, data)
     }
 }
 

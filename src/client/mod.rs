@@ -1,6 +1,7 @@
 mod pbs;
 mod pve;
 mod ssh;
+mod transport;
 
 use anyhow::Result;
 use serde_json::Value;

@@ -1,13 +1,11 @@
-use super::PveClient;
+use super::{PveClient, transport::JsonApiClient};
 use crate::settings::{ApiCredential, PveSettings};
-use anyhow::{Context, Result};
-use reqwest::{Certificate, Method, blocking::Client};
+use anyhow::Result;
+use reqwest::Method;
 use serde_json::Value;
-use std::{collections::BTreeMap, fs, time::Duration};
+use std::collections::BTreeMap;
 pub struct Pve {
-    base: String,
-    token: String,
-    http: Client,
+    transport: JsonApiClient,
 }
 
 impl Pve {
@@ -20,43 +18,22 @@ impl Pve {
     }
 
     fn new(settings: &PveSettings, credential: &ApiCredential) -> Result<Self> {
-        let mut builder = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .danger_accept_invalid_certs(!settings.verify_tls);
-        if let Some(path) = &settings.ca_file {
-            let pem =
-                fs::read(path).with_context(|| format!("read PVE CA file {}", path.display()))?;
-            builder = builder.add_root_certificate(Certificate::from_pem(&pem)?);
-        }
-        let http = builder.build()?;
         Ok(Self {
-            base: format!(
-                "{}/api2/json",
-                settings.endpoint.as_str().trim_end_matches('/')
-            ),
-            token: format!("PVEAPIToken={}={}", credential.id, credential.secret),
-            http,
+            transport: JsonApiClient::new(
+                &settings.endpoint,
+                settings.verify_tls,
+                settings.ca_file.as_deref(),
+                &format!("PVEAPIToken={}={}", credential.id, credential.secret),
+            )?,
         })
     }
 
     pub fn endpoint(&self) -> &str {
-        self.base.trim_end_matches("/api2/json")
+        self.transport.endpoint()
     }
 
     pub fn get(&self, path: &str) -> Result<Value> {
-        let v: Value = self
-            .http
-            .get(format!("{}{}", self.base, path))
-            .header("Authorization", &self.token)
-            .header("Accept", "application/json")
-            .header(
-                "User-Agent",
-                concat!("pvestate/", env!("CARGO_PKG_VERSION")),
-            )
-            .send()?
-            .error_for_status()?
-            .json()?;
-        Ok(v["data"].clone())
+        self.transport.get_data(path)
     }
 
     pub fn put(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
@@ -72,13 +49,7 @@ impl Pve {
     }
 
     fn mutate(&self, method: Method, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
-        self.http
-            .request(method, format!("{}{}", self.base, path))
-            .header("Authorization", &self.token)
-            .form(data)
-            .send()?
-            .error_for_status()?;
-        Ok(())
+        self.transport.form(method, path, data)
     }
 }
 
