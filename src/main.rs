@@ -3,7 +3,7 @@ use clap::{ArgAction, Parser, Subcommand};
 use pvestate::{
     client::{Pbs, Pve, Ssh},
     command::{adopt, apply, capture, plan, recovery},
-    config::Repository,
+    config,
     settings::Settings,
 };
 use std::path::PathBuf;
@@ -78,10 +78,13 @@ fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Init { path } => {
             pvestate::utility::progress::section("Initializing configuration repository");
-            Repository::initialize(&path)
+            config::scaffold::initialize(&path)?;
+            pvestate::utility::progress::finish(true);
+            println!("initialized configuration repository: {}", path.display());
+            Ok(())
         },
         Command::Capture => {
-            let repo = Repository::open(&cli.config_dir)?;
+            let repo = config::open(&cli.config_dir)?;
             let settings = Settings::load(&cli.config_dir)?;
             let pve = Pve::discovery(&settings.pve)?;
             let pbs = Pbs::discovery(&settings.pbs)?;
@@ -89,7 +92,7 @@ fn run(cli: Cli) -> Result<()> {
             capture::run(&repo, &pve, &pbs, &ssh)
         },
         Command::Plan { json } => {
-            let repo = Repository::open(&cli.config_dir)?;
+            let repo = config::open(&cli.config_dir)?;
             let p = plan::run(&repo)?;
             pvestate::utility::progress::finish(true);
             if json {
@@ -100,16 +103,16 @@ fn run(cli: Cli) -> Result<()> {
             Ok(())
         },
         Command::Adopt { preview, all, ids } => {
-            let repo = Repository::open(&cli.config_dir)?;
+            let repo = config::open(&cli.config_dir)?;
             adopt::run(&repo, preview, all, &ids)
         },
         Command::Apply => {
-            let repo = Repository::open(&cli.config_dir)?;
+            let repo = config::open(&cli.config_dir)?;
             let settings = Settings::load(&cli.config_dir)?;
             apply::run(&repo, &settings)
         },
         Command::Validate => {
-            let repo = Repository::open(&cli.config_dir)?;
+            let repo = config::open(&cli.config_dir)?;
             let settings = Settings::load(&cli.config_dir)?;
             let ssh = Ssh::new(&settings.ssh.discovery);
             capture::validate(&repo, &ssh)
@@ -123,7 +126,7 @@ fn run(cli: Cli) -> Result<()> {
                 Recovery::Configure { target } => (recovery::Stage::Configure, target),
                 Recovery::All { target } => (recovery::Stage::All, target),
             };
-            let repo = Repository::open(&cli.config_dir)?;
+            let repo = config::open(&cli.config_dir)?;
             let settings = Settings::load(&cli.config_dir)?;
             let ssh = settings
                 .ssh
@@ -140,7 +143,16 @@ fn run(cli: Cli) -> Result<()> {
         },
         Command::Schema { output } => {
             pvestate::utility::progress::section("Generating configuration schemas");
-            Repository::write_schema(output.as_deref())
+            config::schema::write(output.as_deref())?;
+            pvestate::utility::progress::finish(true);
+            println!(
+                "wrote configuration schemas to {}",
+                output
+                    .as_deref()
+                    .unwrap_or_else(|| std::path::Path::new("schemas"))
+                    .display()
+            );
+            Ok(())
         },
     }
 }

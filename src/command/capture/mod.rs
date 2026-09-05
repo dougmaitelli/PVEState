@@ -8,7 +8,7 @@ use crate::{
         CaptureManifest, CaptureStatus, SourceEvidence, capture_pve, collect_artifacts,
         write_snapshot,
     },
-    utility::{atomic_file, progress},
+    utility::{atomic_file, progress, runtime_security},
 };
 use anyhow::{Result, anyhow, bail};
 use chrono::Utc;
@@ -22,12 +22,12 @@ pub fn run(
     ssh: &dyn RemoteHost,
 ) -> Result<()> {
     progress::section("Capturing live state");
-    progress::detail(format!("configuration: {}", repo.root.display()));
-    repo.secure_runtime()?;
-    fs::create_dir_all(repo.root.join("observed"))?;
+    progress::detail(format!("configuration: {}", repo.root().display()));
+    runtime_security::prepare(&repo.runtime())?;
+    fs::create_dir_all(repo.root().join("observed"))?;
     let staging = tempfile::Builder::new()
         .prefix(".capture-")
-        .tempdir_in(repo.root.join("observed"))?;
+        .tempdir_in(repo.root().join("observed"))?;
     let staged_observed = staging.path().join("production");
     fs::create_dir_all(staged_observed.join("api"))?;
 
@@ -67,7 +67,7 @@ pub fn run(
     publish_observed(repo, &staged_observed, &manifest.capture_id)?;
     write_runtime_manifest(repo, &manifest)?;
     progress::finish(true);
-    println!("captured live state into {}", repo.root.display());
+    println!("captured live state into {}", repo.root().display());
     Ok(())
 }
 
@@ -150,7 +150,7 @@ fn write_runtime_manifest(repo: &Repository, manifest: &CaptureManifest) -> Resu
 fn publish_observed(repo: &Repository, staged: &Path, capture_id: &str) -> Result<()> {
     let current = repo.observed();
     let previous = repo
-        .root
+        .root()
         .join("observed")
         .join(format!(".previous-{capture_id}"));
     let had_current = current.exists();
@@ -173,7 +173,7 @@ fn publish_observed(repo: &Repository, staged: &Path, capture_id: &str) -> Resul
 }
 
 pub fn validate(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
-    repo.secure_runtime()?;
+    runtime_security::prepare(&repo.runtime())?;
     let mut failures = Vec::new();
     let mut report = Vec::new();
     progress::section("Running recovery validation checks");
@@ -209,13 +209,14 @@ pub fn validate(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config;
 
     #[test]
     fn complete_capture_replaces_previous_observed_tree() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("environment");
-        Repository::initialize(&root).unwrap();
-        let repo = Repository::open(&root).unwrap();
+        config::scaffold::initialize(&root).unwrap();
+        let repo = config::open(&root).unwrap();
         fs::write(repo.observed().join("previous.txt"), "previous").unwrap();
         let staging = tempfile::Builder::new()
             .prefix(".capture-")

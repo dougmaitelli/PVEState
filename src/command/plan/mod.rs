@@ -16,7 +16,7 @@ use crate::{
     utility::{
         atomic_file,
         plan_envelope::{self, PlanEnvelope},
-        progress,
+        progress, runtime_security,
     },
 };
 use anyhow::{Context, Result, bail};
@@ -201,7 +201,7 @@ impl PlanEnvelope for Plan {
 
 pub fn run(repo: &Repository) -> Result<Plan> {
     progress::section("Comparing local configuration with live state");
-    repo.secure_runtime()?;
+    runtime_security::prepare(&repo.runtime())?;
     validation::validate(repo)?;
     let manifest = verified_capture(repo)?;
     let clients = captured::CapturedClients::load(repo, &manifest)?;
@@ -472,6 +472,7 @@ fn value_string(value: &serde_json::Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config;
     use crate::{
         client::{PbsClient, PveClient},
         discovery::{CaptureManifest, SourceEvidence, collect_artifacts},
@@ -683,7 +684,7 @@ mod tests {
     #[test]
     fn fixture_plans_guest_backup_dns_and_file_mutations() {
         let temp = tempfile::tempdir().unwrap();
-        Repository::initialize(temp.path()).unwrap();
+        config::scaffold::initialize(temp.path()).unwrap();
         fs::create_dir_all(temp.path().join("observed/production/pve/firewall")).unwrap();
         fs::write(
             temp.path().join("observed/production/pve/firewall/201.fw"),
@@ -691,7 +692,7 @@ mod tests {
         )
         .unwrap();
         complete_capture(temp.path());
-        let repo = Repository::open(temp.path()).unwrap();
+        let repo = config::open(temp.path()).unwrap();
         let fixture: LiveFixture =
             serde_json::from_str(include_str!("../../../tests/fixtures/planner/live.json"))
                 .unwrap();

@@ -37,7 +37,7 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
     } else {
         "Adopting captured state into local configuration"
     });
-    repo.secure_runtime()?;
+    runtime_security::prepare(&repo.runtime())?;
     let manifest: CaptureManifest = serde_json::from_slice(
         &fs::read(repo.observed().join("manifest.json")).context("run capture first")?,
     )?;
@@ -73,7 +73,7 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
     }
 
     let guest_document = "config/guests.yml".to_string();
-    let mut guest_content = fs::read_to_string(repo.root.join(&guest_document))?;
+    let mut guest_content = fs::read_to_string(repo.root().join(&guest_document))?;
     let mut guest_changed = false;
     let mut documents = BTreeMap::new();
     let mut native_targets = Vec::new();

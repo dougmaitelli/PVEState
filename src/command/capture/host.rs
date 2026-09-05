@@ -77,6 +77,7 @@ pub(super) fn capture(repo: &Repository, ssh: &dyn RemoteHost) -> Result<Vec<Str
 mod tests {
     use super::*;
     use crate::client::SshOutput;
+    use crate::config;
     use std::fs;
 
     struct FakeSsh;
@@ -108,8 +109,8 @@ mod tests {
     fn host_capture_accepts_an_injected_ssh_client() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("environment");
-        Repository::initialize(&root).unwrap();
-        let repo = Repository::open(&root).unwrap();
+        config::scaffold::initialize(&root).unwrap();
+        let repo = config::open(&root).unwrap();
         fs::create_dir_all(repo.runtime()).unwrap();
 
         assert!(capture(&repo, &FakeSsh).unwrap().is_empty());

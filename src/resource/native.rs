@@ -128,7 +128,7 @@ fn patch_document(
         .get(path)
         .cloned()
         .map(Ok)
-        .unwrap_or_else(|| fs::read_to_string(repo.root.join(path)))?;
+        .unwrap_or_else(|| fs::read_to_string(repo.root().join(path)))?;
     let updated = yaml_patch::apply_patches(&content, &patches)?;
     documents.insert(path.to_string(), updated);
     Ok(())

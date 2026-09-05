@@ -51,7 +51,7 @@ fn run_with_factory(
     factory: impl FnOnce() -> Result<MutationClients>,
 ) -> Result<()> {
     progress::section("Applying local configuration to live system");
-    repo.secure_runtime()?;
+    runtime_security::prepare(&repo.runtime())?;
     let plan = authorize(repo, settings)?;
     let mut journal = ApplyJournal::new(&repo.runtime(), &plan);
     journal.persist()?;
@@ -324,6 +324,7 @@ fn mutate_pbs(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config;
     use crate::settings::ApplySettings;
     use anyhow::anyhow;
     use reqwest::Url;
@@ -437,8 +438,8 @@ mod tests {
 
     fn authorized_apply() -> (tempfile::TempDir, Repository, ApplySettings) {
         let temp = tempfile::tempdir().unwrap();
-        Repository::initialize(temp.path()).unwrap();
-        let repo = Repository::open(temp.path()).unwrap();
+        config::scaffold::initialize(temp.path()).unwrap();
+        let repo = config::open(temp.path()).unwrap();
         let mut plan = Plan {
             schema_version: 2,
             created_at: Utc::now(),

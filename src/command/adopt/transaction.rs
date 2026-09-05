@@ -1,4 +1,7 @@
-use crate::{config::Repository, utility::atomic_file};
+use crate::{
+    config::{self, Repository},
+    utility::atomic_file,
+};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -60,8 +63,11 @@ pub(super) fn validate(repo: &Repository, documents: &BTreeMap<String, String>) 
         .prefix("adopt-validation-")
         .tempdir_in(repo.runtime())?;
     fs::create_dir(staging.path().join("config"))?;
-    fs::copy(repo.root.join("pves.yml"), staging.path().join("pves.yml"))?;
-    for entry in fs::read_dir(repo.root.join("config"))? {
+    fs::copy(
+        repo.root().join("pves.yml"),
+        staging.path().join("pves.yml"),
+    )?;
+    for entry in fs::read_dir(repo.root().join("config"))? {
         let entry = entry?;
         if entry.file_type()?.is_file() {
             fs::copy(
@@ -73,7 +79,7 @@ pub(super) fn validate(repo: &Repository, documents: &BTreeMap<String, String>) 
     for (path, content) in documents {
         atomic_file::write(&staging.path().join(path), content.as_bytes())?;
     }
-    Repository::open(staging.path()).context("validate complete adopted configuration")?;
+    config::open(staging.path()).context("validate complete adopted configuration")?;
     Ok(())
 }
 
@@ -90,7 +96,7 @@ fn publish_with(
     let originals = documents
         .keys()
         .map(|path| {
-            fs::read(repo.root.join(path))
+            fs::read(repo.root().join(path))
                 .map(|content| (path.clone(), content))
                 .with_context(|| format!("read original {path}"))
         })
@@ -100,7 +106,7 @@ fn publish_with(
     let mut published = Vec::new();
 
     for (index, (path, content)) in documents.iter().enumerate() {
-        if let Err(error) = writer(&repo.root.join(path), content.as_bytes()) {
+        if let Err(error) = writer(&repo.root().join(path), content.as_bytes()) {
             journal.status = "rolling-back";
             journal.failure = Some(format!("publish {path}: {error:#}"));
             let _ = journal.persist(&repo.runtime());
@@ -165,7 +171,7 @@ fn rollback(
     let mut failures = Vec::new();
     for published_path in published.iter().rev() {
         let original = &originals[published_path];
-        match writer(&repo.root.join(published_path), original) {
+        match writer(&repo.root().join(published_path), original) {
             Ok(()) => {
                 let position = documents
                     .keys()
@@ -201,8 +207,8 @@ mod tests {
 
     fn repository() -> (tempfile::TempDir, Repository) {
         let temp = tempfile::tempdir().unwrap();
-        Repository::initialize(temp.path()).unwrap();
-        let repo = Repository::open(temp.path()).unwrap();
+        config::scaffold::initialize(temp.path()).unwrap();
+        let repo = config::open(temp.path()).unwrap();
         (temp, repo)
     }
 
@@ -210,7 +216,7 @@ mod tests {
     fn second_document_failure_restores_every_original() {
         let (_temp, repo) = repository();
         let paths = ["config/cluster.yml", "config/node.yml"];
-        let before = paths.map(|path| fs::read(repo.root.join(path)).unwrap());
+        let before = paths.map(|path| fs::read(repo.root().join(path)).unwrap());
         let documents = BTreeMap::from([
             (
                 paths[0].to_string(),
@@ -231,8 +237,8 @@ mod tests {
         .unwrap_err();
 
         assert!(format!("{error:#}").contains("injected second-file failure"));
-        assert_eq!(fs::read(repo.root.join(paths[0])).unwrap(), before[0]);
-        assert_eq!(fs::read(repo.root.join(paths[1])).unwrap(), before[1]);
+        assert_eq!(fs::read(repo.root().join(paths[0])).unwrap(), before[0]);
+        assert_eq!(fs::read(repo.root().join(paths[1])).unwrap(), before[1]);
         let journal: serde_json::Value =
             serde_json::from_slice(&fs::read(repo.runtime().join("adopt-latest.json")).unwrap())
                 .unwrap();
@@ -244,21 +250,21 @@ mod tests {
     fn validation_failure_does_not_publish_any_document() {
         let (_temp, repo) = repository();
         let path = "config/guests.yml";
-        let before = fs::read(repo.root.join(path)).unwrap();
+        let before = fs::read(repo.root().join(path)).unwrap();
         let documents = BTreeMap::from([(path.to_string(), "not: valid guests".into())]);
 
         assert!(validate(&repo, &documents).is_err());
-        assert_eq!(fs::read(repo.root.join(path)).unwrap(), before);
+        assert_eq!(fs::read(repo.root().join(path)).unwrap(), before);
         assert!(!repo.runtime().join("adopt-latest.json").exists());
     }
 
     #[test]
     fn successful_multi_document_publication_replaces_every_file() {
         let (_temp, repo) = repository();
-        let cluster = fs::read_to_string(repo.root.join("config/cluster.yml"))
+        let cluster = fs::read_to_string(repo.root().join("config/cluster.yml"))
             .unwrap()
             .replace("example", "adopted");
-        let node = fs::read_to_string(repo.root.join("config/node.yml"))
+        let node = fs::read_to_string(repo.root().join("config/node.yml"))
             .unwrap()
             .replace("name: pve", "name: adopted-node");
         let documents = BTreeMap::from([
@@ -270,11 +276,11 @@ mod tests {
         publish(&repo, &documents).unwrap();
 
         assert_eq!(
-            fs::read_to_string(repo.root.join("config/cluster.yml")).unwrap(),
+            fs::read_to_string(repo.root().join("config/cluster.yml")).unwrap(),
             cluster
         );
         assert_eq!(
-            fs::read_to_string(repo.root.join("config/node.yml")).unwrap(),
+            fs::read_to_string(repo.root().join("config/node.yml")).unwrap(),
             node
         );
         let journal: serde_json::Value =

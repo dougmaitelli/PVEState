@@ -58,7 +58,7 @@ pub fn run(
     ssh: Option<&dyn RemoteHost>,
 ) -> Result<()> {
     progress::section(format!("Recovery: {}", stage.name()));
-    repo.secure_runtime()?;
+    runtime_security::prepare(&repo.runtime())?;
     if matches!(stage, Stage::Plan) {
         return create_plan(repo, target);
     }
