@@ -2,6 +2,56 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum DatastoreBackend {
+    Local,
+    S3,
+}
+impl std::fmt::Display for DatastoreBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Local => "local",
+            Self::S3 => "s3",
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SyncDirection {
+    Pull,
+    Push,
+}
+impl std::fmt::Display for SyncDirection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Pull => "pull",
+            Self::Push => "push",
+        })
+    }
+}
+fn pull() -> SyncDirection {
+    SyncDirection::Pull
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum BackupMode {
+    Snapshot,
+    Suspend,
+    Stop,
+}
+impl std::fmt::Display for BackupMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Snapshot => "snapshot",
+            Self::Suspend => "suspend",
+            Self::Stop => "stop",
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BackupConfig {
@@ -35,7 +85,7 @@ pub struct BackupGuest {
 #[serde(deny_unknown_fields)]
 pub struct Datastore {
     pub name: String,
-    pub backend: String,
+    pub backend: DatastoreBackend,
     pub local_cache_path: String,
     pub bucket: String,
     pub s3_endpoint_id: String,
@@ -97,11 +147,7 @@ pub struct SyncJob {
     #[serde(default)]
     pub remove_vanished: bool,
     #[serde(default = "pull")]
-    pub direction: String,
-}
-
-fn pull() -> String {
-    "pull".into()
+    pub direction: SyncDirection,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -109,7 +155,7 @@ fn pull() -> String {
 pub struct PveBackupJob {
     pub storage: String,
     pub schedule: String,
-    pub mode: String,
+    pub mode: BackupMode,
     pub guest_ids: Vec<u32>,
     pub retention: Retention,
 }
@@ -118,4 +164,16 @@ pub struct PveBackupJob {
 #[serde(deny_unknown_fields)]
 pub struct Retention {
     pub keep_last: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_unknown_backup_modes_backends_and_directions() {
+        assert!(serde_yaml::from_str::<BackupMode>("live").is_err());
+        assert!(serde_yaml::from_str::<DatastoreBackend>("tape").is_err());
+        assert!(serde_yaml::from_str::<SyncDirection>("sideways").is_err());
+    }
 }

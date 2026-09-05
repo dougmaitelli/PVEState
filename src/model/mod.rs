@@ -10,15 +10,17 @@ mod storage;
 
 pub use crate::resource::{
     backup::{
-        BackupConfig, BackupGuest, BackupJobs, Datastore, PbsBackup, PruneJob, PveBackupJob,
-        Retention, S3Endpoint, SyncJob, VerifyJob,
+        BackupConfig, BackupGuest, BackupJobs, BackupMode, Datastore, DatastoreBackend, PbsBackup,
+        PruneJob, PveBackupJob, Retention, S3Endpoint, SyncDirection, SyncJob, VerifyJob,
     },
     firewall::{
-        FirewallAlias, FirewallIpSet, FirewallIpSetEntry, FirewallPolicy, FirewallRule,
-        FirewallSecurityGroup,
+        FirewallAction, FirewallAlias, FirewallDirection, FirewallIpSet, FirewallIpSetEntry,
+        FirewallLogLevel, FirewallPolicy, FirewallProtocol, FirewallRule, FirewallSecurityGroup,
     },
-    guest::{BindMount, Cpu, Disk, Efi, Guests, Lxc, Nic, Start, Usb, Vm, VmDisk, VmNic},
-    network::{Bridge, Dns, Interface, Network},
+    guest::{
+        BindMount, Cpu, Disk, Efi, Guests, Lxc, MacAddress, Nic, Start, Usb, Vm, VmDisk, VmNic,
+    },
+    network::{AddressMethod, Bridge, Dns, Interface, Network},
 };
 pub use cluster::*;
 pub use manifest::*;

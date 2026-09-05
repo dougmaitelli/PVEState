@@ -2,6 +2,38 @@ use crate::model::{DiskInterface, FirewallPolicy, UsbSlot};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::{fmt, str::FromStr};
+
+#[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct MacAddress(String);
+
+impl fmt::Display for MacAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+impl FromStr for MacAddress {
+    type Err = anyhow::Error;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let valid = value.split(':').count() == 6
+            && value
+                .split(':')
+                .all(|part| part.len() == 2 && part.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        if valid {
+            Ok(Self(value.to_ascii_uppercase()))
+        } else {
+            anyhow::bail!("invalid MAC address `{value}`")
+        }
+    }
+}
+impl<'de> Deserialize<'de> for MacAddress {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        String::deserialize(d)?
+            .parse()
+            .map_err(serde::de::Error::custom)
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -88,7 +120,7 @@ pub struct Efi {
 #[serde(deny_unknown_fields)]
 pub struct Nic {
     pub name: String,
-    pub mac: String,
+    pub mac: MacAddress,
     pub bridge: String,
     #[serde(default)]
     pub firewall: bool,
@@ -102,7 +134,7 @@ pub struct Nic {
 #[serde(deny_unknown_fields)]
 pub struct VmNic {
     pub model: String,
-    pub mac: String,
+    pub mac: MacAddress,
     pub bridge: String,
     #[serde(default)]
     pub firewall: bool,
@@ -131,4 +163,16 @@ pub struct BindMount {
     pub source: String,
     pub target: String,
     pub backed_up_by_pve: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mac_addresses_are_validated_and_normalized() {
+        let mac: MacAddress = serde_yaml::from_str("02:aa:00:bb:01:cc").unwrap();
+        assert_eq!(mac.to_string(), "02:AA:00:BB:01:CC");
+        assert!(serde_yaml::from_str::<MacAddress>("not-a-mac").is_err());
+    }
 }

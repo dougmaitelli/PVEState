@@ -123,11 +123,7 @@ fn authorize(repo: &Repository, settings: &ApplySettings) -> Result<Plan> {
         },
     )?;
     let allowed = &settings.domains;
-    let needed: BTreeSet<_> = plan
-        .operations
-        .iter()
-        .map(|x| x.domain().to_string())
-        .collect();
+    let needed: BTreeSet<_> = plan.operations.iter().map(|x| x.domain()).collect();
     if !needed.is_subset(allowed) {
         bail!(
             "unapproved domains: {:?}",

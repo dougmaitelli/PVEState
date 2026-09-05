@@ -47,6 +47,21 @@ impl From<&str> for Domain {
         }
     }
 }
+impl std::str::FromStr for Domain {
+    type Err = anyhow::Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        match value {
+            "guests" => Ok(Self::Guest),
+            "network" => Ok(Self::Network),
+            "firewall" => Ok(Self::Firewall),
+            "dns" => Ok(Self::Dns),
+            "backup" => Ok(Self::Backup),
+            "pbs" => Ok(Self::Pbs),
+            _ => bail!("unknown operation domain `{value}`"),
+        }
+    }
+}
 impl From<Domain> for String {
     fn from(value: Domain) -> Self {
         value.to_string()
@@ -249,5 +264,6 @@ mod tests {
         assert!(serde_json::from_str::<ApiPath>("\"relative\"").is_err());
         assert!(serde_json::from_str::<DiskId>("\"not-a-disk\"").is_err());
         assert!(serde_json::from_str::<SecretName>("\"lower-case\"").is_err());
+        assert!("unknown".parse::<Domain>().is_err());
     }
 }

@@ -19,7 +19,7 @@ pub(super) fn validate(repo: &Repository) -> Result<()> {
             if !names.insert(&nic.name) {
                 bail!("lxc/{id}: duplicate NIC name {}", nic.name);
             }
-            if !macs.insert(nic.mac.to_uppercase()) {
+            if !macs.insert(nic.mac.to_string()) {
                 bail!("duplicate MAC: {}", nic.mac);
             }
         }
@@ -30,7 +30,7 @@ pub(super) fn validate(repo: &Repository) -> Result<()> {
             if !bridges.contains(&nic.bridge) {
                 bail!("qemu/{id}: unknown bridge {}", nic.bridge);
             }
-            if !macs.insert(nic.mac.to_uppercase()) {
+            if !macs.insert(nic.mac.to_string()) {
                 bail!("duplicate MAC: {}", nic.mac);
             }
         }

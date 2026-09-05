@@ -1,3 +1,4 @@
+use crate::command::plan::Domain;
 use anyhow::{Context, Result, bail};
 use reqwest::Url;
 use std::{
@@ -67,7 +68,7 @@ pub struct ApplySettings {
     pub enabled: bool,
     pub confirm_plan_sha: Option<String>,
     pub target: Option<Url>,
-    pub domains: BTreeSet<String>,
+    pub domains: BTreeSet<Domain>,
     pub activate_network: bool,
     pub(crate) secrets: BTreeMap<String, String>,
 }
@@ -156,8 +157,9 @@ impl Settings {
                     .split(',')
                     .map(str::trim)
                     .filter(|domain| !domain.is_empty())
-                    .map(str::to_owned)
-                    .collect(),
+                    .map(str::parse)
+                    .collect::<Result<_, _>>()
+                    .context("invalid PVES_APPLY_DOMAINS")?,
                 activate_network: yes("PVES_APPLY_NETWORK_NOW"),
                 secrets,
             },

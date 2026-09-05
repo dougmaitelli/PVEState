@@ -46,11 +46,13 @@ fn rules(output: &mut String, rules: &[FirewallRule]) {
         if let Some(name) = &rule.macro_name {
             *output += &format!("{name}({})", rule.action);
         } else {
-            *output += &rule.action;
+            *output += &rule.action.to_string();
+        }
+        if let Some(protocol) = &rule.protocol {
+            *output += &format!(" -p {protocol}");
         }
         for (flag, value) in [
             ("-i", rule.interface.as_ref()),
-            ("-p", rule.protocol.as_ref()),
             ("-source", rule.source.as_ref()),
             ("-dest", rule.destination.as_ref()),
             ("-sport", rule.source_port.as_ref()),

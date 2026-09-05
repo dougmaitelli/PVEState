@@ -37,7 +37,7 @@ fn pve_jobs(repo: &Repository, actual: &Value, operations: &mut Vec<Operation>) 
         let mut changes: BTreeMap<String, String> = BTreeMap::from([
             ("storage".into(), desired.storage.clone()),
             ("schedule".into(), desired.schedule.clone()),
-            ("mode".into(), desired.mode.clone()),
+            ("mode".into(), desired.mode.to_string()),
             (
                 "vmid".into(),
                 desired
@@ -317,7 +317,7 @@ fn sync_data(job: &SyncJob) -> BTreeMap<String, String> {
         ("store".into(), job.store.clone()),
         ("remote-store".into(), job.remote_store.clone()),
         ("remove-vanished".into(), job.remove_vanished.to_string()),
-        ("sync-direction".into(), job.direction.clone()),
+        ("sync-direction".into(), job.direction.to_string()),
     ]);
     if let Some(value) = &job.remote {
         data.insert("remote".into(), value.clone());

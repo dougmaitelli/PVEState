@@ -2,7 +2,8 @@ use crate::utility::yaml_patch::{self, Patch, Segment};
 use crate::{
     config::Repository,
     model::{
-        Bridge, FirewallAlias, FirewallIpSet, FirewallIpSetEntry, FirewallPolicy, FirewallRule,
+        Bridge, FirewallAction, FirewallAlias, FirewallDirection, FirewallIpSet,
+        FirewallIpSetEntry, FirewallLogLevel, FirewallPolicy, FirewallProtocol, FirewallRule,
         FirewallSecurityGroup, Interface, Network,
     },
 };
@@ -258,7 +259,12 @@ pub(crate) fn parse_firewall(content: &str) -> ParsedFirewall {
             if let Some((key, value)) = line.split_once(':') {
                 match key.trim() {
                     "enable" => enabled = matches!(value.trim(), "1" | "yes" | "true" | "on"),
-                    "log_level_in" => log_level_in = Some(value.trim().into()),
+                    "log_level_in" => match value.trim().parse::<FirewallLogLevel>() {
+                        Ok(value) => log_level_in = Some(value),
+                        Err(error) => {
+                            unmodeled.push(NativeDirective::new(number, line, error.to_string()))
+                        },
+                    },
                     key => {
                         if options.insert(key.into(), value.trim().into()).is_some() {
                             unmodeled.push(NativeDirective::new(
@@ -361,7 +367,7 @@ fn parse_firewall_rule(line: &str) -> Result<FirewallRule> {
         .map_or((true, line), |line| (false, line));
     let (rule, comment) = split_comment(line);
     let mut words = rule.split_whitespace();
-    let direction = words.next().context("firewall rule direction")?.into();
+    let direction: FirewallDirection = words.next().context("firewall rule direction")?.parse()?;
     let action_token = words.next().context("firewall rule action")?;
     let (macro_name, action) = if let Some((name, action)) = action_token.split_once('(') {
         (
@@ -369,10 +375,10 @@ fn parse_firewall_rule(line: &str) -> Result<FirewallRule> {
             action
                 .strip_suffix(')')
                 .context("malformed firewall macro action")?
-                .to_string(),
+                .parse::<FirewallAction>()?,
         )
     } else {
-        (None, action_token.into())
+        (None, action_token.parse()?)
     };
     let mut interface = None;
     let mut protocol = None;
@@ -380,19 +386,19 @@ fn parse_firewall_rule(line: &str) -> Result<FirewallRule> {
     let mut destination = None;
     let mut source_port = None;
     let mut destination_port = None;
-    let mut log = "nolog".to_string();
+    let mut log = FirewallLogLevel::NoLog;
     while let Some(flag) = words.next() {
         let value = words
             .next()
             .with_context(|| format!("firewall rule value after {flag}"))?;
         match flag {
             "-i" => interface = Some(value.into()),
-            "-p" => protocol = Some(value.into()),
+            "-p" => protocol = Some(value.parse::<FirewallProtocol>()?),
             "-source" => source = Some(value.into()),
             "-dest" => destination = Some(value.into()),
             "-sport" => source_port = Some(value.into()),
             "-dport" => destination_port = Some(value.into()),
-            "-log" => log = value.into(),
+            "-log" => log = value.parse()?,
             _ => bail!("unsupported captured firewall rule option {flag}"),
         }
     }
@@ -607,9 +613,17 @@ pub(crate) fn parse_network(content: &str, current: &Network) -> Result<ParsedNe
             continue;
         }
         if let Some(ports) = &stanza.ports {
+            let Ok(method) = stanza.method.parse() else {
+                unmodeled.push(NativeDirective::new(
+                    stanza.line,
+                    &stanza.definition,
+                    format!("unsupported IPv4 address method `{}`", stanza.method),
+                ));
+                continue;
+            };
             bridges.push(Bridge {
                 name: stanza.name.clone(),
-                method: stanza.method.clone(),
+                method,
                 address: stanza.address.clone(),
                 gateway: stanza.gateway.clone(),
                 ipv6: None,
@@ -623,9 +637,17 @@ pub(crate) fn parse_network(content: &str, current: &Network) -> Result<ParsedNe
             && stanza.stp.is_none()
             && stanza.forward_delay.is_none()
         {
+            let Ok(method) = stanza.method.parse() else {
+                unmodeled.push(NativeDirective::new(
+                    stanza.line,
+                    &stanza.definition,
+                    format!("unsupported IPv4 address method `{}`", stanza.method),
+                ));
+                continue;
+            };
             interfaces.push(Interface {
                 name: stanza.name.clone(),
-                method: stanza.method.clone(),
+                method,
             });
         } else {
             unmodeled.push(NativeDirective::new(

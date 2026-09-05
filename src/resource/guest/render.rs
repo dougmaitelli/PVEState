@@ -14,7 +14,7 @@ pub fn lxc_nic(n: &Nic) -> String {
         ("firewall", Some(u8::from(n.firewall).to_string())),
         ("gw", n.gateway4.clone()),
         ("gw6", n.gateway6.clone()),
-        ("hwaddr", Some(n.mac.clone())),
+        ("hwaddr", Some(n.mac.to_string())),
         ("ip", Some(n.ipv4.clone())),
         ("ip6", n.ipv6.clone()),
         ("type", Some("veth".into())),
@@ -22,7 +22,7 @@ pub fn lxc_nic(n: &Nic) -> String {
 }
 pub fn vm_nic(n: &VmNic) -> String {
     options(vec![
-        (n.model.as_str(), Some(n.mac.clone())),
+        (n.model.as_str(), Some(n.mac.to_string())),
         ("bridge", Some(n.bridge.clone())),
         ("firewall", Some(u8::from(n.firewall).to_string())),
         ("tag", n.vlan.map(|value| value.to_string())),
