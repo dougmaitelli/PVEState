@@ -1,7 +1,7 @@
 use crate::{
     client::RemoteHost,
     config::LocalState,
-    render,
+    resource::firewall,
     utility::{progress, remote_file, shell},
 };
 use anyhow::{Context, Result, bail};
@@ -69,7 +69,7 @@ pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
             remote_file::write(
                 ssh,
                 &format!("/etc/pve/firewall/{id}.fw"),
-                &render::firewall_policy(policy),
+                &firewall::render::render(policy),
                 remote_file::WriteOptions {
                     mode: "0640",
                     expected_sha256: None,

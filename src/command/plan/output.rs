@@ -197,8 +197,8 @@ fn print_diff(domain: &str, before: &str, after: &str) {
 fn comparable_content(domain: &str, before: &str, after: &str) -> (String, String) {
     if domain == "network" {
         (
-            crate::render::semantic_lines(before).join("\n"),
-            crate::render::semantic_lines(after).join("\n"),
+            crate::resource::network::render::semantic_lines(before).join("\n"),
+            crate::resource::network::render::semantic_lines(after).join("\n"),
         )
     } else {
         (before.into(), after.into())

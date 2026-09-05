@@ -2,7 +2,7 @@ use crate::{
     client::RemoteHost,
     config::LocalState,
     model::RestoreMount,
-    render,
+    resource::guest,
     utility::{progress, shell},
 };
 use anyhow::{Context, Result};
@@ -21,7 +21,7 @@ pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
     let network = guest
         .networks
         .first()
-        .map(|nic| format!(" --net0 {}", shell::quote(&render::lxc_nic(nic))))
+        .map(|nic| format!(" --net0 {}", shell::quote(&guest::render::lxc_nic(nic))))
         .unwrap_or_default();
     let create = format!(
         "pct status {id} >/dev/null 2>&1 || pct create {id} {} --hostname {} --cores {} --memory {} --swap {} --rootfs {}:{}{} --unprivileged {} --onboot {}",

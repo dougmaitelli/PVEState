@@ -12,8 +12,7 @@ use crate::{
     client::{PbsClient, PveClient},
     config::LocalState,
     discovery::CapturedState,
-    render,
-    resource::{backup, guest},
+    resource::{backup, firewall, guest, network},
     utility::{
         atomic_file,
         plan_envelope::{self, PlanEnvelope},
@@ -285,7 +284,7 @@ fn build(
         repo,
         ("network", &repo.guests.node),
         ("network/interfaces", "/etc/network/interfaces"),
-        render::network(&repo.network),
+        network::render::render(&repo.network),
         true,
         builder.operations(),
     )?;
@@ -294,7 +293,7 @@ fn build(
             repo,
             ("firewall", "cluster"),
             ("pve/firewall/cluster.fw", "/etc/pve/firewall/cluster.fw"),
-            render::firewall_policy(policy),
+            firewall::render::render(policy),
             false,
             builder.operations(),
         )?;
@@ -328,7 +327,7 @@ fn build(
                 repo,
                 ("firewall", &id),
                 (&paths.0, &paths.1),
-                render::firewall_policy(policy),
+                firewall::render::render(policy),
                 false,
                 builder.operations(),
             )?;
@@ -349,7 +348,7 @@ fn build(
             repo,
             ("firewall", &format!("node/{node}")),
             (&local, &remote),
-            render::firewall_policy(policy),
+            firewall::render::render(policy),
             false,
             builder.operations(),
         )?;
@@ -626,7 +625,7 @@ mod tests {
     fn firewall_option_order_is_not_drift() {
         let a = "[OPTIONS]\nenable: 1\nlog_level_in: nolog\n";
         let b = "[OPTIONS]\nlog_level_in: nolog\nenable: 1\n";
-        assert_eq!(render::firewall_semantic(a), render::firewall_semantic(b));
+        assert_eq!(firewall::render::semantic(a), firewall::render::semantic(b));
     }
 
     #[test]
@@ -634,7 +633,7 @@ mod tests {
         let a = "[RULES]\nIN ACCEPT -dport 22\nIN DROP\n";
         let b = "[RULES]\nIN DROP\nIN ACCEPT -dport 22\n";
 
-        assert_ne!(render::firewall_semantic(a), render::firewall_semantic(b));
+        assert_ne!(firewall::render::semantic(a), firewall::render::semantic(b));
     }
 
     #[test]

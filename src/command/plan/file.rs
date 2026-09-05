@@ -1,5 +1,8 @@
 use super::{Domain, Operation, ResourceId};
-use crate::{config::LocalState, render};
+use crate::{
+    config::LocalState,
+    resource::{firewall, network},
+};
 use anyhow::Result;
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -17,9 +20,9 @@ pub(super) fn operation(
     let current = fs::read_to_string(repo.observed().join(local)).ok();
     let current_text = current.as_deref().unwrap_or_default();
     let differs = if domain == "firewall" {
-        render::firewall_semantic(&wanted) != render::firewall_semantic(current_text)
+        firewall::render::semantic(&wanted) != firewall::render::semantic(current_text)
     } else {
-        render::semantic_lines(&wanted) != render::semantic_lines(current_text)
+        network::render::semantic_lines(&wanted) != network::render::semantic_lines(current_text)
     };
     if differs {
         let domain = Domain::from(domain);

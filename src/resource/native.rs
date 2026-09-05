@@ -741,7 +741,7 @@ mod tests {
         assert_eq!(parsed.managed.rules[0].source.as_deref(), Some("admin"));
         assert!(!parsed.managed.rules[0].enabled);
 
-        let rendered = crate::render::firewall_policy(&parsed.managed);
+        let rendered = crate::resource::firewall::render::render(&parsed.managed);
         let reparsed = parse_firewall(&rendered);
         assert!(reparsed.unmodeled.is_empty());
         assert_eq!(
@@ -792,11 +792,11 @@ mod tests {
     fn supported_network_is_stable_across_parse_and_render() {
         let current: Network =
             serde_yaml::from_str(include_str!("../../examples/basic/config/network.yml")).unwrap();
-        let rendered = crate::render::network(&current);
+        let rendered = crate::resource::network::render::render(&current);
 
         let first = parse_network(&rendered, &current).unwrap();
         assert!(first.unmodeled.is_empty());
-        let rerendered = crate::render::network(&first.managed);
+        let rerendered = crate::resource::network::render::render(&first.managed);
         let second = parse_network(&rerendered, &first.managed).unwrap();
 
         assert!(second.unmodeled.is_empty());

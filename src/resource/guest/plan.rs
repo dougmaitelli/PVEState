@@ -1,7 +1,7 @@
+use super::render;
 use crate::{
     command::plan::{ApiMethod, ApiTarget, Operation},
     model::{GuestField, GuestKind, GuestRef, Lxc, Vm},
-    render,
 };
 use anyhow::{Context, Result};
 use serde_json::Value;
