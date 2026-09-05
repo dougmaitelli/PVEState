@@ -96,32 +96,31 @@ fn print_operation(operation: &Operation) {
         Operation::WriteFile {
             domain,
             resource,
-            path,
+            target,
             content,
             before_content,
-            activate,
             ..
         } => {
             println!("  {} {resource}", style("WRITE").green().bold());
-            println!("      {path}");
+            println!("      {}", target.path());
             print_diff(
                 domain.as_str(),
                 before_content.as_deref().unwrap_or_default(),
                 content,
             );
-            if *activate {
+            if target.requires_activation() {
                 println!("      {}", style("requires activation").yellow());
             }
         },
         Operation::DeleteFile {
             resource,
-            path,
+            target,
             domain,
             before_content,
             ..
         } => {
             println!("  {} {resource}", style("DELETE").red().bold());
-            println!("      {path}");
+            println!("      {}", target.path());
             print_diff(domain.as_str(), before_content, "");
         },
     }

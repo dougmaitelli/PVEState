@@ -96,7 +96,7 @@ fn run_with_factory(
 }
 
 fn authorize(repo: &LocalState, settings: &ApplySettings) -> Result<Plan> {
-    let plan: Plan = serde_json::from_slice(
+    let plan = Plan::from_slice(
         &runtime_security::read(
             &repo
                 .runtime()
@@ -214,41 +214,37 @@ fn execute(
                     Ok(())
                 },
                 Operation::WriteFile {
-                    path,
+                    target,
                     content,
                     before_sha256,
-                    activate,
                     ..
                 } => {
                     let s = ssh.context("plan requires apply SSH settings")?;
-                    let mode = if path == crate::resource::native_paths::NETWORK_REMOTE {
-                        "0644"
-                    } else {
-                        "0640"
-                    };
+                    let path = target.path();
                     remote_file::write(
                         s,
-                        path,
+                        &path,
                         content,
                         remote_file::WriteOptions {
-                            mode,
+                            mode: target.mode(),
                             expected_sha256: before_sha256.as_deref(),
                             verify_expected: true,
                             backup_existing: true,
                         },
                     )?;
-                    if *activate && settings.activate_network {
+                    if target.requires_activation() && settings.activate_network {
                         s.run("ifreload -a")?;
                     }
                     Ok(())
                 },
                 Operation::DeleteFile {
-                    path,
+                    target,
                     before_sha256,
                     ..
                 } => {
                     let s = ssh.context("plan requires apply SSH settings")?;
-                    shell::verify_remote_file(s, path, Some(before_sha256))?;
+                    let path = target.path();
+                    shell::verify_remote_file(s, &path, Some(before_sha256))?;
                     let stamp = Utc::now().format("%Y%m%dT%H%M%SZ");
                     let backup = format!("/root/pves-preapply/{stamp}{path}");
                     let parent = std::path::Path::new(&backup)
@@ -258,9 +254,9 @@ fn execute(
                     s.run(&format!(
                         "install -d {} && cp -a {} {} && rm -f {}",
                         shell::quote(parent),
-                        shell::quote(path),
+                        shell::quote(&path),
                         shell::quote(&backup),
-                        shell::quote(path)
+                        shell::quote(&path)
                     ))?;
                     Ok(())
                 },
@@ -438,7 +434,7 @@ mod tests {
         config::scaffold::initialize(temp.path()).unwrap();
         let repo = config::open(temp.path()).unwrap();
         let mut plan = Plan {
-            schema_version: 2,
+            schema_version: 3,
             created_at: Utc::now(),
             capture_id: "fixture-capture".into(),
             target: "https://pve.test:8006".into(),
@@ -523,7 +519,7 @@ mod tests {
     fn injected_client_failure_is_journaled_without_network() {
         let temp = tempfile::tempdir().unwrap();
         let plan = Plan {
-            schema_version: 2,
+            schema_version: 3,
             created_at: Utc::now(),
             capture_id: "fixture-capture".into(),
             target: "https://pve.test:8006".into(),
@@ -573,7 +569,7 @@ mod tests {
         ))
         .unwrap();
         let plan = Plan {
-            schema_version: 2,
+            schema_version: 3,
             created_at: Utc::now(),
             capture_id: "fixture-capture".into(),
             target: fixture.pve_target.clone(),

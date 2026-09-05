@@ -27,7 +27,7 @@ pub(crate) fn run(
     });
     runtime_security::prepare(&local.runtime())?;
     let captured = CapturedState::load(local, chrono::Duration::minutes(30))?;
-    let plan: Plan = serde_json::from_slice(
+    let plan = Plan::from_slice(
         &runtime_security::read(
             &local
                 .runtime()

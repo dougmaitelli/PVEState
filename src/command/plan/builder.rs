@@ -36,7 +36,7 @@ impl PlanBuilder {
 
     pub(crate) fn finish(self) -> Result<Plan> {
         let mut plan = Plan {
-            schema_version: 2,
+            schema_version: 3,
             created_at: Utc::now(),
             capture_id: self.capture_id,
             target: self.target,

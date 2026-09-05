@@ -157,7 +157,7 @@ mod tests {
 
     fn plan() -> Plan {
         Plan {
-            schema_version: 2,
+            schema_version: 3,
             created_at: Utc::now(),
             capture_id: "fixture-capture".into(),
             target: "https://pve.test:8006".into(),
@@ -173,7 +173,7 @@ mod tests {
         plan.operations.push(Operation::DeleteFile {
             domain: "firewall".into(),
             resource: "guest/101".into(),
-            path: "/etc/pve/firewall/101.fw".into(),
+            target: crate::command::plan::ManagedFile::GuestFirewall { vmid: 101 },
             before_content: "old firewall".into(),
             before_sha256: "before".into(),
         });

@@ -6,7 +6,7 @@ mod validation;
 
 pub(crate) use builder::PlanBuilder;
 pub(crate) use output::print_human;
-pub(crate) use types::{ApiPath, DiskId, Domain, ResourceId, SecretName};
+pub(crate) use types::{ApiPath, DiskId, Domain, ManagedFile, ResourceId, SecretName};
 
 use crate::{
     client::{PbsClient, PveClient},
@@ -48,17 +48,16 @@ pub(crate) enum Operation {
     WriteFile {
         domain: Domain,
         resource: ResourceId,
-        path: String,
+        target: ManagedFile,
         content: String,
         #[serde(skip)]
         before_content: Option<String>,
         before_sha256: Option<String>,
-        activate: bool,
     },
     DeleteFile {
         domain: Domain,
         resource: ResourceId,
-        path: String,
+        target: ManagedFile,
         #[serde(skip)]
         before_content: String,
         before_sha256: String,
@@ -116,8 +115,8 @@ impl Operation {
             Self::GrowDisk {
                 resource, size_gb, ..
             } => format!("grow {resource} to {size_gb} GiB"),
-            Self::WriteFile { path, .. } => format!("write {path}"),
-            Self::DeleteFile { path, .. } => format!("delete {path}"),
+            Self::WriteFile { target, .. } => format!("write {}", target.path()),
+            Self::DeleteFile { target, .. } => format!("delete {}", target.path()),
         }
     }
 }
@@ -136,6 +135,18 @@ pub(crate) struct Plan {
 }
 
 impl Plan {
+    pub(crate) fn from_slice(bytes: &[u8]) -> Result<Self> {
+        let value: serde_json::Value = serde_json::from_slice(bytes)?;
+        let schema_version = value
+            .get("schema_version")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_default();
+        if schema_version != 3 {
+            bail!("unsupported plan schema {schema_version}; run plan again")
+        }
+        Ok(serde_json::from_value(value)?)
+    }
+
     #[cfg(test)]
     pub(crate) fn calculate_hash(&self) -> Result<String> {
         let mut signed = self.clone();
@@ -144,7 +155,7 @@ impl Plan {
     }
 
     pub(crate) fn verify(&self) -> Result<()> {
-        if self.schema_version != 2 {
+        if self.schema_version != 3 {
             bail!(
                 "unsupported plan schema {}; run plan again",
                 self.schema_version
@@ -187,12 +198,24 @@ impl Plan {
                     }
                 },
                 Operation::WriteFile {
-                    domain, resource, ..
+                    domain,
+                    resource,
+                    target,
+                    ..
                 }
                 | Operation::DeleteFile {
-                    domain, resource, ..
+                    domain,
+                    resource,
+                    target,
+                    ..
                 } => {
                     types::validate_operation(*domain, ApiTarget::Pve, resource)?;
+                    if !target.matches(*domain, resource) {
+                        bail!(
+                            "managed file {} is incompatible with domain {domain} and resource {resource}",
+                            target.path()
+                        )
+                    }
                 },
             }
         }
@@ -307,34 +330,26 @@ pub(super) fn build(
     file::operation(
         repo,
         (Domain::Network, &repo.guests.node),
-        (
-            crate::resource::native_paths::NETWORK_ARTIFACT,
-            crate::resource::native_paths::NETWORK_REMOTE,
-        ),
+        crate::resource::native_paths::NETWORK_ARTIFACT,
+        ManagedFile::NetworkInterfaces,
         network::render::render(&repo.network),
-        true,
         builder.operations(),
     )?;
     if let Some(policy) = &repo.cluster.firewall {
         file::operation(
             repo,
             (Domain::Firewall, "cluster"),
-            (
-                crate::resource::native_paths::CLUSTER_FIREWALL_ARTIFACT,
-                crate::resource::native_paths::CLUSTER_FIREWALL_REMOTE,
-            ),
+            crate::resource::native_paths::CLUSTER_FIREWALL_ARTIFACT,
+            ManagedFile::ClusterFirewall,
             firewall::render::render(policy),
-            false,
             builder.operations(),
         )?;
     } else {
         file::deletion(
             repo,
             (Domain::Firewall, "cluster"),
-            (
-                crate::resource::native_paths::CLUSTER_FIREWALL_ARTIFACT,
-                crate::resource::native_paths::CLUSTER_FIREWALL_REMOTE,
-            ),
+            crate::resource::native_paths::CLUSTER_FIREWALL_ARTIFACT,
+            ManagedFile::ClusterFirewall,
             builder.operations(),
         )?;
     }
@@ -349,47 +364,45 @@ pub(super) fn build(
                 .iter()
                 .map(|(id, guest)| (id, guest.firewall.as_ref())),
         );
-    for (id, policy) in guest_firewalls {
-        let id = id.to_string();
-        let paths = (
-            crate::resource::native_paths::guest_firewall_artifact(&id),
-            crate::resource::native_paths::guest_firewall_remote(&id),
-        );
+    for (vmid, policy) in guest_firewalls {
+        let resource = vmid.to_string();
+        let local = crate::resource::native_paths::guest_firewall_artifact(vmid);
         if let Some(policy) = policy {
             file::operation(
                 repo,
-                (Domain::Firewall, &id),
-                (&paths.0, &paths.1),
+                (Domain::Firewall, &resource),
+                &local,
+                ManagedFile::GuestFirewall { vmid: *vmid },
                 firewall::render::render(policy),
-                false,
                 builder.operations(),
             )?;
         } else {
             file::deletion(
                 repo,
-                (Domain::Firewall, &id),
-                (&paths.0, &paths.1),
+                (Domain::Firewall, &resource),
+                &local,
+                ManagedFile::GuestFirewall { vmid: *vmid },
                 builder.operations(),
             )?;
         }
     }
     let node = &repo.node.node.name;
     let local = crate::resource::native_paths::node_firewall_artifact(node);
-    let remote = crate::resource::native_paths::node_firewall_remote(node);
     if let Some(policy) = &repo.node.firewall {
         file::operation(
             repo,
             (Domain::Firewall, &format!("node/{node}")),
-            (&local, &remote),
+            &local,
+            ManagedFile::NodeFirewall { node: node.clone() },
             firewall::render::render(policy),
-            false,
             builder.operations(),
         )?;
     } else {
         file::deletion(
             repo,
             (Domain::Firewall, &format!("node/{node}")),
-            (&local, &remote),
+            &local,
+            ManagedFile::NodeFirewall { node: node.clone() },
             builder.operations(),
         )?;
     }
@@ -604,20 +617,20 @@ mod tests {
             Operation::WriteFile {
                 domain,
                 resource,
-                path,
-                activate,
+                target,
                 ..
             } => serde_json::json!({
                 "action": "write-file", "domain": domain, "resource": resource,
-                "path": path, "activate": activate,
+                "target": target,
             }),
             Operation::DeleteFile {
                 domain,
                 resource,
-                path,
+                target,
                 ..
             } => serde_json::json!({
-                "action": "delete-file", "domain": domain, "resource": resource, "path": path,
+                "action": "delete-file", "domain": domain, "resource": resource,
+                "target": target,
             }),
         }
     }
@@ -625,7 +638,7 @@ mod tests {
     #[test]
     fn plan_hash_detects_tampering() {
         let mut plan = Plan {
-            schema_version: 2,
+            schema_version: 3,
             created_at: Utc::now(),
             capture_id: "fixture-capture".into(),
             target: "https://pve.example:8006".into(),
@@ -643,7 +656,7 @@ mod tests {
     #[test]
     fn plan_verification_rejects_cross_domain_operations() {
         let mut plan = Plan {
-            schema_version: 2,
+            schema_version: 3,
             created_at: Utc::now(),
             capture_id: "fixture-capture".into(),
             target: "https://pve.example:8006".into(),
@@ -665,6 +678,64 @@ mod tests {
 
         let error = plan.verify().unwrap_err();
         assert!(error.to_string().contains("incompatible"));
+    }
+
+    #[test]
+    fn plan_verification_rejects_managed_file_identity_mismatch() {
+        let mut plan = Plan {
+            schema_version: 3,
+            created_at: Utc::now(),
+            capture_id: "fixture-capture".into(),
+            target: "https://pve.example:8006".into(),
+            pbs_target: "https://pbs.example:8007".into(),
+            operations: vec![Operation::DeleteFile {
+                domain: Domain::Firewall,
+                resource: ResourceId::Guest("lxc/102".parse().unwrap()),
+                target: ManagedFile::GuestFirewall { vmid: 101 },
+                before_content: String::new(),
+                before_sha256: String::new(),
+            }],
+            blockers: Vec::new(),
+            plan_sha256: String::new(),
+        };
+        plan.plan_sha256 = plan.calculate_hash().unwrap();
+
+        let error = plan.verify().unwrap_err();
+        assert!(error.to_string().contains("incompatible"));
+    }
+
+    #[test]
+    fn legacy_arbitrary_file_paths_are_not_deserializable() {
+        let operation = serde_json::json!({
+            "action": "delete-file",
+            "domain": "firewall",
+            "resource": "cluster",
+            "path": "/etc/shadow",
+            "before_sha256": "digest"
+        });
+
+        assert!(serde_json::from_value::<Operation>(operation).is_err());
+    }
+
+    #[test]
+    fn old_plan_schema_requests_regeneration_before_operation_decoding() {
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "schema_version": 2,
+            "operations": [{
+                "action": "delete-file",
+                "domain": "firewall",
+                "resource": "cluster",
+                "path": "/etc/shadow",
+                "before_sha256": "digest"
+            }]
+        }))
+        .unwrap();
+
+        let error = Plan::from_slice(&bytes).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "unsupported plan schema 2; run plan again"
+        );
     }
 
     #[test]

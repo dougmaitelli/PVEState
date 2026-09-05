@@ -8,9 +8,9 @@
   {"action":"api-mutation","target":"pbs","method":"put","domain":"pbs","resource":"datastore/example-backup","endpoint":"/config/datastore/example%2Dbackup","changes":{"gc-schedule":"daily"},"digest":null},
   {"action":"api-mutation","target":"pbs","method":"post","domain":"pbs","resource":"s3/example","endpoint":"/config/s3","changes":{"endpoint":"{{bucket}}.s3.example.test","id":"example","region":"us-west-1"},"environment_changes":{"access-key":"PBS_APPLY_S3_ACCESS_KEY","secret-key":"PBS_APPLY_S3_SECRET_KEY"},"digest":null},
   {"action":"api-mutation","target":"pbs","method":"put","domain":"pbs","resource":"prune/prune-example","endpoint":"/config/prune/prune%2Dexample","changes":{"schedule":"daily"},"digest":null},
-  {"action":"write-file","domain":"network","resource":"pve","path":"/etc/network/interfaces","activate":true},
-  {"action":"write-file","domain":"firewall","resource":"cluster","path":"/etc/pve/firewall/cluster.fw","activate":false},
-  {"action":"write-file","domain":"firewall","resource":"101","path":"/etc/pve/firewall/101.fw","activate":false},
-  {"action":"delete-file","domain":"firewall","resource":"201","path":"/etc/pve/firewall/201.fw"},
-  {"action":"write-file","domain":"firewall","resource":"node/pve","path":"/etc/pve/nodes/pve/host.fw","activate":false}
+  {"action":"write-file","domain":"network","resource":"pve","target":{"kind":"network-interfaces"}},
+  {"action":"write-file","domain":"firewall","resource":"cluster","target":{"kind":"cluster-firewall"}},
+  {"action":"write-file","domain":"firewall","resource":"101","target":{"kind":"guest-firewall","vmid":101}},
+  {"action":"delete-file","domain":"firewall","resource":"201","target":{"kind":"guest-firewall","vmid":201}},
+  {"action":"write-file","domain":"firewall","resource":"node/pve","target":{"kind":"node-firewall","node":"pve"}}
 ]

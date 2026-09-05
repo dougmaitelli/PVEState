@@ -1,4 +1,7 @@
-use crate::model::{DiskInterface, GuestRef};
+use crate::{
+    model::{DiskInterface, GuestRef},
+    resource::native_paths,
+};
 use anyhow::{Result, bail};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::{fmt, ops::Deref};
@@ -13,6 +16,78 @@ pub(crate) enum Domain {
     Dns,
     Backup,
     Pbs,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub(crate) enum ManagedFile {
+    NetworkInterfaces,
+    ClusterFirewall,
+    NodeFirewall { node: String },
+    GuestFirewall { vmid: u32 },
+}
+
+impl ManagedFile {
+    pub(crate) fn path(&self) -> String {
+        match self {
+            Self::NetworkInterfaces => native_paths::NETWORK_REMOTE.into(),
+            Self::ClusterFirewall => native_paths::CLUSTER_FIREWALL_REMOTE.into(),
+            Self::NodeFirewall { node } => native_paths::node_firewall_remote(node),
+            Self::GuestFirewall { vmid } => native_paths::guest_firewall_remote(vmid),
+        }
+    }
+
+    pub(crate) const fn domain(&self) -> Domain {
+        match self {
+            Self::NetworkInterfaces => Domain::Network,
+            Self::ClusterFirewall | Self::NodeFirewall { .. } | Self::GuestFirewall { .. } => {
+                Domain::Firewall
+            },
+        }
+    }
+
+    pub(crate) const fn requires_activation(&self) -> bool {
+        matches!(self, Self::NetworkInterfaces)
+    }
+
+    pub(crate) const fn mode(&self) -> &'static str {
+        match self {
+            Self::NetworkInterfaces => "0644",
+            Self::ClusterFirewall | Self::NodeFirewall { .. } | Self::GuestFirewall { .. } => {
+                "0640"
+            },
+        }
+    }
+
+    pub(crate) fn matches(&self, domain: Domain, resource: &ResourceId) -> bool {
+        if !self.is_valid() || domain != self.domain() {
+            return false;
+        }
+        match (self, resource) {
+            (Self::NetworkInterfaces, ResourceId::Named(_))
+            | (Self::ClusterFirewall, ResourceId::Cluster) => true,
+            (Self::NodeFirewall { node }, ResourceId::Node(resource_node)) => node == resource_node,
+            (Self::GuestFirewall { vmid }, ResourceId::Guest(resource_guest)) => {
+                *vmid == resource_guest.vmid
+            },
+            (Self::GuestFirewall { vmid }, ResourceId::Named(resource_vmid)) => {
+                resource_vmid.parse::<u32>() == Ok(*vmid)
+            },
+            _ => false,
+        }
+    }
+
+    fn is_valid(&self) -> bool {
+        match self {
+            Self::NodeFirewall { node } => {
+                !node.is_empty()
+                    && node.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_')
+                    })
+            },
+            Self::NetworkInterfaces | Self::ClusterFirewall | Self::GuestFirewall { .. } => true,
+        }
+    }
 }
 
 impl Domain {
@@ -257,6 +332,43 @@ mod tests {
         ));
         assert!(matches!(ResourceId::parse("node/pve"), ResourceId::Node(_)));
         assert_eq!(ResourceId::parse("cluster"), ResourceId::Cluster);
+    }
+
+    #[test]
+    fn managed_files_have_canonical_paths_domains_and_activation() {
+        let network = ManagedFile::NetworkInterfaces;
+        assert_eq!(network.path(), "/etc/network/interfaces");
+        assert_eq!(network.domain(), Domain::Network);
+        assert!(network.requires_activation());
+
+        let cluster = ManagedFile::ClusterFirewall;
+        assert_eq!(cluster.path(), "/etc/pve/firewall/cluster.fw");
+        assert_eq!(cluster.domain(), Domain::Firewall);
+        assert!(!cluster.requires_activation());
+
+        let node = ManagedFile::NodeFirewall { node: "pve".into() };
+        assert_eq!(node.path(), "/etc/pve/nodes/pve/host.fw");
+
+        let guest = ManagedFile::GuestFirewall { vmid: 101 };
+        assert_eq!(guest.path(), "/etc/pve/firewall/101.fw");
+    }
+
+    #[test]
+    fn managed_file_rejects_traversal_and_identity_mismatches() {
+        let traversal = ManagedFile::NodeFirewall {
+            node: "../../shadow".into(),
+        };
+        assert!(!traversal.matches(Domain::Firewall, &ResourceId::Node("../../shadow".into())));
+
+        let guest = ManagedFile::GuestFirewall { vmid: 101 };
+        assert!(!guest.matches(
+            Domain::Firewall,
+            &ResourceId::Guest("lxc/102".parse().unwrap())
+        ));
+        assert!(!guest.matches(
+            Domain::Network,
+            &ResourceId::Guest("lxc/101".parse().unwrap())
+        ));
     }
 
     #[test]

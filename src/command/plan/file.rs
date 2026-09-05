@@ -1,4 +1,4 @@
-use super::{Domain, Operation, ResourceId};
+use super::{Domain, ManagedFile, Operation, ResourceId};
 use crate::{
     config::LocalState,
     resource::{firewall, network},
@@ -10,13 +10,12 @@ use std::fs;
 pub(super) fn operation(
     repo: &LocalState,
     identity: (Domain, &str),
-    paths: (&str, &str),
+    local: &str,
+    target: ManagedFile,
     wanted: String,
-    activate: bool,
     operations: &mut Vec<Operation>,
 ) -> Result<()> {
     let (domain, resource) = identity;
-    let (local, remote) = paths;
     let current = fs::read_to_string(repo.observed().join(local)).ok();
     let current_text = current.as_deref().unwrap_or_default();
     let differs = if domain == Domain::Firewall {
@@ -32,11 +31,10 @@ pub(super) fn operation(
         operations.push(Operation::WriteFile {
             domain,
             resource,
-            path: remote.into(),
+            target,
             content: wanted,
             before_content: current,
             before_sha256,
-            activate,
         });
     }
     Ok(())
@@ -45,10 +43,11 @@ pub(super) fn operation(
 pub(super) fn deletion(
     repo: &LocalState,
     identity: (Domain, &str),
-    paths: (&str, &str),
+    local: &str,
+    target: ManagedFile,
     operations: &mut Vec<Operation>,
 ) -> Result<()> {
-    let Some(current) = fs::read(repo.observed().join(paths.0)).ok() else {
+    let Some(current) = fs::read(repo.observed().join(local)).ok() else {
         return Ok(());
     };
     let domain = identity.0;
@@ -56,7 +55,7 @@ pub(super) fn deletion(
     operations.push(Operation::DeleteFile {
         domain,
         resource,
-        path: paths.1.into(),
+        target,
         before_sha256: hex::encode(Sha256::digest(&current)),
         before_content: String::from_utf8_lossy(&current).into_owned(),
     });
