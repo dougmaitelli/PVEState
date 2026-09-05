@@ -1,6 +1,7 @@
-use crate::utility::yaml_patch::{self, Patch, Segment};
+use crate::utility::yaml_patch::Segment;
 use crate::{
-    config::Repository,
+    config::{ConfigDocument, LocalPatch, LocalState},
+    discovery::CapturedNative,
     model::{
         Bridge, FirewallAction, FirewallAlias, FirewallDirection, FirewallIpSet,
         FirewallIpSetEntry, FirewallLogLevel, FirewallPolicy, FirewallProtocol, FirewallRule,
@@ -8,10 +9,7 @@ use crate::{
     },
 };
 use anyhow::{Context, Result, bail};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
-};
+use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ParsedNetwork {
@@ -46,15 +44,15 @@ pub enum Target {
     Firewall { resource: String },
 }
 
-pub fn prepare(
-    repo: &Repository,
+pub fn adoption_patches(
+    local: &LocalState,
+    captured: &CapturedNative,
     target: &Target,
-    documents: &mut BTreeMap<String, String>,
-) -> Result<()> {
+) -> Result<Vec<LocalPatch>> {
     match target {
         Target::Network => {
-            let captured = fs::read_to_string(repo.observed().join("network/interfaces"))?;
-            let parsed = parse_network(&captured, &repo.network)?;
+            let content = captured.read_to_string("network/interfaces")?;
+            let parsed = parse_network(&content, &local.network)?;
             if !parsed.unmodeled.is_empty() {
                 bail!(
                     "captured network contains syntax that cannot be adopted safely: {}",
@@ -66,20 +64,22 @@ pub fn prepare(
                         .join("; ")
                 )
             }
-            patch_document(
-                repo,
-                documents,
-                "config/network.yml",
-                vec![
-                    set("interfaces", &parsed.managed.interfaces)?,
-                    set("bridges", &parsed.managed.bridges)?,
-                ],
-            )?;
-            Ok(())
+            Ok(vec![
+                replace(
+                    ConfigDocument::Network,
+                    vec![Segment::Key("interfaces".into())],
+                    &parsed.managed.interfaces,
+                )?,
+                replace(
+                    ConfigDocument::Network,
+                    vec![Segment::Key("bridges".into())],
+                    &parsed.managed.bridges,
+                )?,
+            ])
         },
         Target::Firewall { resource } => {
-            let (observed, path) = firewall_paths(repo, resource)?;
-            let policy = if let Ok(content) = fs::read_to_string(observed) {
+            let (observed, document, path) = firewall_paths(local, captured, resource)?;
+            let policy = if let Ok(content) = std::fs::read_to_string(observed) {
                 let parsed = parse_firewall(&content);
                 if !parsed.unmodeled.is_empty() {
                     bail!(
@@ -96,71 +96,65 @@ pub fn prepare(
             } else {
                 None
             };
-            let document = match resource.as_str() {
-                "cluster" => "config/cluster.yml",
-                value if value.starts_with("node/") => "config/node.yml",
-                _ => "config/guests.yml",
-            };
-            patch_document(
-                repo,
-                documents,
-                document,
-                vec![Patch::Set(path, serde_yaml::to_value(policy)?)],
-            )
+            Ok(vec![if let Some(policy) = policy {
+                LocalPatch::ReplaceResource {
+                    document,
+                    path,
+                    value: serde_yaml::to_value(policy)?,
+                }
+            } else {
+                LocalPatch::RemoveResource { document, path }
+            }])
         },
     }
 }
 
-fn set(key: &str, value: &impl serde::Serialize) -> Result<Patch> {
-    Ok(Patch::Set(
-        vec![Segment::Key(key.into())],
-        serde_yaml::to_value(value)?,
-    ))
+fn replace(
+    document: ConfigDocument,
+    path: Vec<Segment>,
+    value: &impl serde::Serialize,
+) -> Result<LocalPatch> {
+    Ok(LocalPatch::ReplaceResource {
+        document,
+        path,
+        value: serde_yaml::to_value(value)?,
+    })
 }
 
-fn patch_document(
-    repo: &Repository,
-    documents: &mut BTreeMap<String, String>,
-    path: &str,
-    patches: Vec<Patch>,
-) -> Result<()> {
-    let content = documents
-        .get(path)
-        .cloned()
-        .map(Ok)
-        .unwrap_or_else(|| fs::read_to_string(repo.root().join(path)))?;
-    let updated = yaml_patch::apply_patches(&content, &patches)?;
-    documents.insert(path.to_string(), updated);
-    Ok(())
-}
-
-fn firewall_paths(repo: &Repository, resource: &str) -> Result<(std::path::PathBuf, Vec<Segment>)> {
-    let observed = repo.observed().join("pve/firewall");
+fn firewall_paths(
+    local: &LocalState,
+    captured: &CapturedNative,
+    resource: &str,
+) -> Result<(std::path::PathBuf, ConfigDocument, Vec<Segment>)> {
+    let observed = captured.path("pve/firewall");
     if resource == "cluster" {
         return Ok((
             observed.join("cluster.fw"),
+            ConfigDocument::Cluster,
             vec![Segment::Key("firewall".into())],
         ));
     }
     if let Some(node) = resource.strip_prefix("node/") {
         return Ok((
             observed.join(format!("{node}-host.fw")),
+            ConfigDocument::Node,
             vec![Segment::Key("firewall".into())],
         ));
     }
     let id: u32 = resource
         .parse()
         .with_context(|| format!("invalid firewall resource {resource}"))?;
-    let (collection, exists) = if repo.guests.lxcs.contains_key(&id) {
+    let (collection, exists) = if local.guests.lxcs.contains_key(&id) {
         ("lxcs", true)
     } else {
-        ("vms", repo.guests.vms.contains_key(&id))
+        ("vms", local.guests.vms.contains_key(&id))
     };
     if !exists {
         bail!("firewall resource {resource} is not a configured guest")
     }
     Ok((
         observed.join(format!("{id}.fw")),
+        ConfigDocument::Guests,
         vec![
             Segment::Key(collection.into()),
             Segment::Key(id.to_string()),

@@ -1,12 +1,12 @@
 use crate::{
     client::RemoteHost,
-    config::Repository,
+    config::LocalState,
     utility::{atomic_file, progress},
 };
 use anyhow::Result;
 use std::collections::BTreeMap;
 
-pub(super) fn capture(repo: &Repository, ssh: &dyn RemoteHost) -> Result<Vec<String>> {
+pub(super) fn capture(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<Vec<String>> {
     let pbs_vmid = repo.backup.pbs.guest.vmid;
     let cluster_command = if repo.node.node.standalone {
         "pvecm status 2>&1 || true"

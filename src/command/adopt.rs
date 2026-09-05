@@ -2,14 +2,13 @@ mod transaction;
 
 use crate::{
     command::plan::{ApiTarget, Operation, Plan},
-    config::Repository,
-    discovery::CaptureManifest,
+    config::{ConfigDocument, LocalPatch, LocalState},
+    discovery::CapturedState,
     model::{GuestField, GuestKind, GuestRef},
     resource::native,
     utility::{progress, runtime_security, yaml_patch},
 };
 use anyhow::{Context, Result, bail};
-use chrono::Duration;
 use serde::Serialize;
 use serde_json::Value;
 use std::{
@@ -28,34 +27,30 @@ pub struct Candidate {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     #[serde(skip)]
-    native: Option<native::Target>,
+    patches: Vec<LocalPatch>,
 }
 
-pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) -> Result<()> {
+pub fn run(repo: &LocalState, preview: bool, all: bool, requested: &[String]) -> Result<()> {
     progress::section(if preview {
         "Previewing captured drift"
     } else {
         "Adopting captured state into local configuration"
     });
     runtime_security::prepare(&repo.runtime())?;
-    let manifest: CaptureManifest = serde_json::from_slice(
-        &fs::read(repo.observed().join("manifest.json")).context("run capture first")?,
-    )?;
-    manifest.verify(&repo.observed(), Duration::minutes(30))?;
+    let captured = CapturedState::load(repo, chrono::Duration::minutes(30))?;
     let plan: Plan = serde_json::from_slice(
         &runtime_security::read(&repo.runtime().join("production-plan.json"))
             .context("run plan first")?,
     )?;
     plan.verify()?;
-    if plan.capture_id != manifest.capture_id {
+    if plan.capture_id != captured.id().as_str() {
         bail!(
             "plan was created from capture {}, but the current capture is {}; run plan again",
             plan.capture_id,
-            manifest.capture_id
+            captured.id().as_str()
         )
     }
-    let observed: Value = serde_json::from_slice(&fs::read(repo.observed().join("api/pve.json"))?)?;
-    let candidates = candidates(repo, &plan, &observed)?;
+    let candidates = candidates(repo, &captured, &plan)?;
 
     if preview {
         progress::finish(true);
@@ -72,11 +67,7 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
         bail!("unknown adoption IDs: {unknown:?}")
     }
 
-    let guest_document = "config/guests.yml".to_string();
-    let mut guest_content = fs::read_to_string(repo.root().join(&guest_document))?;
-    let mut guest_changed = false;
-    let mut documents = BTreeMap::new();
-    let mut native_targets = Vec::new();
+    let mut patches = Vec::new();
     for candidate in candidates
         .iter()
         .filter(|candidate| selected.contains(&candidate.id))
@@ -92,21 +83,9 @@ pub fn run(repo: &Repository, preview: bool, all: bool, requested: &[String]) ->
                 candidate.reason.as_deref().unwrap_or("unsupported")
             )
         }
-        if let Some(target) = &candidate.native {
-            native_targets.push(target);
-        } else {
-            guest_content = apply_candidate(&guest_content, candidate)?;
-            guest_changed = true;
-        }
+        patches.extend(candidate.patches.clone());
     }
-    if guest_changed {
-        serde_yaml::from_str::<crate::model::Guests>(&guest_content)
-            .context("validate adopted config/guests.yml")?;
-        documents.insert(guest_document, guest_content);
-    }
-    for target in native_targets {
-        native::prepare(repo, target, &mut documents)?;
-    }
+    let documents = apply_local_patches(repo, patches)?;
     transaction::validate(repo, &documents)?;
     transaction::publish(repo, &documents)?;
     progress::finish(true);
@@ -140,7 +119,7 @@ fn selection(
     Ok(requested.iter().cloned().collect())
 }
 
-fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Candidate>> {
+fn candidates(repo: &LocalState, captured: &CapturedState, plan: &Plan) -> Result<Vec<Candidate>> {
     let mut result = Vec::new();
     for operation in &plan.operations {
         let Operation::ApiMutation {
@@ -167,7 +146,7 @@ fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Ca
             continue;
         }
         let guest = resource.guest().context("guest operation resource")?;
-        let actual = guest_config(observed, &repo.guests.node, guest)?;
+        let actual = guest_config(captured, &repo.guests.node, guest)?;
         for (field, desired) in changes {
             if field == "delete" {
                 result.push(candidate(
@@ -194,14 +173,20 @@ fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Ca
             } else {
                 (desired.clone(), production)
             };
-            result.push(candidate(
+            let mut value = candidate(
                 resource,
                 &candidate_field,
                 &desired,
                 &production,
                 adoptable,
                 (!adoptable).then_some("field has no unambiguous desired-state mapping"),
-            ));
+            );
+            if let Some(field) = typed_field {
+                value
+                    .patches
+                    .push(guest_patch(guest, field, &value.captured)?);
+            }
+            result.push(value);
         }
     }
     for operation in &plan.operations {
@@ -209,17 +194,23 @@ fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Ca
             let Some(guest) = resource.guest() else {
                 continue;
             };
-            let actual = guest_config(observed, &repo.guests.node, guest)?;
+            let actual = guest_config(captured, &repo.guests.node, guest)?;
             let disk_config = value_string(actual.get(disk.as_str()).unwrap_or(&Value::Null));
             let production = option(&disk_config, "size").unwrap_or_default();
-            result.push(candidate(
+            let mut value = candidate(
                 resource,
                 &GuestField::DiskSize.api_name(),
                 "larger",
                 production.trim_end_matches('G'),
                 true,
                 None,
-            ));
+            );
+            value.patches.push(guest_patch(
+                guest,
+                GuestField::DiskSize,
+                production.trim_end_matches('G'),
+            )?);
+            result.push(value);
         }
     }
     for operation in &plan.operations {
@@ -245,7 +236,13 @@ fn candidates(repo: &Repository, plan: &Plan, observed: &Value) -> Result<Vec<Ca
                     true,
                     None,
                 );
-                value.native = Some(target);
+                match native::adoption_patches(repo, &captured.native, &target) {
+                    Ok(patches) => value.patches = patches,
+                    Err(error) => {
+                        value.adoptable = false;
+                        value.reason = Some(format!("{error:#}"));
+                    },
+                }
                 result.push(value);
             },
             Operation::WriteFile { resource, path, .. }
@@ -279,7 +276,7 @@ fn candidate(
         captured: captured.into(),
         adoptable,
         reason: reason.into().map(str::to_owned),
-        native: None,
+        patches: Vec::new(),
     }
 }
 
@@ -315,20 +312,21 @@ fn adoption_field(kind: GuestKind, field: &str, production: &str) -> Option<Gues
     }
 }
 
-fn apply_candidate(content: &str, candidate: &Candidate) -> Result<String> {
-    let reference: GuestRef = candidate.resource.parse()?;
-    let field = candidate_field(&candidate.field)?;
+fn guest_patch(reference: GuestRef, field: GuestField, captured: &str) -> Result<LocalPatch> {
     let mut prefix = vec![
         yaml_patch::Segment::Key(reference.kind.collection_name().into()),
         yaml_patch::Segment::Key(reference.vmid.to_string()),
     ];
-    let yaml_patch::Patch::Set(mut path, value) =
-        adoption_patch(reference.kind, field, &candidate.captured)?
+    let yaml_patch::Patch::Set(mut path, value) = adoption_patch(reference.kind, field, captured)?
     else {
         unreachable!("guest field adoption only creates set patches")
     };
     prefix.append(&mut path);
-    yaml_patch::apply_patches(content, &[yaml_patch::Patch::Set(prefix, value)])
+    Ok(LocalPatch::SetScalar {
+        document: ConfigDocument::Guests,
+        path: prefix,
+        value,
+    })
 }
 
 #[derive(Clone, Copy)]
@@ -474,25 +472,28 @@ fn adoption_patch(
     Ok(yaml_patch::Patch::Set(path, value))
 }
 
-fn guest_config<'a>(observed: &'a Value, node: &str, guest: GuestRef) -> Result<&'a Value> {
-    let collection = guest.kind.collection_name();
-    observed
-        .pointer(&format!(
-            "/nodes/{node}/{collection}/{}/config/data",
-            guest.vmid
-        ))
-        .with_context(|| format!("captured config for {guest}"))
+fn guest_config(captured: &CapturedState, node: &str, guest: GuestRef) -> Result<Value> {
+    captured.pve.response(&guest.config_endpoint(node))
 }
 
-fn candidate_field(value: &str) -> Result<GuestField> {
-    if let Some(index) = value
-        .strip_prefix("mp")
-        .and_then(|value| value.strip_suffix(".backed_up_by_pve"))
-        .and_then(|value| value.parse().ok())
-    {
-        return Ok(GuestField::BindMountBackup(index));
+fn apply_local_patches(
+    local: &LocalState,
+    patches: Vec<LocalPatch>,
+) -> Result<BTreeMap<String, String>> {
+    let mut grouped = BTreeMap::<ConfigDocument, Vec<yaml_patch::Patch>>::new();
+    for patch in patches {
+        grouped
+            .entry(patch.document())
+            .or_default()
+            .push(patch.into_yaml_patch());
     }
-    GuestField::from_api(value).with_context(|| format!("unknown guest field {value}"))
+    let mut documents = BTreeMap::new();
+    for (document, patches) in grouped {
+        let path = document.path();
+        let content = fs::read_to_string(local.root().join(path))?;
+        documents.insert(path.into(), yaml_patch::apply_patches(&content, &patches)?);
+    }
+    Ok(documents)
 }
 
 fn option<'a>(value: &'a str, name: &str) -> Option<&'a str> {
@@ -524,18 +525,14 @@ mod tests {
     #[test]
     fn adopts_lxc_mount_backup_flag() {
         let before = include_str!("../../examples/basic/config/guests.yml");
-        let candidate = Candidate {
-            id: "lxc/101:mp0.backed_up_by_pve".into(),
-            resource: "lxc/101".into(),
-            field: "mp0.backed_up_by_pve".into(),
-            local: "0".into(),
-            captured: "1".into(),
-            adoptable: true,
-            reason: None,
-            native: None,
-        };
-
-        let after = apply_candidate(before, &candidate).unwrap();
+        let patch = guest_patch(
+            GuestRef::new(GuestKind::Lxc, 101),
+            GuestField::BindMountBackup(0),
+            "1",
+        )
+        .unwrap()
+        .into_yaml_patch();
+        let after = yaml_patch::apply_patches(before, &[patch]).unwrap();
         let guests: crate::model::Guests = serde_yaml::from_str(&after).unwrap();
 
         assert!(guests.lxcs[&101].bind_mounts[0].backed_up_by_pve);
@@ -561,7 +558,7 @@ mod tests {
                 captured: "4".into(),
                 adoptable: true,
                 reason: None,
-                native: None,
+                patches: Vec::new(),
             },
             Candidate {
                 id: "no".into(),
@@ -571,7 +568,7 @@ mod tests {
                 captured: "live".into(),
                 adoptable: false,
                 reason: Some("unsupported".into()),
-                native: None,
+                patches: Vec::new(),
             },
         ];
         assert_eq!(

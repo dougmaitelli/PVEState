@@ -1,5 +1,5 @@
 use crate::{
-    config::Repository,
+    config::LocalState,
     settings::RecoverySettings,
     utility::{
         atomic_file, authorization,
@@ -39,7 +39,7 @@ impl PlanEnvelope for RecoveryPlan {
     }
 }
 
-pub(super) fn create(repo: &Repository, target: &str) -> Result<()> {
+pub(super) fn create(repo: &LocalState, target: &str) -> Result<()> {
     let mut blockers = Vec::new();
     if repo.restore.target.expected_host_key_sha256.is_none() {
         blockers.push("target.expected_host_key_sha256".into());
@@ -90,7 +90,7 @@ pub(super) fn create(repo: &Repository, target: &str) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn load(repo: &Repository) -> Result<RecoveryPlan> {
+pub(super) fn load(repo: &LocalState) -> Result<RecoveryPlan> {
     Ok(serde_json::from_slice(
         &runtime_security::read(&repo.runtime().join("recovery-plan.json"))
             .context("run recover plan first")?,

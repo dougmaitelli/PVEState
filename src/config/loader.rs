@@ -1,12 +1,12 @@
-use super::{Repository, RepositoryLayout};
+use super::{LocalState, RepositoryLayout};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::{fs, path::Path};
 
-pub fn open(root: &Path) -> Result<Repository> {
+pub fn open(root: &Path) -> Result<LocalState> {
     let layout = RepositoryLayout::new(root);
 
-    Ok(Repository {
+    Ok(LocalState {
         guests: read(&layout, "guests.yml")?,
         network: read(&layout, "network.yml")?,
         recovery_checks: read(&layout, "recovery-checks.yml")?,

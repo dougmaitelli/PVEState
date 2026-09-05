@@ -1,34 +1,84 @@
 use crate::{
     client::{PbsClient, PveClient},
-    config::Repository,
-    discovery::CaptureManifest,
+    config::LocalState,
 };
 use anyhow::{Context, Result, bail};
+use chrono::Duration;
 use serde_json::Value;
-use std::{collections::BTreeMap, fs, path::Path};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
-pub(super) struct CapturedClients {
-    pub pve: CapturedApi,
-    pub pbs: CapturedApi,
+use super::CaptureManifest;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptureId(String);
+
+impl CaptureId {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
-pub(super) struct CapturedApi {
+pub struct VerifiedCaptureManifest(CaptureManifest);
+
+impl VerifiedCaptureManifest {
+    pub fn manifest(&self) -> &CaptureManifest {
+        &self.0
+    }
+}
+
+pub struct CapturedState {
+    id: CaptureId,
+    pub manifest: VerifiedCaptureManifest,
+    pub pve: CapturedPve,
+    pub pbs: CapturedPbs,
+    pub native: CapturedNative,
+}
+
+struct CapturedApi {
     endpoint: String,
     responses: BTreeMap<String, Value>,
 }
 
-impl CapturedClients {
-    pub fn load(repo: &Repository, manifest: &CaptureManifest) -> Result<Self> {
+pub struct CapturedNative {
+    root: PathBuf,
+}
+
+pub struct CapturedPve(CapturedApi);
+
+pub struct CapturedPbs(CapturedApi);
+
+impl CapturedState {
+    pub fn load(local: &LocalState, max_age: Duration) -> Result<Self> {
+        let observed = local.observed();
+        let manifest: CaptureManifest = serde_json::from_slice(
+            &fs::read(observed.join("manifest.json")).context("run capture first")?,
+        )?;
+        manifest.verify(&observed, max_age)?;
+        let id = CaptureId(manifest.capture_id.clone());
+        let pve = CapturedPve(CapturedApi::load(
+            &observed.join("api/pve.json"),
+            source_endpoint(&manifest, "pve-api")?,
+        )?);
+        let pbs = CapturedPbs(CapturedApi::load(
+            &observed.join("api/pbs.json"),
+            source_endpoint(&manifest, "pbs-api")?,
+        )?);
+
         Ok(Self {
-            pve: CapturedApi::load(
-                &repo.observed().join("api/pve.json"),
-                source_endpoint(manifest, "pve-api")?,
-            )?,
-            pbs: CapturedApi::load(
-                &repo.observed().join("api/pbs.json"),
-                source_endpoint(manifest, "pbs-api")?,
-            )?,
+            id,
+            manifest: VerifiedCaptureManifest(manifest),
+            pve,
+            pbs,
+            native: CapturedNative { root: observed },
         })
+    }
+
+    pub fn id(&self) -> &CaptureId {
+        &self.id
     }
 }
 
@@ -55,11 +105,28 @@ impl CapturedApi {
         })
     }
 
-    fn get(&self, path: &str) -> Result<Value> {
+    pub fn response(&self, path: &str) -> Result<Value> {
         self.responses
             .get(path)
             .cloned()
             .with_context(|| format!("complete capture has no successful response for {path}"))
+    }
+}
+
+impl CapturedPve {
+    pub fn response(&self, path: &str) -> Result<Value> {
+        self.0.response(path)
+    }
+}
+
+impl CapturedNative {
+    pub fn path(&self, relative: impl AsRef<Path>) -> PathBuf {
+        self.root.join(relative)
+    }
+
+    pub fn read_to_string(&self, relative: impl AsRef<Path>) -> Result<String> {
+        let path = self.path(relative);
+        fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))
     }
 }
 
@@ -94,24 +161,20 @@ fn collect_responses(value: &Value, responses: &mut BTreeMap<String, Value>) {
 }
 
 macro_rules! captured_client {
-    ($trait:ident) => {
-        impl $trait for CapturedApi {
+    ($type:ident, $trait:ident) => {
+        impl $trait for $type {
             fn endpoint(&self) -> &str {
-                &self.endpoint
+                &self.0.endpoint
             }
-
             fn get(&self, path: &str) -> Result<Value> {
-                self.get(path)
+                self.0.response(path)
             }
-
             fn put(&self, _: &str, _: &BTreeMap<String, String>) -> Result<()> {
                 bail!("planner attempted to mutate through a captured-state client")
             }
-
             fn post(&self, _: &str, _: &BTreeMap<String, String>) -> Result<()> {
                 bail!("planner attempted to mutate through a captured-state client")
             }
-
             fn delete(&self, _: &str, _: &BTreeMap<String, String>) -> Result<()> {
                 bail!("planner attempted to mutate through a captured-state client")
             }
@@ -119,8 +182,8 @@ macro_rules! captured_client {
     };
 }
 
-captured_client!(PveClient);
-captured_client!(PbsClient);
+captured_client!(CapturedPve, PveClient);
+captured_client!(CapturedPbs, PbsClient);
 
 #[cfg(test)]
 mod tests {
@@ -134,11 +197,7 @@ mod tests {
                 "path": "/nodes/pve/dns",
                 "data": {"search": "example.test"}
             },
-            "failed": {
-                "ok": false,
-                "path": "/failed",
-                "error": "denied"
-            }
+            "failed": {"ok": false, "path": "/failed", "error": "denied"}
         });
         let mut responses = BTreeMap::new();
 

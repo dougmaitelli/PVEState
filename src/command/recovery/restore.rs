@@ -1,12 +1,12 @@
 use crate::{
     client::RemoteHost,
-    config::Repository,
+    config::LocalState,
     render,
     utility::{progress, remote_file, shell},
 };
 use anyhow::{Context, Result, bail};
 
-pub(super) fn run(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
+pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
     for id in &repo.restore.restore_order {
         let id = *id;
         let archive = repo

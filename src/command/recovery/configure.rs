@@ -1,7 +1,7 @@
-use crate::{client::RemoteHost, config::Repository};
+use crate::{client::RemoteHost, config::LocalState};
 use anyhow::{Context, Result};
 
-pub(super) fn run(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
+pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
     let command = repo
         .restore
         .application

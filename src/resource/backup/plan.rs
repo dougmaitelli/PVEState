@@ -1,7 +1,7 @@
 use crate::{
     client::{PbsClient, PveClient},
     command::plan::{ApiMethod, ApiTarget, Operation},
-    config::Repository,
+    config::LocalState,
     model::{PruneJob, SyncJob, VerifyJob},
 };
 use anyhow::{Context, Result};
@@ -10,7 +10,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 
 pub(crate) fn plan(
-    repo: &Repository,
+    repo: &LocalState,
     pve: &dyn PveClient,
     pbs: &dyn PbsClient,
     operations: &mut Vec<Operation>,
@@ -31,7 +31,7 @@ pub(crate) fn plan(
     Ok(())
 }
 
-fn pve_jobs(repo: &Repository, actual: &Value, operations: &mut Vec<Operation>) -> Result<()> {
+fn pve_jobs(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation>) -> Result<()> {
     for (id, desired) in &repo.backup.pve_backup_jobs {
         let current = find(actual, "id", id);
         let mut changes: BTreeMap<String, String> = BTreeMap::from([
@@ -93,7 +93,7 @@ fn pve_jobs(repo: &Repository, actual: &Value, operations: &mut Vec<Operation>) 
 }
 
 fn datastore(
-    repo: &Repository,
+    repo: &LocalState,
     actual: &Value,
     operations: &mut Vec<Operation>,
     blockers: &mut Vec<String>,
@@ -156,7 +156,7 @@ fn datastore(
     Ok(())
 }
 
-fn s3_endpoint(repo: &Repository, actual: &Value, operations: &mut Vec<Operation>) -> Result<()> {
+fn s3_endpoint(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation>) -> Result<()> {
     let desired = &repo.backup.pbs.s3_endpoint;
     let Some(current) = find(actual, "id", &desired.id) else {
         operations.push(Operation::ApiMutation {
@@ -200,7 +200,7 @@ fn s3_endpoint(repo: &Repository, actual: &Value, operations: &mut Vec<Operation
     Ok(())
 }
 
-fn prune_jobs(repo: &Repository, actual: &Value, operations: &mut Vec<Operation>) -> Result<()> {
+fn prune_jobs(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation>) -> Result<()> {
     for (id, desired) in &repo.backup.pbs.jobs.prune {
         reconcile_job(actual, id, "/config/prune", prune_data(desired), operations);
     }
@@ -213,7 +213,7 @@ fn prune_jobs(repo: &Repository, actual: &Value, operations: &mut Vec<Operation>
     Ok(())
 }
 
-fn verify_jobs(repo: &Repository, actual: &Value, operations: &mut Vec<Operation>) -> Result<()> {
+fn verify_jobs(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation>) -> Result<()> {
     for (id, desired) in &repo.backup.pbs.jobs.verify {
         reconcile_job(
             actual,
@@ -232,7 +232,7 @@ fn verify_jobs(repo: &Repository, actual: &Value, operations: &mut Vec<Operation
     Ok(())
 }
 
-fn sync_jobs(repo: &Repository, actual: &Value, operations: &mut Vec<Operation>) -> Result<()> {
+fn sync_jobs(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation>) -> Result<()> {
     for (id, desired) in &repo.backup.pbs.jobs.sync {
         reconcile_job(actual, id, "/config/sync", sync_data(desired), operations);
     }

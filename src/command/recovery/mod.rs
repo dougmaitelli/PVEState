@@ -7,7 +7,7 @@ mod restore;
 
 use crate::{
     client::RemoteHost,
-    config::Repository,
+    config::LocalState,
     settings::RecoverySettings,
     utility::{progress, runtime_security},
 };
@@ -24,7 +24,7 @@ pub enum Stage {
 }
 
 pub fn run(
-    repo: &Repository,
+    repo: &LocalState,
     stage: Stage,
     target: &str,
     settings: &RecoverySettings,

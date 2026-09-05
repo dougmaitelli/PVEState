@@ -1,5 +1,5 @@
 use crate::{
-    config::{self, Repository},
+    config::{self, LocalState},
     utility::atomic_file,
 };
 use anyhow::{Context, Result, bail};
@@ -57,7 +57,7 @@ impl Journal {
     }
 }
 
-pub(super) fn validate(repo: &Repository, documents: &BTreeMap<String, String>) -> Result<()> {
+pub(super) fn validate(repo: &LocalState, documents: &BTreeMap<String, String>) -> Result<()> {
     validate_paths(documents)?;
     let staging = tempfile::Builder::new()
         .prefix("adopt-validation-")
@@ -83,12 +83,12 @@ pub(super) fn validate(repo: &Repository, documents: &BTreeMap<String, String>) 
     Ok(())
 }
 
-pub(super) fn publish(repo: &Repository, documents: &BTreeMap<String, String>) -> Result<()> {
+pub(super) fn publish(repo: &LocalState, documents: &BTreeMap<String, String>) -> Result<()> {
     publish_with(repo, documents, atomic_file::write)
 }
 
 fn publish_with(
-    repo: &Repository,
+    repo: &LocalState,
     documents: &BTreeMap<String, String>,
     mut writer: impl FnMut(&Path, &[u8]) -> Result<()>,
 ) -> Result<()> {
@@ -161,7 +161,7 @@ fn publish_with(
 }
 
 fn rollback(
-    repo: &Repository,
+    repo: &LocalState,
     documents: &BTreeMap<String, String>,
     originals: &BTreeMap<String, Vec<u8>>,
     published: &[String],
@@ -205,7 +205,7 @@ mod tests {
     use super::*;
     use std::cell::Cell;
 
-    fn repository() -> (tempfile::TempDir, Repository) {
+    fn repository() -> (tempfile::TempDir, LocalState) {
         let temp = tempfile::tempdir().unwrap();
         config::scaffold::initialize(temp.path()).unwrap();
         let repo = config::open(temp.path()).unwrap();

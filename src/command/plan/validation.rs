@@ -1,8 +1,8 @@
-use crate::{config::Repository, model::FirewallPolicy};
+use crate::{config::LocalState, model::FirewallPolicy};
 use anyhow::{Result, bail};
 use std::collections::BTreeSet;
 
-pub(super) fn validate(repo: &Repository) -> Result<()> {
+pub(super) fn validate(repo: &LocalState) -> Result<()> {
     let bridges: BTreeSet<_> = repo
         .network
         .bridges

@@ -1,13 +1,13 @@
 use crate::{
     client::RemoteHost,
-    config::Repository,
+    config::LocalState,
     model::RestoreMount,
     render,
     utility::{progress, shell},
 };
 use anyhow::{Context, Result};
 
-pub(super) fn run(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
+pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
     progress::operation("create and provision PBS guest");
     let bootstrap = &repo.restore.pbs_bootstrap;
     let id = bootstrap.vmid;
@@ -50,7 +50,7 @@ pub(super) fn run(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn cache_mount(repo: &Repository) -> Option<&RestoreMount> {
+pub(super) fn cache_mount(repo: &LocalState) -> Option<&RestoreMount> {
     let bootstrap = &repo.restore.pbs_bootstrap;
     repo.restore
         .reattach_mounts

@@ -3,7 +3,7 @@ mod native;
 
 use crate::{
     client::{PbsClient, PveClient, RemoteHost, capture_pbs},
-    config::Repository,
+    config::LocalState,
     discovery::{
         CaptureManifest, CaptureStatus, SourceEvidence, capture_pve, collect_artifacts,
         write_snapshot,
@@ -16,7 +16,7 @@ use serde_json::json;
 use std::{collections::BTreeMap, fs, path::Path};
 
 pub fn run(
-    repo: &Repository,
+    repo: &LocalState,
     pve: &dyn PveClient,
     pbs: &dyn PbsClient,
     ssh: &dyn RemoteHost,
@@ -72,7 +72,7 @@ pub fn run(
 }
 
 fn perform(
-    repo: &Repository,
+    repo: &LocalState,
     observed: &Path,
     pve: &dyn PveClient,
     pbs: &dyn PbsClient,
@@ -136,7 +136,7 @@ fn write_observed_manifest(observed: &Path, manifest: &CaptureManifest) -> Resul
     atomic_file::write(&observed.join("manifest.json"), &content)
 }
 
-fn write_runtime_manifest(repo: &Repository, manifest: &CaptureManifest) -> Result<()> {
+fn write_runtime_manifest(repo: &LocalState, manifest: &CaptureManifest) -> Result<()> {
     let content = serde_json::to_vec_pretty(manifest)?;
     atomic_file::write(
         &repo
@@ -147,7 +147,7 @@ fn write_runtime_manifest(repo: &Repository, manifest: &CaptureManifest) -> Resu
     Ok(())
 }
 
-fn publish_observed(repo: &Repository, staged: &Path, capture_id: &str) -> Result<()> {
+fn publish_observed(repo: &LocalState, staged: &Path, capture_id: &str) -> Result<()> {
     let current = repo.observed();
     let previous = repo
         .root()
@@ -172,7 +172,7 @@ fn publish_observed(repo: &Repository, staged: &Path, capture_id: &str) -> Resul
     Ok(())
 }
 
-pub fn validate(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
+pub fn validate(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
     runtime_security::prepare(&repo.runtime())?;
     let mut failures = Vec::new();
     let mut report = Vec::new();

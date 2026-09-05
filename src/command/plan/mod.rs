@@ -1,16 +1,17 @@
-mod captured;
+mod builder;
 mod file;
 mod output;
 mod types;
 mod validation;
 
+pub use builder::PlanBuilder;
 pub use output::print_human;
 pub use types::{ApiPath, DiskId, Domain, ResourceId, SecretName};
 
 use crate::{
     client::{PbsClient, PveClient},
-    config::Repository,
-    discovery::CaptureManifest,
+    config::LocalState,
+    discovery::CapturedState,
     render,
     resource::{backup, guest},
     utility::{
@@ -19,7 +20,7 @@ use crate::{
         progress, runtime_security,
     },
 };
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs};
@@ -199,36 +200,39 @@ impl PlanEnvelope for Plan {
     }
 }
 
-pub fn run(repo: &Repository) -> Result<Plan> {
+pub fn run(repo: &LocalState) -> Result<Plan> {
     progress::section("Comparing local configuration with live state");
     runtime_security::prepare(&repo.runtime())?;
     validation::validate(repo)?;
-    let manifest = verified_capture(repo)?;
-    let clients = captured::CapturedClients::load(repo, &manifest)?;
-    build(repo, &clients.pve, &clients.pbs, &manifest.capture_id)
+    let captured = CapturedState::load(repo, chrono::Duration::minutes(30))?;
+    build_captured(repo, &captured)
+}
+
+fn build_captured(repo: &LocalState, captured: &CapturedState) -> Result<Plan> {
+    build(repo, &captured.pve, &captured.pbs, captured.id().as_str())
 }
 
 fn build(
-    repo: &Repository,
+    repo: &LocalState,
     api: &dyn PveClient,
     pbs: &dyn PbsClient,
     capture_id: &str,
 ) -> Result<Plan> {
-    let mut operations = Vec::new();
-    let mut blockers = Vec::new();
+    let mut builder = PlanBuilder::new(capture_id, api.endpoint(), pbs.endpoint());
 
     for (id, desired) in &repo.guests.lxcs {
         let actual = api.get(
             &crate::model::GuestRef::new(crate::model::GuestKind::Lxc, *id)
                 .config_endpoint(&repo.guests.node),
         )?;
+        let (operations, blockers) = builder.parts();
         guest::lxc(
             &repo.guests.node,
             *id,
             desired,
             &actual,
-            &mut operations,
-            &mut blockers,
+            operations,
+            blockers,
         )?;
     }
     for (id, desired) in &repo.guests.vms {
@@ -236,20 +240,21 @@ fn build(
             &crate::model::GuestRef::new(crate::model::GuestKind::Qemu, *id)
                 .config_endpoint(&repo.guests.node),
         )?;
+        let (operations, blockers) = builder.parts();
         guest::vm(
             &repo.guests.node,
             *id,
             desired,
             &actual,
-            &mut operations,
-            &mut blockers,
+            operations,
+            blockers,
         )?;
     }
 
     let dns = api.get(&format!("/nodes/{}/dns", repo.guests.node))?;
     let changes = dns_changes(&repo.network.dns.search, &repo.network.dns.servers, &dns);
     if !changes.is_empty() {
-        operations.push(Operation::ApiMutation {
+        builder.operations().push(Operation::ApiMutation {
             target: ApiTarget::Pve,
             method: ApiMethod::Put,
             domain: "dns".into(),
@@ -261,14 +266,19 @@ fn build(
         });
     }
 
-    backup::plan(repo, api, pbs, &mut operations, &mut blockers)?;
+    let (operations, blockers) = builder.parts();
+    backup::plan(repo, api, pbs, operations, blockers)?;
 
     if let Ok(captured_network) = fs::read_to_string(repo.observed().join("network/interfaces")) {
-        blockers.extend(network_safety_blockers(&captured_network, &repo.network)?);
+        builder
+            .blockers()
+            .extend(network_safety_blockers(&captured_network, &repo.network)?);
     }
     for (resource, path) in firewall_artifacts(repo) {
         if let Ok(content) = fs::read_to_string(repo.observed().join(path)) {
-            blockers.extend(firewall_safety_blockers(&content, &resource));
+            builder
+                .blockers()
+                .extend(firewall_safety_blockers(&content, &resource));
         }
     }
     file::operation(
@@ -277,7 +287,7 @@ fn build(
         ("network/interfaces", "/etc/network/interfaces"),
         render::network(&repo.network),
         true,
-        &mut operations,
+        builder.operations(),
     )?;
     if let Some(policy) = &repo.cluster.firewall {
         file::operation(
@@ -286,14 +296,14 @@ fn build(
             ("pve/firewall/cluster.fw", "/etc/pve/firewall/cluster.fw"),
             render::firewall_policy(policy),
             false,
-            &mut operations,
+            builder.operations(),
         )?;
     } else {
         file::deletion(
             repo,
             ("firewall", "cluster"),
             ("pve/firewall/cluster.fw", "/etc/pve/firewall/cluster.fw"),
-            &mut operations,
+            builder.operations(),
         )?;
     }
     let guest_firewalls = repo
@@ -320,14 +330,14 @@ fn build(
                 (&paths.0, &paths.1),
                 render::firewall_policy(policy),
                 false,
-                &mut operations,
+                builder.operations(),
             )?;
         } else {
             file::deletion(
                 repo,
                 ("firewall", &id),
                 (&paths.0, &paths.1),
-                &mut operations,
+                builder.operations(),
             )?;
         }
     }
@@ -341,42 +351,24 @@ fn build(
             (&local, &remote),
             render::firewall_policy(policy),
             false,
-            &mut operations,
+            builder.operations(),
         )?;
     } else {
         file::deletion(
             repo,
             ("firewall", &format!("node/{node}")),
             (&local, &remote),
-            &mut operations,
+            builder.operations(),
         )?;
     }
 
-    let mut plan = Plan {
-        schema_version: 2,
-        created_at: Utc::now(),
-        capture_id: capture_id.into(),
-        target: api.endpoint().into(),
-        pbs_target: pbs.endpoint().into(),
-        operations,
-        blockers,
-        plan_sha256: String::new(),
-    };
-    plan_envelope::sign(&mut plan)?;
+    let plan = builder.finish()?;
     for operation in &plan.operations {
         progress::operation(operation.description());
     }
     progress::detail(format!("{} blocker(s)", plan.blockers.len()));
     atomic_file::write_json(&repo.runtime().join("production-plan.json"), &plan)?;
     Ok(plan)
-}
-
-fn verified_capture(repo: &Repository) -> Result<CaptureManifest> {
-    let manifest: CaptureManifest = serde_json::from_slice(
-        &fs::read(repo.observed().join("manifest.json")).context("run capture before plan")?,
-    )?;
-    manifest.verify(&repo.observed(), chrono::Duration::minutes(30))?;
-    Ok(manifest)
 }
 
 fn compare(
@@ -406,7 +398,7 @@ fn network_safety_blockers(content: &str, current: &crate::model::Network) -> Re
         .collect())
 }
 
-fn firewall_artifacts(repo: &Repository) -> Vec<(String, String)> {
+fn firewall_artifacts(repo: &LocalState) -> Vec<(String, String)> {
     let mut artifacts = vec![
         ("cluster".into(), "pve/firewall/cluster.fw".into()),
         (

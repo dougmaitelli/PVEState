@@ -1,12 +1,12 @@
 use crate::{
     client::RemoteHost,
-    config::Repository,
+    config::LocalState,
     render,
     utility::{progress, remote_file, shell},
 };
 use anyhow::Result;
 
-pub(super) fn run(repo: &Repository, ssh: &dyn RemoteHost) -> Result<()> {
+pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
     progress::operation("verify replacement PVE host");
     ssh.run("pveversion")?;
 

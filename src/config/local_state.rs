@@ -4,7 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub struct Repository {
+pub struct LocalState {
     pub layout: RepositoryLayout,
     pub guests: Guests,
     pub network: Network,
@@ -19,7 +19,7 @@ pub struct Repository {
     pub required_secrets: RequiredSecretsConfig,
 }
 
-impl Repository {
+impl LocalState {
     pub fn root(&self) -> &Path {
         self.layout.root()
     }

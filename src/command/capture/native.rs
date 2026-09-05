@@ -1,6 +1,6 @@
 use crate::{
     client::RemoteHost,
-    config::Repository,
+    config::LocalState,
     discovery::PveSnapshot,
     utility::{progress, shell},
 };
@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use std::{collections::BTreeSet, fs, path::Path};
 
 pub(super) fn export(
-    repo: &Repository,
+    repo: &LocalState,
     observed: &Path,
     ssh: &dyn RemoteHost,
     snapshot: &PveSnapshot,

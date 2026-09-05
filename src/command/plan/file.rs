@@ -1,11 +1,11 @@
 use super::{Domain, Operation, ResourceId};
-use crate::{config::Repository, render};
+use crate::{config::LocalState, render};
 use anyhow::Result;
 use sha2::{Digest, Sha256};
 use std::fs;
 
 pub(super) fn operation(
-    repo: &Repository,
+    repo: &LocalState,
     identity: (&str, &str),
     paths: (&str, &str),
     wanted: String,
@@ -41,7 +41,7 @@ pub(super) fn operation(
 }
 
 pub(super) fn deletion(
-    repo: &Repository,
+    repo: &LocalState,
     identity: (&str, &str),
     paths: (&str, &str),
     operations: &mut Vec<Operation>,

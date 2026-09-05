@@ -4,7 +4,7 @@ use self::journal::ApplyJournal;
 use crate::{
     client::{Pbs, PbsClient, Pve, PveClient, RemoteHost, Ssh},
     command::plan::{ApiMethod, ApiTarget, Operation, Plan},
-    config::Repository,
+    config::LocalState,
     settings::{ApplySettings, Settings},
     utility::{authorization, progress, remote_file, runtime_security, shell},
 };
@@ -38,14 +38,14 @@ impl MutationClients {
     }
 }
 
-pub fn run(repo: &Repository, settings: &Settings) -> Result<()> {
+pub fn run(repo: &LocalState, settings: &Settings) -> Result<()> {
     run_with_factory(repo, &settings.apply, || {
         MutationClients::configured(settings)
     })
 }
 
 fn run_with_factory(
-    repo: &Repository,
+    repo: &LocalState,
     settings: &ApplySettings,
     factory: impl FnOnce() -> Result<MutationClients>,
 ) -> Result<()> {
@@ -90,7 +90,7 @@ fn run_with_factory(
     }
 }
 
-fn authorize(repo: &Repository, settings: &ApplySettings) -> Result<Plan> {
+fn authorize(repo: &LocalState, settings: &ApplySettings) -> Result<Plan> {
     let plan: Plan = serde_json::from_slice(
         &runtime_security::read(&repo.runtime().join("production-plan.json"))
             .context("run plan first")?,
@@ -423,7 +423,7 @@ mod tests {
         }
     }
 
-    fn authorized_apply() -> (tempfile::TempDir, Repository, ApplySettings) {
+    fn authorized_apply() -> (tempfile::TempDir, LocalState, ApplySettings) {
         let temp = tempfile::tempdir().unwrap();
         config::scaffold::initialize(temp.path()).unwrap();
         let repo = config::open(temp.path()).unwrap();

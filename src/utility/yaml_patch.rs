@@ -1,13 +1,13 @@
 use anyhow::{Context, Result, bail};
 use serde_yaml::{Mapping, Value};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Segment {
     Key(String),
     Index(usize),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Patch {
     Set(Vec<Segment>, Value),
     #[allow(dead_code, reason = "used by collection adoption adapters")]
