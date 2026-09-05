@@ -1,36 +1,36 @@
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
-pub struct RepositoryLayout {
+pub(crate) struct RepositoryLayout {
     root: PathBuf,
 }
 
 impl RepositoryLayout {
-    pub fn new(root: impl Into<PathBuf>) -> Self {
+    pub(crate) fn new(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
     }
 
-    pub fn root(&self) -> &Path {
+    pub(crate) fn root(&self) -> &Path {
         &self.root
     }
 
-    pub fn config(&self) -> PathBuf {
+    pub(crate) fn config(&self) -> PathBuf {
         self.root.join("config")
     }
 
-    pub fn document(&self, name: &str) -> PathBuf {
+    pub(crate) fn document(&self, name: &str) -> PathBuf {
         self.config().join(name)
     }
 
-    pub fn runtime(&self) -> PathBuf {
+    pub(crate) fn runtime(&self) -> PathBuf {
         self.root.join(".runtime")
     }
 
-    pub fn observed_root(&self) -> PathBuf {
+    pub(crate) fn observed_root(&self) -> PathBuf {
         self.root.join("observed")
     }
 
-    pub fn observed(&self) -> PathBuf {
+    pub(crate) fn observed(&self) -> PathBuf {
         self.observed_root().join("production")
     }
 }

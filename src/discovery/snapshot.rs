@@ -5,7 +5,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::{fs, path::Path};
 
-pub fn write_snapshot<T: Serialize>(
+pub(crate) fn write_snapshot<T: Serialize>(
     name: &str,
     collected_at: DateTime<Utc>,
     snapshot: &T,

@@ -7,7 +7,7 @@ use std::{
 };
 use tempfile::Builder;
 
-pub fn write(path: &Path, content: &[u8]) -> Result<()> {
+pub(crate) fn write(path: &Path, content: &[u8]) -> Result<()> {
     let parent = path.parent().context("atomic file parent")?;
     fs::create_dir_all(parent)?;
     let name = path
@@ -66,7 +66,7 @@ fn sync_parent(_: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
+pub(crate) fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
     write(path, &serde_json::to_vec_pretty(value)?)
 }
 

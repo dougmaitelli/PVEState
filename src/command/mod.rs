@@ -1,5 +1,5 @@
-pub mod adopt;
-pub mod apply;
-pub mod capture;
-pub mod plan;
-pub mod recovery;
+pub(crate) mod adopt;
+pub(crate) mod apply;
+pub(crate) mod capture;
+pub(crate) mod plan;
+pub(crate) mod recovery;

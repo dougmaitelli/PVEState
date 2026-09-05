@@ -12,47 +12,47 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-pub struct Pbs {
+pub(crate) struct Pbs {
     transport: JsonApiClient,
 }
 
 #[derive(Debug, Serialize)]
-pub struct Snapshot {
-    pub schema_version: u8,
-    pub collected_at: chrono::DateTime<chrono::Utc>,
-    pub mode: &'static str,
-    pub endpoint: String,
-    pub requests: Responses,
-    pub datastores: BTreeMap<String, Datastore>,
+pub(crate) struct Snapshot {
+    pub(crate) schema_version: u8,
+    pub(crate) collected_at: chrono::DateTime<chrono::Utc>,
+    pub(crate) mode: &'static str,
+    pub(crate) endpoint: String,
+    pub(crate) requests: Responses,
+    pub(crate) datastores: BTreeMap<String, Datastore>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct Responses {
-    pub version: RawResponse,
-    pub datastore_usage: ObjectsResponse,
-    pub datastores: ObjectsResponse,
-    pub s3_endpoints: ObjectsResponse,
-    pub remotes: ObjectsResponse,
-    pub sync_jobs: ObjectsResponse,
-    pub prune_jobs: ObjectsResponse,
-    pub verify_jobs: ObjectsResponse,
-    pub node_status: ObjectResponse,
+pub(crate) struct Responses {
+    pub(crate) version: RawResponse,
+    pub(crate) datastore_usage: ObjectsResponse,
+    pub(crate) datastores: ObjectsResponse,
+    pub(crate) s3_endpoints: ObjectsResponse,
+    pub(crate) remotes: ObjectsResponse,
+    pub(crate) sync_jobs: ObjectsResponse,
+    pub(crate) prune_jobs: ObjectsResponse,
+    pub(crate) verify_jobs: ObjectsResponse,
+    pub(crate) node_status: ObjectResponse,
 }
 
 #[derive(Debug, Serialize)]
-pub struct Datastore {
-    pub config: ApiObject,
-    pub status: ObjectResponse,
-    pub groups: ObjectsResponse,
-    pub snapshots: ObjectsResponse,
+pub(crate) struct Datastore {
+    pub(crate) config: ApiObject,
+    pub(crate) status: ObjectResponse,
+    pub(crate) groups: ObjectsResponse,
+    pub(crate) snapshots: ObjectsResponse,
 }
 
 impl Pbs {
-    pub fn discovery(settings: &PbsSettings) -> Result<Self> {
+    pub(crate) fn discovery(settings: &PbsSettings) -> Result<Self> {
         Self::new(settings, settings.discovery_credential()?)
     }
 
-    pub fn mutation(settings: &PbsSettings) -> Result<Self> {
+    pub(crate) fn mutation(settings: &PbsSettings) -> Result<Self> {
         Self::new(settings, settings.mutation_credential()?)
     }
 
@@ -67,23 +67,23 @@ impl Pbs {
         })
     }
 
-    pub fn endpoint(&self) -> &str {
+    pub(crate) fn endpoint(&self) -> &str {
         self.transport.endpoint()
     }
 
-    pub fn get(&self, path: &str) -> Result<Value> {
+    pub(crate) fn get(&self, path: &str) -> Result<Value> {
         self.transport.get_data(path)
     }
 
-    pub fn put(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+    pub(crate) fn put(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
         self.mutate(Method::PUT, path, data)
     }
 
-    pub fn post(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+    pub(crate) fn post(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
         self.mutate(Method::POST, path, data)
     }
 
-    pub fn delete(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+    pub(crate) fn delete(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
         self.mutate(Method::DELETE, path, data)
     }
 
@@ -92,7 +92,7 @@ impl Pbs {
     }
 }
 
-pub fn capture(client: &dyn PbsClient) -> Snapshot {
+pub(crate) fn capture(client: &dyn PbsClient) -> Snapshot {
     let requests = Responses {
         version: get(client, "/version"),
         datastore_usage: get(client, "/status/datastore-usage"),
@@ -165,7 +165,7 @@ impl PbsClient for Pbs {
 }
 
 impl Snapshot {
-    pub fn failures(&self) -> Vec<String> {
+    pub(crate) fn failures(&self) -> Vec<String> {
         let mut failures = Vec::new();
         add_failure("version", &self.requests.version, &mut failures);
         add_failure(

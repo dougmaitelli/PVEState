@@ -3,14 +3,14 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct RepositoryManifest {
-    pub schema_version: u16,
-    pub tool: Option<ToolRequirement>,
-    pub environment: Option<String>,
+pub(crate) struct RepositoryManifest {
+    pub(crate) schema_version: u16,
+    pub(crate) tool: Option<ToolRequirement>,
+    pub(crate) environment: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct ToolRequirement {
-    pub minimum_version: String,
+pub(crate) struct ToolRequirement {
+    pub(crate) minimum_version: String,
 }

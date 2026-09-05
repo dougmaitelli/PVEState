@@ -4,55 +4,55 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct RestoreConfig {
-    pub schema_version: u16,
-    pub target: RestoreTarget,
-    pub pbs_bootstrap: PbsBootstrap,
-    pub archives: BTreeMap<u32, Option<String>>,
-    pub restore_order: Vec<u32>,
-    pub protected_vmids: Vec<u32>,
-    pub reattach_mounts: Vec<RestoreMount>,
-    pub application: RestoreApplication,
+pub(crate) struct RestoreConfig {
+    pub(crate) schema_version: u16,
+    pub(crate) target: RestoreTarget,
+    pub(crate) pbs_bootstrap: PbsBootstrap,
+    pub(crate) archives: BTreeMap<u32, Option<String>>,
+    pub(crate) restore_order: Vec<u32>,
+    pub(crate) protected_vmids: Vec<u32>,
+    pub(crate) reattach_mounts: Vec<RestoreMount>,
+    pub(crate) application: RestoreApplication,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct RestoreTarget {
-    pub expected_hostname: String,
+pub(crate) struct RestoreTarget {
+    pub(crate) expected_hostname: String,
     /// OpenSSH SHA-256 fingerprint, for example `SHA256:...`.
     #[serde(default)]
-    pub expected_host_key_sha256: Option<String>,
-    pub production_address: String,
-    pub plan_max_age_minutes: u32,
+    pub(crate) expected_host_key_sha256: Option<String>,
+    pub(crate) production_address: String,
+    pub(crate) plan_max_age_minutes: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct PbsBootstrap {
-    pub vmid: u32,
-    pub datastore: String,
-    pub cache_path: String,
-    pub s3_endpoint_id: String,
-    pub bucket: String,
-    pub region: String,
-    pub lxc_template: Option<String>,
-    pub storage_attached_to_pve: bool,
+pub(crate) struct PbsBootstrap {
+    pub(crate) vmid: u32,
+    pub(crate) datastore: String,
+    pub(crate) cache_path: String,
+    pub(crate) s3_endpoint_id: String,
+    pub(crate) bucket: String,
+    pub(crate) region: String,
+    pub(crate) lxc_template: Option<String>,
+    pub(crate) storage_attached_to_pve: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct RestoreMount {
-    pub vmid: u32,
-    pub index: u16,
-    pub source: String,
-    pub target: String,
+pub(crate) struct RestoreMount {
+    pub(crate) vmid: u32,
+    pub(crate) index: u16,
+    pub(crate) source: String,
+    pub(crate) target: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct RestoreApplication {
-    pub repository: String,
-    pub docker_guest_vmid: u32,
-    pub configure_playbook: Option<String>,
-    pub configure_command: Option<String>,
+pub(crate) struct RestoreApplication {
+    pub(crate) repository: String,
+    pub(crate) docker_guest_vmid: u32,
+    pub(crate) configure_playbook: Option<String>,
+    pub(crate) configure_command: Option<String>,
 }

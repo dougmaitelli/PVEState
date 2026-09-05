@@ -14,28 +14,22 @@ use std::{
 use super::CaptureManifest;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CaptureId(String);
+pub(crate) struct CaptureId(String);
 
 impl CaptureId {
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
 
-pub struct VerifiedCaptureManifest(CaptureManifest);
+pub(crate) struct VerifiedCaptureManifest(CaptureManifest);
 
-impl VerifiedCaptureManifest {
-    pub fn manifest(&self) -> &CaptureManifest {
-        &self.0
-    }
-}
-
-pub struct CapturedState {
+pub(crate) struct CapturedState {
     id: CaptureId,
-    pub manifest: VerifiedCaptureManifest,
-    pub pve: CapturedPve,
-    pub pbs: CapturedPbs,
-    pub native: CapturedNative,
+    pub(crate) manifest: VerifiedCaptureManifest,
+    pub(crate) pve: CapturedPve,
+    pub(crate) pbs: CapturedPbs,
+    pub(crate) native: CapturedNative,
 }
 
 struct CapturedApi {
@@ -43,16 +37,16 @@ struct CapturedApi {
     responses: BTreeMap<String, Value>,
 }
 
-pub struct CapturedNative {
+pub(crate) struct CapturedNative {
     root: PathBuf,
 }
 
-pub struct CapturedPve(CapturedApi);
+pub(crate) struct CapturedPve(CapturedApi);
 
-pub struct CapturedPbs(CapturedApi);
+pub(crate) struct CapturedPbs(CapturedApi);
 
 impl CapturedState {
-    pub fn load(local: &LocalState, max_age: Duration) -> Result<Self> {
+    pub(crate) fn load(local: &LocalState, max_age: Duration) -> Result<Self> {
         let observed = local.observed();
         let manifest: CaptureManifest = serde_json::from_slice(
             &fs::read(observed.join("manifest.json")).context("run capture first")?,
@@ -77,7 +71,8 @@ impl CapturedState {
         })
     }
 
-    pub fn id(&self) -> &CaptureId {
+    pub(crate) fn id(&self) -> &CaptureId {
+        debug_assert_eq!(self.id.as_str(), self.manifest.0.capture_id);
         &self.id
     }
 }
@@ -105,7 +100,7 @@ impl CapturedApi {
         })
     }
 
-    pub fn response(&self, path: &str) -> Result<Value> {
+    pub(crate) fn response(&self, path: &str) -> Result<Value> {
         self.responses
             .get(path)
             .cloned()
@@ -114,17 +109,17 @@ impl CapturedApi {
 }
 
 impl CapturedPve {
-    pub fn response(&self, path: &str) -> Result<Value> {
+    pub(crate) fn response(&self, path: &str) -> Result<Value> {
         self.0.response(path)
     }
 }
 
 impl CapturedNative {
-    pub fn path(&self, relative: impl AsRef<Path>) -> PathBuf {
+    pub(crate) fn path(&self, relative: impl AsRef<Path>) -> PathBuf {
         self.root.join(relative)
     }
 
-    pub fn read_to_string(&self, relative: impl AsRef<Path>) -> Result<String> {
+    pub(crate) fn read_to_string(&self, relative: impl AsRef<Path>) -> Result<String> {
         let path = self.path(relative);
         fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))
     }

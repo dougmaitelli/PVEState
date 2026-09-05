@@ -38,7 +38,7 @@ impl MutationClients {
     }
 }
 
-pub fn run(repo: &LocalState, settings: &Settings) -> Result<()> {
+pub(crate) fn run(repo: &LocalState, settings: &Settings) -> Result<()> {
     run_with_factory(repo, &settings.apply, || {
         MutationClients::configured(settings)
     })

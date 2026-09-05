@@ -5,32 +5,32 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct NodeConfig {
-    pub node: NodeIdentity,
-    pub storage_topology: BTreeMap<String, StorageTopology>,
+pub(crate) struct NodeConfig {
+    pub(crate) node: NodeIdentity,
+    pub(crate) storage_topology: BTreeMap<String, StorageTopology>,
     #[serde(default)]
-    pub firewall: Option<FirewallPolicy>,
+    pub(crate) firewall: Option<FirewallPolicy>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct NodeIdentity {
-    pub name: String,
-    pub standalone: bool,
-    pub pve_version: String,
-    pub kernel: String,
+pub(crate) struct NodeIdentity {
+    pub(crate) name: String,
+    pub(crate) standalone: bool,
+    pub(crate) pve_version: String,
+    pub(crate) kernel: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct StorageTopology {
-    pub layout: Option<String>,
-    pub redundancy: String,
-    pub device_class: String,
-    pub provides: Option<Vec<String>>,
-    pub devices: Option<u16>,
-    pub mount: Option<String>,
-    pub filesystem: Option<String>,
-    pub size_tb: Option<u64>,
-    pub consumers: Option<Vec<String>>,
+pub(crate) struct StorageTopology {
+    pub(crate) layout: Option<String>,
+    pub(crate) redundancy: String,
+    pub(crate) device_class: String,
+    pub(crate) provides: Option<Vec<String>>,
+    pub(crate) devices: Option<u16>,
+    pub(crate) mount: Option<String>,
+    pub(crate) filesystem: Option<String>,
+    pub(crate) size_tb: Option<u64>,
+    pub(crate) consumers: Option<Vec<String>>,
 }

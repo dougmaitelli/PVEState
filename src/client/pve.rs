@@ -4,16 +4,16 @@ use anyhow::Result;
 use reqwest::Method;
 use serde_json::Value;
 use std::collections::BTreeMap;
-pub struct Pve {
+pub(crate) struct Pve {
     transport: JsonApiClient,
 }
 
 impl Pve {
-    pub fn discovery(settings: &PveSettings) -> Result<Self> {
+    pub(crate) fn discovery(settings: &PveSettings) -> Result<Self> {
         Self::new(settings, settings.discovery_credential()?)
     }
 
-    pub fn mutation(settings: &PveSettings) -> Result<Self> {
+    pub(crate) fn mutation(settings: &PveSettings) -> Result<Self> {
         Self::new(settings, settings.mutation_credential()?)
     }
 
@@ -28,23 +28,23 @@ impl Pve {
         })
     }
 
-    pub fn endpoint(&self) -> &str {
+    pub(crate) fn endpoint(&self) -> &str {
         self.transport.endpoint()
     }
 
-    pub fn get(&self, path: &str) -> Result<Value> {
+    pub(crate) fn get(&self, path: &str) -> Result<Value> {
         self.transport.get_data(path)
     }
 
-    pub fn put(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+    pub(crate) fn put(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
         self.mutate(Method::PUT, path, data)
     }
 
-    pub fn post(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+    pub(crate) fn post(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
         self.mutate(Method::POST, path, data)
     }
 
-    pub fn delete(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
+    pub(crate) fn delete(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()> {
         self.mutate(Method::DELETE, path, data)
     }
 

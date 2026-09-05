@@ -1,6 +1,6 @@
 mod model;
 pub(crate) mod plan;
-pub mod render;
+pub(crate) mod render;
 
-pub use model::*;
+pub(crate) use model::*;
 pub(crate) use plan::{lxc, vm};

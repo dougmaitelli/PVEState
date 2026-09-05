@@ -4,9 +4,9 @@ mod output;
 mod types;
 mod validation;
 
-pub use builder::PlanBuilder;
-pub use output::print_human;
-pub use types::{ApiPath, DiskId, Domain, ResourceId, SecretName};
+pub(crate) use builder::PlanBuilder;
+pub(crate) use output::print_human;
+pub(crate) use types::{ApiPath, DiskId, Domain, ResourceId, SecretName};
 
 use crate::{
     client::{PbsClient, PveClient},
@@ -26,7 +26,7 @@ use std::{collections::BTreeMap, fs};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "action", rename_all = "kebab-case")]
-pub enum Operation {
+pub(crate) enum Operation {
     ApiMutation {
         target: ApiTarget,
         method: ApiMethod,
@@ -67,21 +67,21 @@ pub enum Operation {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum ApiTarget {
+pub(crate) enum ApiTarget {
     Pve,
     Pbs,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum ApiMethod {
+pub(crate) enum ApiMethod {
     Post,
     Put,
     Delete,
 }
 
 impl Operation {
-    pub fn domain(&self) -> Domain {
+    pub(crate) fn domain(&self) -> Domain {
         match self {
             Self::ApiMutation { domain, .. }
             | Self::GrowDisk { domain, .. }
@@ -90,7 +90,7 @@ impl Operation {
         }
     }
 
-    pub fn description(&self) -> String {
+    pub(crate) fn description(&self) -> String {
         match self {
             Self::ApiMutation {
                 target,
@@ -114,26 +114,27 @@ impl Operation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Plan {
-    pub schema_version: u8,
-    pub created_at: DateTime<Utc>,
+pub(crate) struct Plan {
+    pub(crate) schema_version: u8,
+    pub(crate) created_at: DateTime<Utc>,
     #[serde(default)]
-    pub capture_id: String,
-    pub target: String,
-    pub pbs_target: String,
-    pub operations: Vec<Operation>,
-    pub blockers: Vec<String>,
-    pub plan_sha256: String,
+    pub(crate) capture_id: String,
+    pub(crate) target: String,
+    pub(crate) pbs_target: String,
+    pub(crate) operations: Vec<Operation>,
+    pub(crate) blockers: Vec<String>,
+    pub(crate) plan_sha256: String,
 }
 
 impl Plan {
-    pub fn calculate_hash(&self) -> Result<String> {
+    #[cfg(test)]
+    pub(crate) fn calculate_hash(&self) -> Result<String> {
         let mut signed = self.clone();
         plan_envelope::sign(&mut signed)?;
         Ok(signed.plan_sha256)
     }
 
-    pub fn verify(&self) -> Result<()> {
+    pub(crate) fn verify(&self) -> Result<()> {
         if self.schema_version != 2 {
             bail!(
                 "unsupported plan schema {}; run plan again",
@@ -199,7 +200,7 @@ impl PlanEnvelope for Plan {
     }
 }
 
-pub fn run(repo: &LocalState) -> Result<Plan> {
+pub(crate) fn run(repo: &LocalState) -> Result<Plan> {
     progress::section("Comparing local configuration with live state");
     runtime_security::prepare(&repo.runtime())?;
     validation::validate(repo)?;

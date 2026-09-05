@@ -13,15 +13,15 @@ use std::collections::BTreeSet;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ParsedNetwork {
-    pub managed: Network,
-    pub unmodeled: Vec<NativeDirective>,
+    pub(crate) managed: Network,
+    pub(crate) unmodeled: Vec<NativeDirective>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct NativeDirective {
-    pub line: usize,
-    pub text: String,
-    pub reason: String,
+    pub(crate) line: usize,
+    pub(crate) text: String,
+    pub(crate) reason: String,
 }
 
 impl NativeDirective {
@@ -39,12 +39,12 @@ impl NativeDirective {
 }
 
 #[derive(Debug, Clone)]
-pub enum Target {
+pub(crate) enum Target {
     Network,
     Firewall { resource: String },
 }
 
-pub fn adoption_patches(
+pub(crate) fn adoption_patches(
     local: &LocalState,
     captured: &CapturedNative,
     target: &Target,
@@ -164,8 +164,8 @@ fn firewall_paths(
 }
 
 pub(crate) struct ParsedFirewall {
-    pub managed: FirewallPolicy,
-    pub unmodeled: Vec<NativeDirective>,
+    pub(crate) managed: FirewallPolicy,
+    pub(crate) unmodeled: Vec<NativeDirective>,
 }
 
 pub(crate) fn parse_firewall(content: &str) -> ParsedFirewall {

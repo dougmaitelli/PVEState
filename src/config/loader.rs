@@ -3,10 +3,10 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::{fs, path::Path};
 
-pub fn open(root: &Path) -> Result<LocalState> {
+pub(crate) fn open(root: &Path) -> Result<LocalState> {
     let layout = RepositoryLayout::new(root);
 
-    Ok(LocalState {
+    let state = LocalState {
         guests: read(&layout, "guests.yml")?,
         network: read(&layout, "network.yml")?,
         recovery_checks: read(&layout, "recovery-checks.yml")?,
@@ -19,7 +19,9 @@ pub fn open(root: &Path) -> Result<LocalState> {
         services: read(&layout, "services.yml")?,
         required_secrets: read(&layout, "required-secrets.yml")?,
         layout,
-    })
+    };
+    state.confirm_all_documents_loaded();
+    Ok(state)
 }
 
 fn read<T: for<'de> Deserialize<'de>>(layout: &RepositoryLayout, name: &str) -> Result<T> {

@@ -2,7 +2,7 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub enum ManagementClass {
+pub(crate) enum ManagementClass {
     ProductionManaged,
     RecoveryOnly,
     ValidationOnly,
@@ -11,11 +11,11 @@ pub enum ManagementClass {
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
-pub struct ScopeEntry {
-    pub document: &'static str,
-    pub fields: &'static str,
-    pub class: ManagementClass,
-    pub behavior: &'static str,
+pub(crate) struct ScopeEntry {
+    pub(crate) document: &'static str,
+    pub(crate) fields: &'static str,
+    pub(crate) class: ManagementClass,
+    pub(crate) behavior: &'static str,
 }
 
 const ENTRIES: &[ScopeEntry] = &[
@@ -173,7 +173,7 @@ const fn entry(
     }
 }
 
-pub fn entries() -> &'static [ScopeEntry] {
+pub(crate) fn entries() -> &'static [ScopeEntry] {
     ENTRIES
 }
 

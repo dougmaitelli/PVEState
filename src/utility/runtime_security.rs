@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use std::{fs, path::Path};
 
-pub fn prepare(path: &Path) -> Result<()> {
+pub(crate) fn prepare(path: &Path) -> Result<()> {
     match fs::symlink_metadata(path) {
         Ok(_) => {},
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => create(path)?,
@@ -10,7 +10,7 @@ pub fn prepare(path: &Path) -> Result<()> {
     validate_directory(path)
 }
 
-pub fn read(path: &Path) -> Result<Vec<u8>> {
+pub(crate) fn read(path: &Path) -> Result<Vec<u8>> {
     let parent = path.parent().context("runtime file parent")?;
     prepare(parent)?;
     validate_file(path)?;

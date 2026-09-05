@@ -10,38 +10,38 @@ use std::{
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum CaptureStatus {
+pub(crate) enum CaptureStatus {
     Complete,
     Partial,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CaptureManifest {
-    pub schema_version: u8,
-    pub capture_id: String,
-    pub exported_at: DateTime<Utc>,
-    pub status: CaptureStatus,
-    pub sources: BTreeMap<String, SourceEvidence>,
-    pub artifacts: BTreeMap<String, ArtifactEvidence>,
-    pub failures: Vec<String>,
+pub(crate) struct CaptureManifest {
+    pub(crate) schema_version: u8,
+    pub(crate) capture_id: String,
+    pub(crate) exported_at: DateTime<Utc>,
+    pub(crate) status: CaptureStatus,
+    pub(crate) sources: BTreeMap<String, SourceEvidence>,
+    pub(crate) artifacts: BTreeMap<String, ArtifactEvidence>,
+    pub(crate) failures: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SourceEvidence {
-    pub endpoint: String,
-    pub required: bool,
-    pub complete: bool,
-    pub failures: Vec<String>,
+pub(crate) struct SourceEvidence {
+    pub(crate) endpoint: String,
+    pub(crate) required: bool,
+    pub(crate) complete: bool,
+    pub(crate) failures: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ArtifactEvidence {
-    pub sha256: String,
-    pub size: u64,
+pub(crate) struct ArtifactEvidence {
+    pub(crate) sha256: String,
+    pub(crate) size: u64,
 }
 
 impl CaptureManifest {
-    pub fn new(
+    pub(crate) fn new(
         exported_at: DateTime<Utc>,
         sources: BTreeMap<String, SourceEvidence>,
         artifacts: BTreeMap<String, ArtifactEvidence>,
@@ -75,7 +75,7 @@ impl CaptureManifest {
         }
     }
 
-    pub fn verify(&self, observed: &Path, max_age: Duration) -> Result<()> {
+    pub(crate) fn verify(&self, observed: &Path, max_age: Duration) -> Result<()> {
         if self.schema_version != 2 {
             bail!(
                 "unsupported capture manifest schema {}; run capture",
@@ -129,7 +129,7 @@ impl CaptureManifest {
     }
 }
 
-pub fn collect_artifacts(observed: &Path) -> Result<BTreeMap<String, ArtifactEvidence>> {
+pub(crate) fn collect_artifacts(observed: &Path) -> Result<BTreeMap<String, ArtifactEvidence>> {
     let mut files = Vec::new();
     visit(observed, observed, &mut files)?;
     let mut artifacts = BTreeMap::new();

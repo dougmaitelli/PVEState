@@ -17,20 +17,20 @@ use std::{
 };
 
 #[derive(Debug, Serialize)]
-pub struct Candidate {
-    pub id: String,
-    pub resource: String,
-    pub field: String,
-    pub local: String,
-    pub captured: String,
-    pub adoptable: bool,
+pub(crate) struct Candidate {
+    pub(crate) id: String,
+    pub(crate) resource: String,
+    pub(crate) field: String,
+    pub(crate) local: String,
+    pub(crate) captured: String,
+    pub(crate) adoptable: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
+    pub(crate) reason: Option<String>,
     #[serde(skip)]
     patches: Vec<LocalPatch>,
 }
 
-pub fn run(repo: &LocalState, preview: bool, all: bool, requested: &[String]) -> Result<()> {
+pub(crate) fn run(repo: &LocalState, preview: bool, all: bool, requested: &[String]) -> Result<()> {
     progress::section(if preview {
         "Previewing captured drift"
     } else {

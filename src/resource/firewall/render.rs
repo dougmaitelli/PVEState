@@ -1,6 +1,6 @@
 use crate::model::{FirewallPolicy, FirewallRule};
 
-pub fn render(policy: &FirewallPolicy) -> String {
+pub(crate) fn render(policy: &FirewallPolicy) -> String {
     let mut output = String::from("[OPTIONS]\n\n");
     output += &format!("enable: {}\n", u8::from(policy.enabled));
     if let Some(value) = &policy.log_level_in {
@@ -73,7 +73,7 @@ fn comment(output: &mut String, value: Option<&str>) {
     output.push('\n');
 }
 
-pub fn semantic(s: &str) -> (Vec<String>, Vec<String>) {
+pub(crate) fn semantic(s: &str) -> (Vec<String>, Vec<String>) {
     let mut section = String::new();
     let mut unordered = Vec::new();
     let mut ordered = Vec::new();

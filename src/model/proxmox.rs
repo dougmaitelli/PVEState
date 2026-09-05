@@ -4,20 +4,20 @@ use std::{fmt, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum GuestKind {
+pub(crate) enum GuestKind {
     Lxc,
     Qemu,
 }
 
 impl GuestKind {
-    pub const fn api_name(self) -> &'static str {
+    pub(crate) const fn api_name(self) -> &'static str {
         match self {
             Self::Lxc => "lxc",
             Self::Qemu => "qemu",
         }
     }
 
-    pub const fn collection_name(self) -> &'static str {
+    pub(crate) const fn collection_name(self) -> &'static str {
         match self {
             Self::Lxc => "lxcs",
             Self::Qemu => "vms",
@@ -43,19 +43,19 @@ impl FromStr for GuestKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct GuestRef {
-    pub kind: GuestKind,
-    pub vmid: u32,
+pub(crate) struct GuestRef {
+    pub(crate) kind: GuestKind,
+    pub(crate) vmid: u32,
 }
 
 impl GuestRef {
-    pub const fn new(kind: GuestKind, vmid: u32) -> Self {
+    pub(crate) const fn new(kind: GuestKind, vmid: u32) -> Self {
         Self { kind, vmid }
     }
-    pub fn config_endpoint(self, node: &str) -> String {
+    pub(crate) fn config_endpoint(self, node: &str) -> String {
         format!("/nodes/{node}/{}/{}/config", self.kind, self.vmid)
     }
-    pub fn resize_endpoint(self, node: &str) -> String {
+    pub(crate) fn resize_endpoint(self, node: &str) -> String {
         format!("/nodes/{node}/{}/{}/resize", self.kind, self.vmid)
     }
 }
@@ -77,7 +77,7 @@ impl FromStr for GuestRef {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GuestField {
+pub(crate) enum GuestField {
     Hostname,
     OsType,
     Unprivileged,
@@ -103,7 +103,7 @@ pub enum GuestField {
 }
 
 impl GuestField {
-    pub fn api_name(self) -> String {
+    pub(crate) fn api_name(self) -> String {
         match self {
             Self::Hostname => "hostname".into(),
             Self::OsType => "ostype".into(),
@@ -130,7 +130,7 @@ impl GuestField {
         }
     }
 
-    pub fn from_api(value: &str) -> Option<Self> {
+    pub(crate) fn from_api(value: &str) -> Option<Self> {
         let scalar = match value {
             "hostname" => Self::Hostname,
             "ostype" => Self::OsType,
@@ -157,7 +157,7 @@ impl GuestField {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DiskInterface {
+pub(crate) enum DiskInterface {
     Scsi(u8),
     Sata(u8),
     Virtio(u8),
@@ -216,7 +216,7 @@ impl<'de> Deserialize<'de> for DiskInterface {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct UsbSlot(pub u8);
+pub(crate) struct UsbSlot(pub u8);
 
 impl fmt::Display for UsbSlot {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

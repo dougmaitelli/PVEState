@@ -1,13 +1,13 @@
 use crate::model::{BindMount, Nic, VmNic};
 
-pub fn options(items: Vec<(&str, Option<String>)>) -> String {
+pub(crate) fn options(items: Vec<(&str, Option<String>)>) -> String {
     items
         .into_iter()
         .filter_map(|(key, value)| value.map(|value| format!("{key}={value}")))
         .collect::<Vec<_>>()
         .join(",")
 }
-pub fn lxc_nic(n: &Nic) -> String {
+pub(crate) fn lxc_nic(n: &Nic) -> String {
     options(vec![
         ("name", Some(n.name.clone())),
         ("bridge", Some(n.bridge.clone())),
@@ -20,7 +20,7 @@ pub fn lxc_nic(n: &Nic) -> String {
         ("type", Some("veth".into())),
     ])
 }
-pub fn vm_nic(n: &VmNic) -> String {
+pub(crate) fn vm_nic(n: &VmNic) -> String {
     options(vec![
         (n.model.as_str(), Some(n.mac.to_string())),
         ("bridge", Some(n.bridge.clone())),
@@ -28,7 +28,7 @@ pub fn vm_nic(n: &VmNic) -> String {
         ("tag", n.vlan.map(|value| value.to_string())),
     ])
 }
-pub fn bind_mount(m: &BindMount) -> String {
+pub(crate) fn bind_mount(m: &BindMount) -> String {
     format!(
         "{},mp={},backup={}",
         m.source,

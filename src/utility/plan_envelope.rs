@@ -2,18 +2,18 @@ use anyhow::{Result, bail};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-pub trait PlanEnvelope: Clone + Serialize {
+pub(crate) trait PlanEnvelope: Clone + Serialize {
     fn integrity(&self) -> &str;
     fn set_integrity(&mut self, value: String);
 }
 
-pub fn sign<T: PlanEnvelope>(plan: &mut T) -> Result<()> {
+pub(crate) fn sign<T: PlanEnvelope>(plan: &mut T) -> Result<()> {
     plan.set_integrity(String::new());
     plan.set_integrity(hash(plan)?);
     Ok(())
 }
 
-pub fn verify<T: PlanEnvelope>(plan: &T, message: &str) -> Result<()> {
+pub(crate) fn verify<T: PlanEnvelope>(plan: &T, message: &str) -> Result<()> {
     let mut unsigned = plan.clone();
     unsigned.set_integrity(String::new());
     if hash(&unsigned)? != plan.integrity() {

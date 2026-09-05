@@ -1,6 +1,6 @@
 use crate::model::Network;
 
-pub fn render(n: &Network) -> String {
+pub(crate) fn render(n: &Network) -> String {
     let mut s = String::from("# Managed by PVE State\nauto lo\niface lo inet loopback\n\n");
     for i in &n.interfaces {
         s += &format!("iface {} inet {}\n\n", i.name, i.method);
@@ -34,7 +34,7 @@ pub fn render(n: &Network) -> String {
     s += "source /etc/network/interfaces.d/*\n";
     s
 }
-pub fn semantic_lines(s: &str) -> Vec<String> {
+pub(crate) fn semantic_lines(s: &str) -> Vec<String> {
     s.lines()
         .map(str::trim)
         .filter(|x| !x.is_empty() && !x.starts_with('#'))

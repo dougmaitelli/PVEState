@@ -7,80 +7,80 @@ use std::{
 };
 
 #[derive(Clone)]
-pub struct Settings {
-    pub pve: PveSettings,
-    pub pbs: PbsSettings,
-    pub ssh: SshSettings,
-    pub apply: ApplySettings,
-    pub recovery: RecoverySettings,
+pub(crate) struct Settings {
+    pub(crate) pve: PveSettings,
+    pub(crate) pbs: PbsSettings,
+    pub(crate) ssh: SshSettings,
+    pub(crate) apply: ApplySettings,
+    pub(crate) recovery: RecoverySettings,
 }
 
 #[derive(Clone)]
-pub struct PveSettings {
-    pub endpoint: Url,
-    pub verify_tls: bool,
-    pub ca_file: Option<PathBuf>,
-    pub discovery: Option<ApiCredential>,
-    pub mutation: Option<ApiCredential>,
+pub(crate) struct PveSettings {
+    pub(crate) endpoint: Url,
+    pub(crate) verify_tls: bool,
+    pub(crate) ca_file: Option<PathBuf>,
+    pub(crate) discovery: Option<ApiCredential>,
+    pub(crate) mutation: Option<ApiCredential>,
 }
 
 #[derive(Clone)]
-pub struct PbsSettings {
-    pub endpoint: Url,
-    pub verify_tls: bool,
-    pub ca_file: Option<PathBuf>,
-    pub discovery: Option<ApiCredential>,
-    pub mutation: Option<ApiCredential>,
+pub(crate) struct PbsSettings {
+    pub(crate) endpoint: Url,
+    pub(crate) verify_tls: bool,
+    pub(crate) ca_file: Option<PathBuf>,
+    pub(crate) discovery: Option<ApiCredential>,
+    pub(crate) mutation: Option<ApiCredential>,
 }
 
 #[derive(Clone)]
-pub struct ApiCredential {
-    pub id: String,
-    pub secret: String,
+pub(crate) struct ApiCredential {
+    pub(crate) id: String,
+    pub(crate) secret: String,
 }
 
 #[derive(Clone)]
-pub struct SshSettings {
-    pub discovery: SshTarget,
-    pub mutation: Option<SshTarget>,
-    pub recovery: Option<SshTargetTemplate>,
+pub(crate) struct SshSettings {
+    pub(crate) discovery: SshTarget,
+    pub(crate) mutation: Option<SshTarget>,
+    pub(crate) recovery: Option<SshTargetTemplate>,
 }
 
 #[derive(Clone)]
-pub struct SshTarget {
-    pub host: String,
-    pub port: u16,
-    pub user: String,
-    pub key: PathBuf,
-    pub known_hosts: PathBuf,
+pub(crate) struct SshTarget {
+    pub(crate) host: String,
+    pub(crate) port: u16,
+    pub(crate) user: String,
+    pub(crate) key: PathBuf,
+    pub(crate) known_hosts: PathBuf,
 }
 
 #[derive(Clone)]
-pub struct SshTargetTemplate {
-    pub port: u16,
-    pub user: String,
-    pub key: PathBuf,
-    pub known_hosts: PathBuf,
+pub(crate) struct SshTargetTemplate {
+    pub(crate) port: u16,
+    pub(crate) user: String,
+    pub(crate) key: PathBuf,
+    pub(crate) known_hosts: PathBuf,
 }
 
 #[derive(Clone)]
-pub struct ApplySettings {
-    pub enabled: bool,
-    pub confirm_plan_sha: Option<String>,
-    pub target: Option<Url>,
-    pub domains: BTreeSet<Domain>,
-    pub activate_network: bool,
+pub(crate) struct ApplySettings {
+    pub(crate) enabled: bool,
+    pub(crate) confirm_plan_sha: Option<String>,
+    pub(crate) target: Option<Url>,
+    pub(crate) domains: BTreeSet<Domain>,
+    pub(crate) activate_network: bool,
     pub(crate) secrets: BTreeMap<String, String>,
 }
 
 #[derive(Clone)]
-pub struct RecoverySettings {
-    pub enabled: bool,
-    pub confirm_plan_sha: Option<String>,
+pub(crate) struct RecoverySettings {
+    pub(crate) enabled: bool,
+    pub(crate) confirm_plan_sha: Option<String>,
 }
 
 impl Settings {
-    pub fn load(root: &Path) -> Result<Self> {
+    pub(crate) fn load(root: &Path) -> Result<Self> {
         dotenvy::from_path(root.join(".pves.env")).ok();
         let host = required("PVE_HOST")?;
         let api_scheme = value("PVE_API_SCHEME").unwrap_or_else(|| "https".into());
@@ -172,13 +172,13 @@ impl Settings {
 }
 
 impl PveSettings {
-    pub fn discovery_credential(&self) -> Result<&ApiCredential> {
+    pub(crate) fn discovery_credential(&self) -> Result<&ApiCredential> {
         self.discovery
             .as_ref()
             .context("missing PVE discovery API credential")
     }
 
-    pub fn mutation_credential(&self) -> Result<&ApiCredential> {
+    pub(crate) fn mutation_credential(&self) -> Result<&ApiCredential> {
         self.mutation
             .as_ref()
             .context("missing PVE mutation API credential")
@@ -186,13 +186,13 @@ impl PveSettings {
 }
 
 impl PbsSettings {
-    pub fn discovery_credential(&self) -> Result<&ApiCredential> {
+    pub(crate) fn discovery_credential(&self) -> Result<&ApiCredential> {
         self.discovery
             .as_ref()
             .context("missing PBS discovery API credential")
     }
 
-    pub fn mutation_credential(&self) -> Result<&ApiCredential> {
+    pub(crate) fn mutation_credential(&self) -> Result<&ApiCredential> {
         self.mutation
             .as_ref()
             .context("missing PBS mutation API credential")
@@ -200,7 +200,7 @@ impl PbsSettings {
 }
 
 impl ApplySettings {
-    pub fn secret(&self, name: &str) -> Result<&str> {
+    pub(crate) fn secret(&self, name: &str) -> Result<&str> {
         self.secrets
             .get(name)
             .map(String::as_str)
@@ -209,7 +209,7 @@ impl ApplySettings {
 }
 
 impl SshTargetTemplate {
-    pub fn for_host(&self, host: &str) -> SshTarget {
+    pub(crate) fn for_host(&self, host: &str) -> SshTarget {
         SshTarget {
             host: host.into(),
             port: self.port,

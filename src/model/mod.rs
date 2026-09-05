@@ -8,26 +8,21 @@ mod secrets;
 mod services;
 mod storage;
 
-pub use crate::resource::{
-    backup::{
-        BackupConfig, BackupGuest, BackupJobs, BackupMode, Datastore, DatastoreBackend, PbsBackup,
-        PruneJob, PveBackupJob, Retention, S3Endpoint, SyncDirection, SyncJob, VerifyJob,
-    },
+pub(crate) use crate::resource::{
+    backup::{BackupConfig, PruneJob, SyncJob, VerifyJob},
     firewall::{
         FirewallAction, FirewallAlias, FirewallDirection, FirewallIpSet, FirewallIpSetEntry,
         FirewallLogLevel, FirewallPolicy, FirewallProtocol, FirewallRule, FirewallSecurityGroup,
     },
-    guest::{
-        BindMount, Cpu, Disk, Efi, Guests, Lxc, MacAddress, Nic, Start, Usb, Vm, VmDisk, VmNic,
-    },
-    network::{AddressMethod, Bridge, Dns, Interface, Network},
+    guest::{BindMount, Guests, Lxc, Nic, Vm, VmNic},
+    network::{Bridge, Interface, Network},
 };
-pub use cluster::*;
-pub use manifest::*;
-pub use node::*;
-pub use proxmox::*;
-pub use recovery_check::*;
-pub use restore::*;
-pub use secrets::*;
-pub use services::*;
-pub use storage::*;
+pub(crate) use cluster::ClusterConfig;
+pub(crate) use manifest::RepositoryManifest;
+pub(crate) use node::NodeConfig;
+pub(crate) use proxmox::{DiskInterface, GuestField, GuestKind, GuestRef, UsbSlot};
+pub(crate) use recovery_check::RecoveryChecks;
+pub(crate) use restore::{RestoreConfig, RestoreMount};
+pub(crate) use secrets::RequiredSecretsConfig;
+pub(crate) use services::ServicesConfig;
+pub(crate) use storage::StorageConfig;

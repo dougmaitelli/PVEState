@@ -6,7 +6,7 @@ use std::{
     io::Write,
     process::{Command, Stdio},
 };
-pub struct Ssh {
+pub(crate) struct Ssh {
     host: String,
     port: String,
     user: String,
@@ -15,15 +15,15 @@ pub struct Ssh {
 }
 
 #[derive(Debug, Serialize)]
-pub struct SshOutput {
-    pub ok: bool,
-    pub return_code: Option<i32>,
-    pub stdout: String,
-    pub stderr: String,
+pub(crate) struct SshOutput {
+    pub(crate) ok: bool,
+    pub(crate) return_code: Option<i32>,
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
 }
 
 impl Ssh {
-    pub fn new(settings: &SshTarget) -> Self {
+    pub(crate) fn new(settings: &SshTarget) -> Self {
         Self {
             host: settings.host.clone(),
             port: settings.port.to_string(),
@@ -60,7 +60,7 @@ impl Ssh {
         c
     }
 
-    pub fn host_key_fingerprint(&self) -> Result<String> {
+    pub(crate) fn host_key_fingerprint(&self) -> Result<String> {
         let output = self
             .command_with_options("true", true)
             .output()
@@ -81,7 +81,7 @@ impl Ssh {
             })
             .context("SSH did not report the negotiated host-key fingerprint")
     }
-    pub fn run(&self, remote: &str) -> Result<String> {
+    pub(crate) fn run(&self, remote: &str) -> Result<String> {
         let output = self.probe(remote)?;
         if !output.ok {
             bail!("ssh failed: {}", output.stderr)
@@ -89,7 +89,7 @@ impl Ssh {
         Ok(output.stdout)
     }
 
-    pub fn probe(&self, remote: &str) -> Result<SshOutput> {
+    pub(crate) fn probe(&self, remote: &str) -> Result<SshOutput> {
         let output = self.command(remote).output().context("start ssh")?;
         Ok(SshOutput {
             ok: output.status.success(),
@@ -98,7 +98,7 @@ impl Ssh {
             stderr: String::from_utf8(output.stderr)?,
         })
     }
-    pub fn stdin(&self, remote: &str, input: &[u8]) -> Result<()> {
+    pub(crate) fn stdin(&self, remote: &str, input: &[u8]) -> Result<()> {
         let mut c = self.command(remote);
         let mut p = c.stdin(Stdio::piped()).spawn()?;
         p.stdin.take().unwrap().write_all(input)?;

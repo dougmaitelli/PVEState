@@ -6,52 +6,52 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Serialize)]
-pub struct PveSnapshot {
-    pub schema_version: u8,
-    pub collected_at: DateTime<Utc>,
-    pub mode: &'static str,
-    pub endpoint: String,
-    pub requests: ClusterResponses,
-    pub nodes: BTreeMap<String, Node>,
+pub(crate) struct PveSnapshot {
+    pub(crate) schema_version: u8,
+    pub(crate) collected_at: DateTime<Utc>,
+    pub(crate) mode: &'static str,
+    pub(crate) endpoint: String,
+    pub(crate) requests: ClusterResponses,
+    pub(crate) nodes: BTreeMap<String, Node>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct ClusterResponses {
-    pub version: RawResponse,
-    pub cluster_status: ObjectsResponse,
-    pub cluster_resources: ObjectsResponse,
-    pub backup_jobs: ObjectsResponse,
-    pub ha_status: RawResponse,
-    pub pools: ObjectsResponse,
-    pub storage: ObjectsResponse,
-    pub firewall_options: ObjectResponse,
-    pub firewall_rules: ObjectsResponse,
-    pub firewall_groups: ObjectsResponse,
-    pub firewall_aliases: ObjectsResponse,
+pub(crate) struct ClusterResponses {
+    pub(crate) version: RawResponse,
+    pub(crate) cluster_status: ObjectsResponse,
+    pub(crate) cluster_resources: ObjectsResponse,
+    pub(crate) backup_jobs: ObjectsResponse,
+    pub(crate) ha_status: RawResponse,
+    pub(crate) pools: ObjectsResponse,
+    pub(crate) storage: ObjectsResponse,
+    pub(crate) firewall_options: ObjectResponse,
+    pub(crate) firewall_rules: ObjectsResponse,
+    pub(crate) firewall_groups: ObjectsResponse,
+    pub(crate) firewall_aliases: ObjectsResponse,
 }
 
 #[derive(Debug, Serialize)]
-pub struct Node {
-    pub status: ObjectResponse,
-    pub network: ObjectsResponse,
-    pub dns: ObjectResponse,
-    pub storage: ObjectsResponse,
-    pub firewall_options: ObjectResponse,
-    pub firewall_rules: ObjectsResponse,
-    pub lxcs: BTreeMap<String, Guest>,
-    pub vms: BTreeMap<String, Guest>,
+pub(crate) struct Node {
+    pub(crate) status: ObjectResponse,
+    pub(crate) network: ObjectsResponse,
+    pub(crate) dns: ObjectResponse,
+    pub(crate) storage: ObjectsResponse,
+    pub(crate) firewall_options: ObjectResponse,
+    pub(crate) firewall_rules: ObjectsResponse,
+    pub(crate) lxcs: BTreeMap<String, Guest>,
+    pub(crate) vms: BTreeMap<String, Guest>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct Guest {
-    pub summary: ApiObject,
-    pub config: ObjectResponse,
-    pub snapshots: ObjectsResponse,
-    pub firewall_options: ObjectResponse,
-    pub firewall_rules: ObjectsResponse,
+pub(crate) struct Guest {
+    pub(crate) summary: ApiObject,
+    pub(crate) config: ObjectResponse,
+    pub(crate) snapshots: ObjectsResponse,
+    pub(crate) firewall_options: ObjectResponse,
+    pub(crate) firewall_rules: ObjectsResponse,
 }
 
-pub fn capture_pve(client: &dyn PveClient) -> PveSnapshot {
+pub(crate) fn capture_pve(client: &dyn PveClient) -> PveSnapshot {
     let requests = ClusterResponses {
         version: get(client, "/version"),
         cluster_status: get(client, "/cluster/status"),
@@ -107,7 +107,7 @@ pub fn capture_pve(client: &dyn PveClient) -> PveSnapshot {
 }
 
 impl PveSnapshot {
-    pub fn failures(&self) -> Vec<String> {
+    pub(crate) fn failures(&self) -> Vec<String> {
         let mut failures = Vec::new();
         add_failure("cluster", &self.requests.version, &mut failures);
         add_failure("cluster", &self.requests.cluster_status, &mut failures);

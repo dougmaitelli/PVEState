@@ -4,61 +4,61 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct ClusterConfig {
-    pub cluster: ClusterIdentity,
-    pub proxmox: ProxmoxCluster,
-    pub workload_profile: WorkloadProfile,
-    pub backup: ClusterBackup,
+pub(crate) struct ClusterConfig {
+    pub(crate) cluster: ClusterIdentity,
+    pub(crate) proxmox: ProxmoxCluster,
+    pub(crate) workload_profile: WorkloadProfile,
+    pub(crate) backup: ClusterBackup,
     #[serde(default)]
-    pub firewall: Option<FirewallPolicy>,
+    pub(crate) firewall: Option<FirewallPolicy>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct ClusterIdentity {
-    pub name: String,
-    pub environment: String,
+pub(crate) struct ClusterIdentity {
+    pub(crate) name: String,
+    pub(crate) environment: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct ProxmoxCluster {
-    pub endpoint: String,
-    pub existing_environment: bool,
-    pub change_policy: String,
+pub(crate) struct ProxmoxCluster {
+    pub(crate) endpoint: String,
+    pub(crate) existing_environment: bool,
+    pub(crate) change_policy: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct WorkloadProfile {
-    pub virtual_machines: Count,
-    pub containers: Count,
+pub(crate) struct WorkloadProfile {
+    pub(crate) virtual_machines: Count,
+    pub(crate) containers: Count,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
-pub enum Count {
+pub(crate) enum Count {
     Number(u32),
     Text(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct ClusterBackup {
-    pub pbs: ClusterPbs,
-    pub s3: ClusterS3,
+pub(crate) struct ClusterBackup {
+    pub(crate) pbs: ClusterPbs,
+    pub(crate) s3: ClusterS3,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct ClusterPbs {
-    pub deployment: String,
-    pub endpoint: String,
+pub(crate) struct ClusterPbs {
+    pub(crate) deployment: String,
+    pub(crate) endpoint: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct ClusterS3 {
-    pub configured_in_pbs: bool,
-    pub endpoint: String,
+pub(crate) struct ClusterS3 {
+    pub(crate) configured_in_pbs: bool,
+    pub(crate) endpoint: String,
 }

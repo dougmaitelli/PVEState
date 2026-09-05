@@ -3,7 +3,7 @@ use crate::utility::plan_envelope;
 use anyhow::Result;
 use chrono::Utc;
 
-pub struct PlanBuilder {
+pub(crate) struct PlanBuilder {
     capture_id: String,
     target: String,
     pbs_target: String,
@@ -12,7 +12,7 @@ pub struct PlanBuilder {
 }
 
 impl PlanBuilder {
-    pub fn new(capture_id: &str, target: &str, pbs_target: &str) -> Self {
+    pub(crate) fn new(capture_id: &str, target: &str, pbs_target: &str) -> Self {
         Self {
             capture_id: capture_id.into(),
             target: target.into(),
@@ -22,19 +22,19 @@ impl PlanBuilder {
         }
     }
 
-    pub fn operations(&mut self) -> &mut Vec<Operation> {
+    pub(crate) fn operations(&mut self) -> &mut Vec<Operation> {
         &mut self.operations
     }
 
-    pub fn blockers(&mut self) -> &mut Vec<String> {
+    pub(crate) fn blockers(&mut self) -> &mut Vec<String> {
         &mut self.blockers
     }
 
-    pub fn parts(&mut self) -> (&mut Vec<Operation>, &mut Vec<String>) {
+    pub(crate) fn parts(&mut self) -> (&mut Vec<Operation>, &mut Vec<String>) {
         (&mut self.operations, &mut self.blockers)
     }
 
-    pub fn finish(self) -> Result<Plan> {
+    pub(crate) fn finish(self) -> Result<Plan> {
         let mut plan = Plan {
             schema_version: 2,
             created_at: Utc::now(),

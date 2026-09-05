@@ -21,7 +21,7 @@ struct Envelope<T> {
 }
 
 impl JsonApiClient {
-    pub fn new(
+    pub(crate) fn new(
         endpoint: &Url,
         verify_tls: bool,
         ca_file: Option<&Path>,
@@ -50,11 +50,11 @@ impl JsonApiClient {
         })
     }
 
-    pub fn endpoint(&self) -> &str {
+    pub(crate) fn endpoint(&self) -> &str {
         self.endpoint.as_str().trim_end_matches('/')
     }
 
-    pub fn get_data<T: DeserializeOwned + Default>(&self, path: &str) -> Result<T> {
+    pub(crate) fn get_data<T: DeserializeOwned + Default>(&self, path: &str) -> Result<T> {
         let response = self
             .http
             .get(self.url(path)?)
@@ -66,7 +66,7 @@ impl JsonApiClient {
         Ok(response.json::<Envelope<T>>()?.data.unwrap_or_default())
     }
 
-    pub fn form(&self, method: Method, path: &str, data: &impl Serialize) -> Result<()> {
+    pub(crate) fn form(&self, method: Method, path: &str, data: &impl Serialize) -> Result<()> {
         self.http
             .request(method, self.url(path)?)
             .header(AUTHORIZATION, &self.authorization)

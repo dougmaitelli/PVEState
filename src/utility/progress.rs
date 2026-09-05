@@ -19,11 +19,11 @@ struct Stage {
     operations: u64,
 }
 
-pub fn set(level: u8) {
+pub(crate) fn set(level: u8) {
     VERBOSITY.store(level, Ordering::Relaxed);
 }
 
-pub fn section(message: impl Into<String>) {
+pub(crate) fn section(message: impl Into<String>) {
     let message = message.into();
     let mut active = ACTIVE.lock().unwrap_or_else(|error| error.into_inner());
     finish_stage(active.take(), true);
@@ -48,7 +48,7 @@ pub fn section(message: impl Into<String>) {
     }
 }
 
-pub fn operation(message: impl AsRef<str>) {
+pub(crate) fn operation(message: impl AsRef<str>) {
     if VERBOSITY.load(Ordering::Relaxed) == 0 {
         count_operation();
         return;
@@ -65,7 +65,7 @@ pub fn operation(message: impl AsRef<str>) {
     }
 }
 
-pub fn detail(message: impl AsRef<str>) {
+pub(crate) fn detail(message: impl AsRef<str>) {
     if VERBOSITY.load(Ordering::Relaxed) < 2 {
         return;
     }
@@ -79,7 +79,7 @@ pub fn detail(message: impl AsRef<str>) {
     }
 }
 
-pub fn finish(success: bool) {
+pub(crate) fn finish(success: bool) {
     let stage = ACTIVE
         .lock()
         .unwrap_or_else(|error| error.into_inner())

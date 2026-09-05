@@ -24,16 +24,16 @@ pub(super) enum OperationStatus {
 
 #[derive(Debug, Serialize)]
 pub(super) struct ApplyJournal {
-    pub schema_version: u8,
-    pub apply_id: String,
-    pub plan_sha256: String,
-    pub target: String,
-    pub pbs_target: String,
-    pub started_at: DateTime<Utc>,
-    pub finished_at: Option<DateTime<Utc>>,
-    pub status: ApplyStatus,
-    pub failure: Option<String>,
-    pub operations: Vec<JournalOperation>,
+    pub(crate) schema_version: u8,
+    pub(crate) apply_id: String,
+    pub(crate) plan_sha256: String,
+    pub(crate) target: String,
+    pub(crate) pbs_target: String,
+    pub(crate) started_at: DateTime<Utc>,
+    pub(crate) finished_at: Option<DateTime<Utc>>,
+    pub(crate) status: ApplyStatus,
+    pub(crate) failure: Option<String>,
+    pub(crate) operations: Vec<JournalOperation>,
     #[serde(skip)]
     path: PathBuf,
     #[serde(skip)]
@@ -42,18 +42,18 @@ pub(super) struct ApplyJournal {
 
 #[derive(Debug, Serialize)]
 pub(super) struct JournalOperation {
-    pub index: usize,
-    pub domain: String,
-    pub resource: String,
-    pub action: &'static str,
-    pub status: OperationStatus,
-    pub started_at: Option<DateTime<Utc>>,
-    pub finished_at: Option<DateTime<Utc>>,
-    pub error: Option<String>,
+    pub(crate) index: usize,
+    pub(crate) domain: String,
+    pub(crate) resource: String,
+    pub(crate) action: &'static str,
+    pub(crate) status: OperationStatus,
+    pub(crate) started_at: Option<DateTime<Utc>>,
+    pub(crate) finished_at: Option<DateTime<Utc>>,
+    pub(crate) error: Option<String>,
 }
 
 impl ApplyJournal {
-    pub fn new(runtime: &Path, plan: &Plan) -> Self {
+    pub(crate) fn new(runtime: &Path, plan: &Plan) -> Self {
         let started_at = Utc::now();
         let apply_id = started_at.format("%Y%m%dT%H%M%S%.fZ").to_string();
         Self {
@@ -86,11 +86,11 @@ impl ApplyJournal {
         }
     }
 
-    pub fn path(&self) -> &Path {
+    pub(crate) fn path(&self) -> &Path {
         &self.path
     }
 
-    pub fn start(&mut self, index: usize) -> Result<()> {
+    pub(crate) fn start(&mut self, index: usize) -> Result<()> {
         let operation = self
             .operations
             .get_mut(index)
@@ -100,7 +100,7 @@ impl ApplyJournal {
         Ok(())
     }
 
-    pub fn applied(&mut self, index: usize) -> Result<()> {
+    pub(crate) fn applied(&mut self, index: usize) -> Result<()> {
         let operation = self
             .operations
             .get_mut(index)
@@ -110,7 +110,7 @@ impl ApplyJournal {
         Ok(())
     }
 
-    pub fn operation_failed(&mut self, index: usize, error: &anyhow::Error) -> Result<()> {
+    pub(crate) fn operation_failed(&mut self, index: usize, error: &anyhow::Error) -> Result<()> {
         let operation = self
             .operations
             .get_mut(index)
@@ -122,18 +122,18 @@ impl ApplyJournal {
         Ok(())
     }
 
-    pub fn succeed(&mut self) {
+    pub(crate) fn succeed(&mut self) {
         self.status = ApplyStatus::Succeeded;
         self.finished_at = Some(Utc::now());
     }
 
-    pub fn fail(&mut self, error: &anyhow::Error) {
+    pub(crate) fn fail(&mut self, error: &anyhow::Error) {
         self.status = ApplyStatus::Failed;
         self.finished_at = Some(Utc::now());
         self.failure = Some(format!("{error:#}"));
     }
 
-    pub fn persist(&self) -> Result<()> {
+    pub(crate) fn persist(&self) -> Result<()> {
         atomic_file::write_json(&self.path, self)?;
         atomic_file::write_json(&self.latest, self)?;
         Ok(())

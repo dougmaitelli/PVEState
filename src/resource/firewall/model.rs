@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, fmt, str::FromStr};
 macro_rules! string_enum {
     ($name:ident { $($variant:ident => $value:literal),+ $(,)? }) => {
         #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
-        pub enum $name { $(#[serde(rename=$value)] $variant),+ }
+        pub(crate) enum $name { $(#[serde(rename=$value)] $variant),+ }
         impl fmt::Display for $name { fn fmt(&self,f:&mut fmt::Formatter<'_>)->fmt::Result { f.write_str(match self {$(Self::$variant=>$value),+}) } }
         impl FromStr for $name { type Err=anyhow::Error; fn from_str(value:&str)->Result<Self,Self::Err>{match value{$($value=>Ok(Self::$variant)),+,_=>anyhow::bail!("unsupported {} `{value}`",stringify!($name))}} }
     };
@@ -18,82 +18,82 @@ string_enum!(FirewallLogLevel { NoLog => "nolog", Emergency => "emerg", Alert =>
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct FirewallPolicy {
-    pub enabled: bool,
+pub(crate) struct FirewallPolicy {
+    pub(crate) enabled: bool,
     #[serde(default)]
-    pub log_level_in: Option<FirewallLogLevel>,
+    pub(crate) log_level_in: Option<FirewallLogLevel>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub options: BTreeMap<String, String>,
+    pub(crate) options: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub aliases: Vec<FirewallAlias>,
+    pub(crate) aliases: Vec<FirewallAlias>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub ip_sets: Vec<FirewallIpSet>,
+    pub(crate) ip_sets: Vec<FirewallIpSet>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub security_groups: Vec<FirewallSecurityGroup>,
+    pub(crate) security_groups: Vec<FirewallSecurityGroup>,
     #[serde(default)]
-    pub rules: Vec<FirewallRule>,
+    pub(crate) rules: Vec<FirewallRule>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct FirewallAlias {
-    pub name: String,
-    pub network: String,
+pub(crate) struct FirewallAlias {
+    pub(crate) name: String,
+    pub(crate) network: String,
     #[serde(default)]
-    pub comment: Option<String>,
+    pub(crate) comment: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct FirewallIpSet {
-    pub name: String,
+pub(crate) struct FirewallIpSet {
+    pub(crate) name: String,
     #[serde(default)]
-    pub entries: Vec<FirewallIpSetEntry>,
+    pub(crate) entries: Vec<FirewallIpSetEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct FirewallIpSetEntry {
-    pub network: String,
+pub(crate) struct FirewallIpSetEntry {
+    pub(crate) network: String,
     #[serde(default)]
-    pub nomatch: bool,
+    pub(crate) nomatch: bool,
     #[serde(default)]
-    pub comment: Option<String>,
+    pub(crate) comment: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct FirewallSecurityGroup {
-    pub name: String,
+pub(crate) struct FirewallSecurityGroup {
+    pub(crate) name: String,
     #[serde(default)]
-    pub rules: Vec<FirewallRule>,
+    pub(crate) rules: Vec<FirewallRule>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct FirewallRule {
+pub(crate) struct FirewallRule {
     #[serde(default = "yes")]
-    pub enabled: bool,
-    pub direction: FirewallDirection,
-    pub action: FirewallAction,
+    pub(crate) enabled: bool,
+    pub(crate) direction: FirewallDirection,
+    pub(crate) action: FirewallAction,
     #[serde(default)]
-    pub macro_name: Option<String>,
+    pub(crate) macro_name: Option<String>,
     #[serde(default)]
-    pub interface: Option<String>,
+    pub(crate) interface: Option<String>,
     #[serde(default)]
-    pub protocol: Option<FirewallProtocol>,
+    pub(crate) protocol: Option<FirewallProtocol>,
     #[serde(default)]
-    pub source: Option<String>,
+    pub(crate) source: Option<String>,
     #[serde(default)]
-    pub destination: Option<String>,
+    pub(crate) destination: Option<String>,
     #[serde(default)]
-    pub source_port: Option<String>,
+    pub(crate) source_port: Option<String>,
     #[serde(default)]
-    pub destination_port: Option<String>,
+    pub(crate) destination_port: Option<String>,
     #[serde(default = "no_log")]
-    pub log: FirewallLogLevel,
+    pub(crate) log: FirewallLogLevel,
     #[serde(default)]
-    pub comment: Option<String>,
+    pub(crate) comment: Option<String>,
 }
 
 fn yes() -> bool {

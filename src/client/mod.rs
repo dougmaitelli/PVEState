@@ -7,11 +7,11 @@ use anyhow::Result;
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-pub use pbs::{Pbs, Snapshot as PbsSnapshot, capture as capture_pbs};
-pub use pve::Pve;
-pub use ssh::{Ssh, SshOutput};
+pub(crate) use pbs::{Pbs, capture as capture_pbs};
+pub(crate) use pve::Pve;
+pub(crate) use ssh::{Ssh, SshOutput};
 
-pub trait PveClient {
+pub(crate) trait PveClient {
     fn endpoint(&self) -> &str;
     fn get(&self, path: &str) -> Result<Value>;
     fn put(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()>;
@@ -19,7 +19,7 @@ pub trait PveClient {
     fn delete(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()>;
 }
 
-pub trait PbsClient {
+pub(crate) trait PbsClient {
     fn endpoint(&self) -> &str;
     fn get(&self, path: &str) -> Result<Value>;
     fn put(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()>;
@@ -27,7 +27,7 @@ pub trait PbsClient {
     fn delete(&self, path: &str, data: &BTreeMap<String, String>) -> Result<()>;
 }
 
-pub trait RemoteHost {
+pub(crate) trait RemoteHost {
     fn host_key_fingerprint(&self) -> Result<String>;
     fn run(&self, remote: &str) -> Result<String>;
     fn probe(&self, remote: &str) -> Result<SshOutput>;

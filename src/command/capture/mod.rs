@@ -15,7 +15,7 @@ use chrono::Utc;
 use serde_json::json;
 use std::{collections::BTreeMap, fs, path::Path};
 
-pub fn run(
+pub(crate) fn run(
     repo: &LocalState,
     pve: &dyn PveClient,
     pbs: &dyn PbsClient,
@@ -172,7 +172,7 @@ fn publish_observed(repo: &LocalState, staged: &Path, capture_id: &str) -> Resul
     Ok(())
 }
 
-pub fn validate(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
+pub(crate) fn validate(repo: &LocalState, ssh: &dyn RemoteHost) -> Result<()> {
     runtime_security::prepare(&repo.runtime())?;
     let mut failures = Vec::new();
     let mut report = Vec::new();

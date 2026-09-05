@@ -1,11 +1,15 @@
 use crate::client::RemoteHost;
 use anyhow::{Result, bail};
 
-pub fn quote(value: &str) -> String {
+pub(crate) fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
-pub fn verify_remote_file(ssh: &dyn RemoteHost, path: &str, expected: Option<&str>) -> Result<()> {
+pub(crate) fn verify_remote_file(
+    ssh: &dyn RemoteHost,
+    path: &str,
+    expected: Option<&str>,
+) -> Result<()> {
     let current = ssh.run(&format!(
         "if test -e {}; then sha256sum {} | cut -d ' ' -f 1; else printf absent; fi",
         quote(path),

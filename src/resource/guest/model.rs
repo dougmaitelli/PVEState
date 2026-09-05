@@ -6,7 +6,7 @@ use std::{fmt, str::FromStr};
 
 #[derive(Debug, Clone, Serialize, JsonSchema, PartialEq, Eq)]
 #[serde(transparent)]
-pub struct MacAddress(String);
+pub(crate) struct MacAddress(String);
 
 impl fmt::Display for MacAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -37,132 +37,132 @@ impl<'de> Deserialize<'de> for MacAddress {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Guests {
-    pub node: String,
+pub(crate) struct Guests {
+    pub(crate) node: String,
     #[serde(default)]
-    pub lxcs: BTreeMap<u32, Lxc>,
+    pub(crate) lxcs: BTreeMap<u32, Lxc>,
     #[serde(default)]
-    pub vms: BTreeMap<u32, Vm>,
+    pub(crate) vms: BTreeMap<u32, Vm>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Lxc {
-    pub hostname: String,
-    pub os: String,
-    pub unprivileged: bool,
-    pub cores: u16,
-    pub memory_mb: u32,
-    pub swap_mb: u32,
-    pub rootfs: Disk,
+pub(crate) struct Lxc {
+    pub(crate) hostname: String,
+    pub(crate) os: String,
+    pub(crate) unprivileged: bool,
+    pub(crate) cores: u16,
+    pub(crate) memory_mb: u32,
+    pub(crate) swap_mb: u32,
+    pub(crate) rootfs: Disk,
     #[serde(default)]
-    pub networks: Vec<Nic>,
-    pub start: Start,
+    pub(crate) networks: Vec<Nic>,
+    pub(crate) start: Start,
     #[serde(default)]
-    pub bind_mounts: Vec<BindMount>,
+    pub(crate) bind_mounts: Vec<BindMount>,
     #[serde(default)]
-    pub firewall: Option<FirewallPolicy>,
+    pub(crate) firewall: Option<FirewallPolicy>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Vm {
-    pub name: String,
-    pub machine: String,
-    pub bios: String,
-    pub cpu: Cpu,
-    pub memory_mb: u32,
-    pub disk: VmDisk,
-    pub efi: Efi,
-    pub networks: Vec<VmNic>,
+pub(crate) struct Vm {
+    pub(crate) name: String,
+    pub(crate) machine: String,
+    pub(crate) bios: String,
+    pub(crate) cpu: Cpu,
+    pub(crate) memory_mb: u32,
+    pub(crate) disk: VmDisk,
+    pub(crate) efi: Efi,
+    pub(crate) networks: Vec<VmNic>,
     #[serde(default)]
-    pub usb_passthrough: Vec<Usb>,
-    pub qemu_guest_agent: bool,
-    pub start: Start,
+    pub(crate) usb_passthrough: Vec<Usb>,
+    pub(crate) qemu_guest_agent: bool,
+    pub(crate) start: Start,
     #[serde(default)]
-    pub firewall: Option<FirewallPolicy>,
+    pub(crate) firewall: Option<FirewallPolicy>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Cpu {
-    pub r#type: String,
-    pub sockets: u16,
-    pub cores: u16,
+pub(crate) struct Cpu {
+    pub(crate) r#type: String,
+    pub(crate) sockets: u16,
+    pub(crate) cores: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Disk {
-    pub storage: String,
-    pub size_gb: u64,
+pub(crate) struct Disk {
+    pub(crate) storage: String,
+    pub(crate) size_gb: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct VmDisk {
-    pub storage: String,
+pub(crate) struct VmDisk {
+    pub(crate) storage: String,
     #[schemars(with = "String")]
-    pub interface: DiskInterface,
-    pub size_gb: u64,
+    pub(crate) interface: DiskInterface,
+    pub(crate) size_gb: u64,
     #[serde(default)]
-    pub discard: bool,
+    pub(crate) discard: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Efi {
-    pub storage: String,
-    pub pre_enrolled_keys: bool,
+pub(crate) struct Efi {
+    pub(crate) storage: String,
+    pub(crate) pre_enrolled_keys: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Nic {
-    pub name: String,
-    pub mac: MacAddress,
-    pub bridge: String,
+pub(crate) struct Nic {
+    pub(crate) name: String,
+    pub(crate) mac: MacAddress,
+    pub(crate) bridge: String,
     #[serde(default)]
-    pub firewall: bool,
-    pub ipv4: String,
-    pub gateway4: Option<String>,
-    pub ipv6: Option<String>,
-    pub gateway6: Option<String>,
+    pub(crate) firewall: bool,
+    pub(crate) ipv4: String,
+    pub(crate) gateway4: Option<String>,
+    pub(crate) ipv6: Option<String>,
+    pub(crate) gateway6: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct VmNic {
-    pub model: String,
-    pub mac: MacAddress,
-    pub bridge: String,
+pub(crate) struct VmNic {
+    pub(crate) model: String,
+    pub(crate) mac: MacAddress,
+    pub(crate) bridge: String,
     #[serde(default)]
-    pub firewall: bool,
-    pub vlan: Option<u16>,
+    pub(crate) firewall: bool,
+    pub(crate) vlan: Option<u16>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Usb {
+pub(crate) struct Usb {
     #[schemars(with = "String")]
-    pub slot: UsbSlot,
-    pub host: String,
+    pub(crate) slot: UsbSlot,
+    pub(crate) host: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Start {
-    pub onboot: bool,
-    pub order: u16,
-    pub delay_seconds: Option<u32>,
+pub(crate) struct Start {
+    pub(crate) onboot: bool,
+    pub(crate) order: u16,
+    pub(crate) delay_seconds: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct BindMount {
-    pub source: String,
-    pub target: String,
-    pub backed_up_by_pve: bool,
+pub(crate) struct BindMount {
+    pub(crate) source: String,
+    pub(crate) target: String,
+    pub(crate) backed_up_by_pve: bool,
 }
 
 #[cfg(test)]

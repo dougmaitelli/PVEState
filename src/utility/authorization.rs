@@ -1,22 +1,22 @@
 use anyhow::{Result, bail};
 use chrono::{DateTime, Duration, Utc};
 
-pub struct Policy<'a> {
-    pub enabled: bool,
-    pub enabled_error: &'a str,
-    pub confirmation: Option<&'a str>,
-    pub confirmation_error: &'a str,
-    pub requested_target: &'a str,
-    pub target_error: &'a str,
-    pub max_age: Duration,
-    pub stale_error: &'a str,
-    pub max_future_skew: Duration,
-    pub future_error: &'a str,
-    pub blocker_prefix: &'a str,
-    pub blocker_separator: &'a str,
+pub(crate) struct Policy<'a> {
+    pub(crate) enabled: bool,
+    pub(crate) enabled_error: &'a str,
+    pub(crate) confirmation: Option<&'a str>,
+    pub(crate) confirmation_error: &'a str,
+    pub(crate) requested_target: &'a str,
+    pub(crate) target_error: &'a str,
+    pub(crate) max_age: Duration,
+    pub(crate) stale_error: &'a str,
+    pub(crate) max_future_skew: Duration,
+    pub(crate) future_error: &'a str,
+    pub(crate) blocker_prefix: &'a str,
+    pub(crate) blocker_separator: &'a str,
 }
 
-pub fn authorize(
+pub(crate) fn authorize(
     plan_sha: &str,
     plan_target: &str,
     created_at: DateTime<Utc>,

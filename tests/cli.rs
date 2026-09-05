@@ -1,7 +1,7 @@
 use std::fs;
 use std::process::Command;
 
-use pvestate::config;
+use pvestate::{initialize_local_state, validate_local_state, write_schemas};
 
 #[test]
 fn help_lists_compact_interface() {
@@ -74,19 +74,19 @@ fn init_creates_a_configuration_repository() {
     assert!(!root.join("config/host.yml").exists());
     assert!(!root.join("config/firewall.yml").exists());
     assert!(root.join("observed/production").is_dir());
-    config::open(&root).expect("generated repository must satisfy every typed contract");
+    validate_local_state(&root).expect("generated repository must satisfy every typed contract");
 }
 
 #[test]
 fn configuration_rejects_unknown_fields() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("environment");
-    config::scaffold::initialize(&root).unwrap();
+    initialize_local_state(&root).unwrap();
     let network = root.join("config/network.yml");
     let mut yaml = fs::read_to_string(&network).unwrap();
     yaml.push_str("unexpected_setting: true\n");
     fs::write(network, yaml).unwrap();
-    let error = match config::open(&root) {
+    let error = match validate_local_state(&root) {
         Ok(_) => panic!("unknown field was accepted"),
         Err(error) => format!("{error:#}"),
     };
@@ -100,7 +100,7 @@ fn configuration_rejects_unknown_fields() {
 fn normal_configuration_allows_recovery_host_key_to_be_omitted() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("environment");
-    config::scaffold::initialize(&root).unwrap();
+    initialize_local_state(&root).unwrap();
     let restore = root.join("config/restore.yml");
     let yaml = fs::read_to_string(&restore)
         .unwrap()
@@ -111,15 +111,13 @@ fn normal_configuration_allows_recovery_host_key_to_be_omitted() {
         + "\n";
     fs::write(restore, yaml).unwrap();
 
-    let repository = config::open(&root).unwrap();
-
-    assert!(repository.restore.target.expected_host_key_sha256.is_none());
+    validate_local_state(&root).unwrap();
 }
 
 #[test]
 fn schema_command_writes_every_document_schema() {
     let temp = tempfile::tempdir().unwrap();
-    config::schema::write(Some(temp.path())).unwrap();
+    write_schemas(Some(temp.path())).unwrap();
     for name in [
         "repository",
         "cluster",

@@ -3,14 +3,14 @@ use anyhow::{Context, Result};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::Utc;
 
-pub struct WriteOptions<'a> {
-    pub mode: &'a str,
-    pub expected_sha256: Option<&'a str>,
-    pub verify_expected: bool,
-    pub backup_existing: bool,
+pub(crate) struct WriteOptions<'a> {
+    pub(crate) mode: &'a str,
+    pub(crate) expected_sha256: Option<&'a str>,
+    pub(crate) verify_expected: bool,
+    pub(crate) backup_existing: bool,
 }
 
-pub fn write(
+pub(crate) fn write(
     ssh: &dyn RemoteHost,
     path: &str,
     content: &str,

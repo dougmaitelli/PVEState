@@ -5,7 +5,7 @@ use std::{fmt, ops::Deref};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
-pub enum Domain {
+pub(crate) enum Domain {
     #[serde(rename = "guests")]
     Guest,
     Network,
@@ -16,7 +16,7 @@ pub enum Domain {
 }
 
 impl Domain {
-    pub const fn as_str(self) -> &'static str {
+    pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::Guest => "guests",
             Self::Network => "network",
@@ -79,7 +79,7 @@ impl PartialEq<&str> for Domain {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ResourceId {
+pub(crate) enum ResourceId {
     Cluster,
     Node(String),
     Guest(GuestRef),
@@ -88,7 +88,7 @@ pub enum ResourceId {
 }
 
 impl ResourceId {
-    pub fn parse(value: &str) -> Self {
+    pub(crate) fn parse(value: &str) -> Self {
         if value == "cluster" {
             return Self::Cluster;
         }
@@ -107,7 +107,7 @@ impl ResourceId {
         Self::Named(value.into())
     }
 
-    pub fn guest(&self) -> Option<GuestRef> {
+    pub(crate) fn guest(&self) -> Option<GuestRef> {
         match self {
             Self::Guest(guest) | Self::GuestDisk(guest, _) => Some(*guest),
             _ => None,
@@ -152,13 +152,13 @@ macro_rules! validated_string {
     ($name:ident, $description:literal, $validate:expr) => {
         #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
         #[serde(transparent)]
-        pub struct $name(String);
+        pub(crate) struct $name(String);
         impl $name {
-            pub fn as_str(&self) -> &str {
+            pub(crate) fn as_str(&self) -> &str {
                 &self.0
             }
-            pub fn is_valid(&self) -> bool {
-                ($validate)(&self.0)
+            pub(crate) fn is_valid(&self) -> bool {
+                ($validate)(self.as_str())
             }
         }
         impl Deref for $name {
@@ -214,7 +214,7 @@ fn disk_id_is_valid(value: &str) -> bool {
 
 validated_string!(DiskId, "guest disk identifier", disk_id_is_valid);
 
-pub fn validate_operation(
+pub(crate) fn validate_operation(
     domain: Domain,
     target: super::ApiTarget,
     resource: &ResourceId,

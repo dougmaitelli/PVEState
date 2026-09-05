@@ -1,4 +1,4 @@
 mod model;
-pub mod render;
+pub(crate) mod render;
 
-pub use model::*;
+pub(crate) use model::*;

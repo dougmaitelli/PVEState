@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum DatastoreBackend {
+pub(crate) enum DatastoreBackend {
     Local,
     S3,
 }
@@ -19,7 +19,7 @@ impl std::fmt::Display for DatastoreBackend {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum SyncDirection {
+pub(crate) enum SyncDirection {
     Pull,
     Push,
 }
@@ -37,7 +37,7 @@ fn pull() -> SyncDirection {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum BackupMode {
+pub(crate) enum BackupMode {
     Snapshot,
     Suspend,
     Stop,
@@ -54,116 +54,116 @@ impl std::fmt::Display for BackupMode {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct BackupConfig {
-    pub pbs: PbsBackup,
+pub(crate) struct BackupConfig {
+    pub(crate) pbs: PbsBackup,
     #[serde(default)]
-    pub pve_backup_jobs: BTreeMap<String, PveBackupJob>,
+    pub(crate) pve_backup_jobs: BTreeMap<String, PveBackupJob>,
     #[serde(default)]
-    pub absent_pve_backup_jobs: Vec<String>,
+    pub(crate) absent_pve_backup_jobs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct PbsBackup {
-    pub endpoint: String,
-    pub version: String,
-    pub guest: BackupGuest,
-    pub datastore: Datastore,
-    pub s3_endpoint: S3Endpoint,
-    pub jobs: BackupJobs,
+pub(crate) struct PbsBackup {
+    pub(crate) endpoint: String,
+    pub(crate) version: String,
+    pub(crate) guest: BackupGuest,
+    pub(crate) datastore: Datastore,
+    pub(crate) s3_endpoint: S3Endpoint,
+    pub(crate) jobs: BackupJobs,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct BackupGuest {
+pub(crate) struct BackupGuest {
     #[serde(rename = "type")]
-    pub kind: String,
-    pub vmid: u32,
+    pub(crate) kind: String,
+    pub(crate) vmid: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Datastore {
-    pub name: String,
-    pub backend: DatastoreBackend,
-    pub local_cache_path: String,
-    pub bucket: String,
-    pub s3_endpoint_id: String,
-    pub garbage_collection_schedule: String,
+pub(crate) struct Datastore {
+    pub(crate) name: String,
+    pub(crate) backend: DatastoreBackend,
+    pub(crate) local_cache_path: String,
+    pub(crate) bucket: String,
+    pub(crate) s3_endpoint_id: String,
+    pub(crate) garbage_collection_schedule: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct S3Endpoint {
-    pub id: String,
-    pub endpoint_template: String,
-    pub region: String,
+pub(crate) struct S3Endpoint {
+    pub(crate) id: String,
+    pub(crate) endpoint_template: String,
+    pub(crate) region: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct BackupJobs {
+pub(crate) struct BackupJobs {
     #[serde(default)]
-    pub prune: BTreeMap<String, PruneJob>,
+    pub(crate) prune: BTreeMap<String, PruneJob>,
     #[serde(default)]
-    pub verify: BTreeMap<String, VerifyJob>,
+    pub(crate) verify: BTreeMap<String, VerifyJob>,
     #[serde(default)]
-    pub sync: BTreeMap<String, SyncJob>,
+    pub(crate) sync: BTreeMap<String, SyncJob>,
     #[serde(default)]
-    pub absent_prune: Vec<String>,
+    pub(crate) absent_prune: Vec<String>,
     #[serde(default)]
-    pub absent_verify: Vec<String>,
+    pub(crate) absent_verify: Vec<String>,
     #[serde(default)]
-    pub absent_sync: Vec<String>,
+    pub(crate) absent_sync: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct PruneJob {
-    pub store: String,
-    pub schedule: String,
+pub(crate) struct PruneJob {
+    pub(crate) store: String,
+    pub(crate) schedule: String,
     #[serde(default)]
-    pub keep_last: Option<u32>,
+    pub(crate) keep_last: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct VerifyJob {
-    pub store: String,
-    pub schedule: String,
-    pub ignore_verified: bool,
-    pub outdated_after_days: u32,
+pub(crate) struct VerifyJob {
+    pub(crate) store: String,
+    pub(crate) schedule: String,
+    pub(crate) ignore_verified: bool,
+    pub(crate) outdated_after_days: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct SyncJob {
-    pub store: String,
-    pub remote_store: String,
+pub(crate) struct SyncJob {
+    pub(crate) store: String,
+    pub(crate) remote_store: String,
     #[serde(default)]
-    pub remote: Option<String>,
+    pub(crate) remote: Option<String>,
     #[serde(default)]
-    pub schedule: Option<String>,
+    pub(crate) schedule: Option<String>,
     #[serde(default)]
-    pub remove_vanished: bool,
+    pub(crate) remove_vanished: bool,
     #[serde(default = "pull")]
-    pub direction: SyncDirection,
+    pub(crate) direction: SyncDirection,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct PveBackupJob {
-    pub storage: String,
-    pub schedule: String,
-    pub mode: BackupMode,
-    pub guest_ids: Vec<u32>,
-    pub retention: Retention,
+pub(crate) struct PveBackupJob {
+    pub(crate) storage: String,
+    pub(crate) schedule: String,
+    pub(crate) mode: BackupMode,
+    pub(crate) guest_ids: Vec<u32>,
+    pub(crate) retention: Retention,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Retention {
-    pub keep_last: u32,
+pub(crate) struct Retention {
+    pub(crate) keep_last: u32,
 }
 
 #[cfg(test)]

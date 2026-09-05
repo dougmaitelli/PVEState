@@ -4,7 +4,7 @@ use anyhow::Result;
 use schemars::schema_for;
 use std::{fs, path::Path};
 
-pub fn write(output: Option<&Path>) -> Result<()> {
+pub(crate) fn write(output: Option<&Path>) -> Result<()> {
     let dir = output.unwrap_or_else(|| Path::new("schemas"));
     fs::create_dir_all(dir)?;
 

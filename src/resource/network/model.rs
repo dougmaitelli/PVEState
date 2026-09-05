@@ -4,7 +4,7 @@ use std::{fmt, str::FromStr};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum AddressMethod {
+pub(crate) enum AddressMethod {
     Manual,
     Static,
     Dhcp,
@@ -52,45 +52,45 @@ impl PartialEq<&str> for AddressMethod {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Network {
-    pub host: String,
-    pub management_address: String,
-    pub management_gateway: String,
-    pub dns: Dns,
-    pub interfaces: Vec<Interface>,
-    pub bridges: Vec<Bridge>,
+pub(crate) struct Network {
+    pub(crate) host: String,
+    pub(crate) management_address: String,
+    pub(crate) management_gateway: String,
+    pub(crate) dns: Dns,
+    pub(crate) interfaces: Vec<Interface>,
+    pub(crate) bridges: Vec<Bridge>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Dns {
-    pub search: String,
+pub(crate) struct Dns {
+    pub(crate) search: String,
     #[serde(default)]
-    pub servers: Vec<String>,
+    pub(crate) servers: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Interface {
-    pub name: String,
-    pub method: AddressMethod,
+pub(crate) struct Interface {
+    pub(crate) name: String,
+    pub(crate) method: AddressMethod,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Bridge {
-    pub name: String,
-    pub method: AddressMethod,
-    pub address: Option<String>,
-    pub gateway: Option<String>,
+pub(crate) struct Bridge {
+    pub(crate) name: String,
+    pub(crate) method: AddressMethod,
+    pub(crate) address: Option<String>,
+    pub(crate) gateway: Option<String>,
     #[serde(default)]
-    pub ipv6: Option<String>,
+    pub(crate) ipv6: Option<String>,
     #[serde(default)]
-    pub gateway6: Option<String>,
+    pub(crate) gateway6: Option<String>,
     #[serde(default)]
-    pub ports: Vec<String>,
-    pub stp: bool,
-    pub forward_delay: u16,
+    pub(crate) ports: Vec<String>,
+    pub(crate) stp: bool,
+    pub(crate) forward_delay: u16,
 }
 
 #[cfg(test)]

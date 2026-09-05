@@ -1,0 +1,158 @@
+use crate::{
+    client::{Pbs, Pve, Ssh},
+    command::{adopt, apply, capture, plan, recovery},
+    config,
+    settings::Settings,
+};
+use anyhow::Result;
+use clap::{ArgAction, Parser, Subcommand};
+use std::path::PathBuf;
+
+#[derive(Parser)]
+#[command(
+    name = "pves",
+    version,
+    about = "Safe desired-state tooling for Proxmox VE"
+)]
+struct Cli {
+    #[arg(long, env = "PVES_CONFIG_DIR", default_value = ".", global = true)]
+    config_dir: PathBuf,
+    /// Show operation progress; repeat for additional detail
+    #[arg(short, long, action = ArgAction::Count, global = true)]
+    verbose: u8,
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    Init {
+        path: PathBuf,
+    },
+    Capture,
+    Plan {
+        /// Print the complete machine-readable plan
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(arg_required_else_help = true)]
+    Adopt {
+        #[arg(long, conflicts_with_all = ["ids", "all"])]
+        preview: bool,
+        #[arg(long, conflicts_with_all = ["preview", "ids"])]
+        all: bool,
+        #[arg(value_name = "ID", num_args = 1.., conflicts_with_all = ["preview", "all"])]
+        ids: Vec<String>,
+    },
+    Apply,
+    Validate,
+    Recover {
+        #[command(subcommand)]
+        action: Recovery,
+    },
+    Schema {
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum Recovery {
+    Plan { target: String },
+    BootstrapPve { target: String },
+    BootstrapPbs { target: String },
+    Restore { target: String },
+    Configure { target: String },
+    All { target: String },
+}
+
+pub fn run_cli() -> Result<()> {
+    let cli = Cli::parse();
+    crate::utility::progress::set(cli.verbose);
+    let result = run(cli);
+    crate::utility::progress::finish(result.is_ok());
+    result
+}
+
+fn run(cli: Cli) -> Result<()> {
+    match cli.command {
+        Command::Init { path } => {
+            crate::utility::progress::section("Initializing configuration repository");
+            config::scaffold::initialize(&path)?;
+            crate::utility::progress::finish(true);
+            println!("initialized configuration repository: {}", path.display());
+            Ok(())
+        },
+        Command::Capture => {
+            let repo = config::open(&cli.config_dir)?;
+            let settings = Settings::load(&cli.config_dir)?;
+            let pve = Pve::discovery(&settings.pve)?;
+            let pbs = Pbs::discovery(&settings.pbs)?;
+            let ssh = Ssh::new(&settings.ssh.discovery);
+            capture::run(&repo, &pve, &pbs, &ssh)
+        },
+        Command::Plan { json } => {
+            let repo = config::open(&cli.config_dir)?;
+            let p = plan::run(&repo)?;
+            crate::utility::progress::finish(true);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&p)?);
+            } else {
+                plan::print_human(&p);
+            }
+            Ok(())
+        },
+        Command::Adopt { preview, all, ids } => {
+            let repo = config::open(&cli.config_dir)?;
+            adopt::run(&repo, preview, all, &ids)
+        },
+        Command::Apply => {
+            let repo = config::open(&cli.config_dir)?;
+            let settings = Settings::load(&cli.config_dir)?;
+            apply::run(&repo, &settings)
+        },
+        Command::Validate => {
+            let repo = config::open(&cli.config_dir)?;
+            let settings = Settings::load(&cli.config_dir)?;
+            let ssh = Ssh::new(&settings.ssh.discovery);
+            capture::validate(&repo, &ssh)
+        },
+        Command::Recover { action } => {
+            let (stage, target) = match action {
+                Recovery::Plan { target } => (recovery::Stage::Plan, target),
+                Recovery::BootstrapPve { target } => (recovery::Stage::BootstrapPve, target),
+                Recovery::BootstrapPbs { target } => (recovery::Stage::BootstrapPbs, target),
+                Recovery::Restore { target } => (recovery::Stage::Restore, target),
+                Recovery::Configure { target } => (recovery::Stage::Configure, target),
+                Recovery::All { target } => (recovery::Stage::All, target),
+            };
+            let repo = config::open(&cli.config_dir)?;
+            let settings = Settings::load(&cli.config_dir)?;
+            let ssh = settings
+                .ssh
+                .recovery
+                .as_ref()
+                .map(|template| Ssh::new(&template.for_host(&target)));
+            recovery::run(
+                &repo,
+                stage,
+                &target,
+                &settings.recovery,
+                ssh.as_ref().map(|client| client as _),
+            )
+        },
+        Command::Schema { output } => {
+            crate::utility::progress::section("Generating configuration schemas");
+            config::schema::write(output.as_deref())?;
+            crate::utility::progress::finish(true);
+            println!(
+                "wrote configuration schemas to {}",
+                output
+                    .as_deref()
+                    .unwrap_or_else(|| std::path::Path::new("schemas"))
+                    .display()
+            );
+            Ok(())
+        },
+    }
+}

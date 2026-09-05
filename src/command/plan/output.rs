@@ -2,7 +2,7 @@ use super::{ApiMethod, ApiTarget, Operation, Plan};
 use console::style;
 use std::collections::BTreeMap;
 
-pub fn print_human(plan: &Plan) {
+pub(crate) fn print_human(plan: &Plan) {
     println!("{}", style("Live change plan").bold().cyan());
     println!("  {:<10} {}", "PVE", plan.target);
     println!("  {:<10} {}", "PBS", plan.pbs_target);

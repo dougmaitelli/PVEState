@@ -4,28 +4,28 @@ use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use std::{collections::BTreeMap, fmt};
 
-pub type ApiObject = BTreeMap<String, Value>;
-pub type ApiObjects = Vec<ApiObject>;
-pub type RawResponse = CapturedResponse<Value>;
-pub type ObjectResponse = CapturedResponse<ApiObject>;
-pub type ObjectsResponse = CapturedResponse<ApiObjects>;
+pub(crate) type ApiObject = BTreeMap<String, Value>;
+pub(crate) type ApiObjects = Vec<ApiObject>;
+pub(crate) type RawResponse = CapturedResponse<Value>;
+pub(crate) type ObjectResponse = CapturedResponse<ApiObject>;
+pub(crate) type ObjectsResponse = CapturedResponse<ApiObjects>;
 
 #[derive(Debug, Serialize)]
-pub struct CapturedResponse<T> {
-    pub ok: bool,
-    pub path: String,
+pub(crate) struct CapturedResponse<T> {
+    pub(crate) ok: bool,
+    pub(crate) path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<T>,
+    pub(crate) data: Option<T>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<CapturedError>,
+    pub(crate) error: Option<CapturedError>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(transparent)]
-pub struct CapturedError(String);
+pub(crate) struct CapturedError(String);
 
 impl CapturedError {
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -49,12 +49,12 @@ impl fmt::Display for CapturedError {
 }
 
 impl<T> CapturedResponse<T> {
-    pub fn failure(&self) -> Option<&str> {
+    pub(crate) fn failure(&self) -> Option<&str> {
         self.error.as_ref().map(CapturedError::as_str)
     }
 }
 
-pub fn capture<T>(path: &str, request: impl FnOnce() -> Result<Value>) -> CapturedResponse<T>
+pub(crate) fn capture<T>(path: &str, request: impl FnOnce() -> Result<Value>) -> CapturedResponse<T>
 where
     T: DeserializeOwned,
 {

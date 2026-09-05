@@ -4,7 +4,7 @@ use serde_yaml::Value;
 type ConfigPath = Vec<Segment>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ConfigDocument {
+pub(crate) enum ConfigDocument {
     Guests,
     Network,
     Cluster,
@@ -12,7 +12,7 @@ pub enum ConfigDocument {
 }
 
 impl ConfigDocument {
-    pub const fn path(self) -> &'static str {
+    pub(crate) const fn path(self) -> &'static str {
         match self {
             Self::Guests => "config/guests.yml",
             Self::Network => "config/network.yml",
@@ -23,7 +23,7 @@ impl ConfigDocument {
 }
 
 #[derive(Debug, Clone)]
-pub enum LocalPatch {
+pub(crate) enum LocalPatch {
     SetScalar {
         document: ConfigDocument,
         path: ConfigPath,
@@ -41,7 +41,7 @@ pub enum LocalPatch {
 }
 
 impl LocalPatch {
-    pub const fn document(&self) -> ConfigDocument {
+    pub(crate) const fn document(&self) -> ConfigDocument {
         match self {
             Self::SetScalar { document, .. }
             | Self::ReplaceResource { document, .. }
@@ -49,7 +49,7 @@ impl LocalPatch {
         }
     }
 
-    pub fn into_yaml_patch(self) -> Patch {
+    pub(crate) fn into_yaml_patch(self) -> Patch {
         match self {
             Self::SetScalar { path, value, .. } | Self::ReplaceResource { path, value, .. } => {
                 Patch::Set(path, value)

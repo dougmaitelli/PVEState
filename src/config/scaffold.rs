@@ -2,7 +2,7 @@ use crate::utility::runtime_security;
 use anyhow::Result;
 use std::{fs, path::Path};
 
-pub fn initialize(path: &Path) -> Result<()> {
+pub(crate) fn initialize(path: &Path) -> Result<()> {
     fs::create_dir_all(path.join("config"))?;
     fs::create_dir_all(path.join("observed/production"))?;
     runtime_security::prepare(&path.join(".runtime"))?;

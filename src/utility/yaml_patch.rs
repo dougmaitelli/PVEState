@@ -2,13 +2,13 @@ use anyhow::{Context, Result, bail};
 use serde_yaml::{Mapping, Value};
 
 #[derive(Debug, Clone)]
-pub enum Segment {
+pub(crate) enum Segment {
     Key(String),
     Index(usize),
 }
 
 #[derive(Debug, Clone)]
-pub enum Patch {
+pub(crate) enum Patch {
     Set(Vec<Segment>, Value),
     #[allow(dead_code, reason = "used by collection adoption adapters")]
     Remove(Vec<Segment>),
@@ -17,7 +17,7 @@ pub enum Patch {
 /// Applies semantic YAML patches. Scalar replacements use the surgical editor so
 /// comments and layout remain untouched. Structural changes are serialized once
 /// into serde_yaml's deterministic representation.
-pub fn apply_patches(input: &str, patches: &[Patch]) -> Result<String> {
+pub(crate) fn apply_patches(input: &str, patches: &[Patch]) -> Result<String> {
     let newline = line_ending(input);
     let mut output = input.to_owned();
     let mut structural = Vec::new();
@@ -175,7 +175,7 @@ fn mapping_key(mapping: &Mapping, key: &str) -> Value {
         .unwrap_or(string)
 }
 
-pub fn replace_scalar(input: &str, path: &[Segment], value: &str) -> Result<String> {
+pub(crate) fn replace_scalar(input: &str, path: &[Segment], value: &str) -> Result<String> {
     let newline = line_ending(input);
     let trailing_newline = input.ends_with('\n');
     let mut lines = input.lines().map(str::to_owned).collect::<Vec<_>>();

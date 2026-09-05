@@ -14,7 +14,7 @@ use crate::{
 use anyhow::{Context, Result};
 
 #[derive(Clone, Copy)]
-pub enum Stage {
+pub(crate) enum Stage {
     Plan,
     BootstrapPve,
     BootstrapPbs,
@@ -23,7 +23,7 @@ pub enum Stage {
     All,
 }
 
-pub fn run(
+pub(crate) fn run(
     repo: &LocalState,
     stage: Stage,
     target: &str,
