@@ -164,7 +164,9 @@ fn parse_pve_job(value: &Value) -> Result<PveBackupJob> {
             .get("keep-last")
             .map(|value| required_number_value(value, "prune-backups.keep-last"))
             .transpose()?,
-        Some(Value::String(options)) => option(options, "keep-last")
+        Some(Value::String(options)) => crate::utility::property_string::parse(options)?
+            .keyed
+            .get("keep-last")
             .map(|value| parse_u32(value, "prune-backups.keep-last"))
             .transpose()?,
         Some(_) => bail!("captured PVE field prune-backups has an invalid type"),
@@ -187,16 +189,17 @@ fn parse_pve_job(value: &Value) -> Result<PveBackupJob> {
 
 fn parse_datastore(value: &Value) -> Result<Datastore> {
     let backend = text(value, "backend")?;
-    let options = options(backend)?;
+    let options = crate::utility::property_string::parse(backend)?;
     let backend = options
+        .keyed
         .get("type")
         .context("captured PBS backend field type")?;
     let backend = serde_yaml::from_str(backend)?;
     let (bucket, s3_endpoint_id) = match backend {
         crate::resource::backup::DatastoreBackend::Local => (None, None),
         crate::resource::backup::DatastoreBackend::S3 => (
-            Some(required_option(&options, "bucket")?.into()),
-            Some(required_option(&options, "client")?.into()),
+            Some(required_option(&options.keyed, "bucket")?.into()),
+            Some(required_option(&options.keyed, "client")?.into()),
         ),
     };
     Ok(Datastore {
@@ -322,29 +325,6 @@ fn boolean(value: &Value, key: &str) -> Result<Option<bool>> {
             _ => bail!("captured PBS field {key} is not a boolean"),
         })
         .transpose()
-}
-
-fn option<'a>(value: &'a str, key: &str) -> Option<&'a str> {
-    value
-        .split(',')
-        .filter_map(|part| part.split_once('='))
-        .find_map(|(name, value)| (name == key).then_some(value))
-}
-
-fn options(value: &str) -> Result<std::collections::BTreeMap<&str, &str>> {
-    let mut result = std::collections::BTreeMap::new();
-    for part in value.split(',') {
-        let (key, value) = part
-            .split_once('=')
-            .with_context(|| format!("invalid PBS backend option `{part}`"))?;
-        if key.is_empty() || value.is_empty() {
-            bail!("invalid PBS backend option `{part}`")
-        }
-        if result.insert(key, value).is_some() {
-            bail!("duplicate PBS backend option `{key}`")
-        }
-    }
-    Ok(result)
 }
 
 fn required_option<'a>(

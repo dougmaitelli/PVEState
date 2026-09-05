@@ -68,9 +68,9 @@ fn captured_lxc(
     assign_bool(actual, "unprivileged", &mut result.unprivileged);
     assign_number(actual, "swap", &mut result.swap_mb);
     assign_bool(actual, "onboot", &mut result.start.onboot);
-    assign_start(actual, &mut result.start);
+    assign_start(actual, &mut result.start)?;
     if let Some(rootfs) = actual.get("rootfs").and_then(Value::as_str) {
-        let options = options(rootfs);
+        let options = super::property::parse(rootfs)?;
         if let Some(volume) = options.get("volume") {
             result.rootfs.storage = volume.split(':').next().unwrap_or(volume).into();
         }
@@ -105,15 +105,23 @@ fn captured_vm(
     assign_number(actual, "sockets", &mut result.cpu.sockets);
     result.qemu_guest_agent = QemuAgentOptions::from_api(actual.get("agent"))?.enabled;
     assign_bool(actual, "onboot", &mut result.start.onboot);
-    assign_start(actual, &mut result.start);
+    assign_start(actual, &mut result.start)?;
     result.disks = actual
         .as_object()
         .into_iter()
         .flat_map(|object| object.iter())
         .filter_map(|(key, value)| Some((key.parse::<DiskInterface>().ok()?, value.as_str()?)))
-        .filter(|(slot, value)| !super::plan::is_unmanaged_special_disk(&slot.to_string(), value))
-        .map(|(slot, value)| Ok((slot, parse_vm_disk(value)?)))
-        .collect::<Result<_>>()?;
+        .map(|(slot, value)| {
+            if super::plan::is_unmanaged_special_disk(&slot.to_string(), value)? {
+                Ok(None)
+            } else {
+                Ok(Some((slot, parse_vm_disk(value)?)))
+            }
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect();
     result.efi_disks = numbered(actual, "efidisk")
         .into_iter()
         .map(|(index, value)| Ok((EfiSlot(index as u8), parse_efi(value)?)))
@@ -125,14 +133,15 @@ fn captured_vm(
     result.usb_devices = numbered(actual, "usb")
         .into_iter()
         .map(|(index, value)| {
+            let property = super::property::parse(value)?;
             Ok((
                 UsbSlot(index as u8),
                 super::Usb {
-                    host: options(value)
+                    host: property
                         .get("host")
-                        .copied()
-                        .unwrap_or(value.split(',').next().unwrap_or_default())
-                        .into(),
+                        .or_else(|| property.get("volume"))
+                        .cloned()
+                        .context("captured USB host")?,
                 },
             ))
         })
@@ -141,7 +150,7 @@ fn captured_vm(
 }
 
 fn parse_vm_disk(value: &str) -> Result<super::VmDisk> {
-    let item = options(value);
+    let item = super::property::parse(value)?;
     let volume = required(&item, "volume")?;
     Ok(super::VmDisk {
         storage: volume.split(':').next().unwrap_or(volume).into(),
@@ -154,18 +163,18 @@ fn parse_vm_disk(value: &str) -> Result<super::VmDisk> {
 }
 
 fn parse_efi(value: &str) -> Result<super::Efi> {
-    let item = options(value);
+    let item = super::property::parse(value)?;
     let volume = required(&item, "volume")?;
     Ok(super::Efi {
         storage: volume.split(':').next().unwrap_or(volume).into(),
         pre_enrolled_keys: item
             .get("pre-enrolled-keys")
-            .is_some_and(|value| matches!(*value, "1" | "true")),
+            .is_some_and(|value| matches!(value.as_str(), "1" | "true")),
     })
 }
 
 fn parse_lxc_nic(value: &str) -> Result<Nic> {
-    let item = options(value);
+    let item = super::property::parse(value)?;
     Ok(Nic {
         name: required(&item, "name")?.into(),
         mac: required(&item, "hwaddr")?.parse()?,
@@ -179,13 +188,13 @@ fn parse_lxc_nic(value: &str) -> Result<Nic> {
 }
 
 fn parse_vm_nic(value: &str) -> Result<VmNic> {
-    let item = options(value);
+    let item = super::property::parse(value)?;
     let (model, mac) = item
         .iter()
-        .find(|(key, _)| !matches!(**key, "bridge" | "firewall" | "tag"))
+        .find(|(key, _)| !matches!(key.as_str(), "volume" | "bridge" | "firewall" | "tag"))
         .context("captured VM NIC model")?;
     Ok(VmNic {
-        model: (*model).into(),
+        model: model.clone(),
         mac: mac.parse()?,
         bridge: required(&item, "bridge")?.into(),
         firewall: flag(&item, "firewall"),
@@ -194,7 +203,7 @@ fn parse_vm_nic(value: &str) -> Result<VmNic> {
 }
 
 fn parse_mount(value: &str) -> Result<BindMount> {
-    let item = options(value);
+    let item = super::property::parse(value)?;
     Ok(BindMount {
         source: required(&item, "volume")?.into(),
         target: required(&item, "mp")?.into(),
@@ -213,28 +222,17 @@ fn numbered<'a>(actual: &'a Value, prefix: &str) -> Vec<(usize, &'a str)> {
     values
 }
 
-fn options(value: &str) -> BTreeMap<&str, &str> {
-    value
-        .split(',')
-        .enumerate()
-        .filter_map(|(index, item)| {
-            item.split_once('=')
-                .or_else(|| (index == 0).then_some(("volume", item)))
-        })
-        .collect()
-}
-
-fn required<'a>(options: &'a BTreeMap<&str, &str>, key: &str) -> Result<&'a str> {
+fn required<'a>(options: &'a BTreeMap<String, String>, key: &str) -> Result<&'a str> {
     options
         .get(key)
-        .copied()
+        .map(String::as_str)
         .with_context(|| format!("captured guest option {key}"))
 }
 
-fn flag(options: &BTreeMap<&str, &str>, key: &str) -> bool {
+fn flag(options: &BTreeMap<String, String>, key: &str) -> bool {
     options
         .get(key)
-        .is_some_and(|value| matches!(*value, "1" | "true" | "on"))
+        .is_some_and(|value| matches!(value.as_str(), "1" | "true" | "on"))
 }
 
 fn gigabytes(value: &str) -> Option<u64> {
@@ -270,14 +268,15 @@ fn assign_number<T: std::str::FromStr>(value: &Value, key: &str, target: &mut T)
     }
 }
 
-fn assign_start(value: &Value, target: &mut super::Start) {
+fn assign_start(value: &Value, target: &mut super::Start) -> Result<()> {
     if let Some(startup) = value.get("startup").and_then(Value::as_str) {
-        let options = options(startup);
+        let options = super::property::parse(startup)?;
         if let Some(order) = options.get("order").and_then(|v| v.parse().ok()) {
             target.order = order;
         }
         target.delay_seconds = options.get("up").and_then(|v| v.parse().ok());
     }
+    Ok(())
 }
 
 fn operation_fields(operation: &Operation) -> String {

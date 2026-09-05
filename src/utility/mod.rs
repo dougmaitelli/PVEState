@@ -2,6 +2,7 @@ pub(crate) mod atomic_file;
 pub(crate) mod authorization;
 pub(crate) mod plan_envelope;
 pub(crate) mod progress;
+pub(crate) mod property_string;
 pub(crate) mod remote_file;
 pub(crate) mod runtime_security;
 pub(crate) mod shell;

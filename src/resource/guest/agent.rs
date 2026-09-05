@@ -12,43 +12,28 @@ pub(crate) struct QemuAgentOptions {
 
 impl QemuAgentOptions {
     pub(crate) fn parse(value: &str) -> Result<Self> {
-        let mut items = value.split(',');
-        let enabled = parse_bool(items.next().context("missing QEMU agent enabled value")?)
-            .context("invalid QEMU agent enabled value")?;
+        let property = crate::utility::property_string::parse(value)?;
+        if property.positional.len() != 1 {
+            bail!("QEMU agent requires exactly one positional enabled value")
+        }
+        let enabled =
+            parse_bool(property.positional[0]).context("invalid QEMU agent enabled value")?;
         let mut result = Self {
             enabled,
             ..Self::default()
         };
-        for item in items {
-            let (key, value) = item
-                .split_once('=')
-                .with_context(|| format!("invalid QEMU agent option `{item}`"))?;
-            if key.is_empty() || value.is_empty() {
-                bail!("invalid QEMU agent option `{item}`")
-            }
+        for (key, value) in property.keyed {
             match key {
                 "fstrim_cloned_disks" => {
-                    if result.fstrim_cloned_disks.is_some() {
-                        bail!("duplicate QEMU agent option `{key}`")
-                    }
                     result.fstrim_cloned_disks =
                         Some(parse_bool(value).with_context(|| format!("invalid `{key}` value"))?);
                 },
                 "freeze-fs-on-backup" => {
-                    if result.freeze_fs_on_backup.is_some() {
-                        bail!("duplicate QEMU agent option `{key}`")
-                    }
                     result.freeze_fs_on_backup =
                         Some(parse_bool(value).with_context(|| format!("invalid `{key}` value"))?);
                 },
                 _ => {
-                    if result
-                        .passthrough
-                        .insert(key.to_owned(), value.to_owned())
-                        .is_some()
-                    {
-                        bail!("duplicate QEMU agent option `{key}`")
-                    }
+                    result.passthrough.insert(key.to_owned(), value.to_owned());
                 },
             }
         }

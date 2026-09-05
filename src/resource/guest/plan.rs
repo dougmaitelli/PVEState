@@ -134,7 +134,7 @@ pub(crate) fn lxc(
             render::bind_mount(mount),
         );
     }
-    let mut changes = changed(&wanted, actual);
+    let mut changes = changed(&wanted, actual)?;
     add_removed(actual, &wanted, &["net", "mp"], &mut changes);
     let actual_unprivileged = actual
         .get("unprivileged")
@@ -218,14 +218,14 @@ pub(crate) fn vm(
                 efi.pre_enrolled_keys,
                 blockers,
                 id,
-            ),
+            )?,
         );
     }
-    let mut changes = changed(&wanted, actual);
+    let mut changes = changed(&wanted, actual)?;
     if let Some(agent) = agent_change(desired.qemu_guest_agent, actual.get("agent"))? {
         changes.insert(GuestField::Agent.api_name(), agent);
     }
-    add_removed_vm(actual, &wanted, &mut changes);
+    add_removed_vm(actual, &wanted, &mut changes)?;
     let guest = GuestRef::new(GuestKind::Qemu, id);
     push_update(node, guest, changes, actual, operations);
     for (slot, desired) in &desired.disks {
@@ -283,7 +283,7 @@ fn disk(
     blockers: &mut Vec<String>,
 ) -> Result<()> {
     let (key, storage, size) = desired;
-    let options = parse_options(actual[key].as_str().context("disk config")?);
+    let options = super::property::parse(actual[key].as_str().context("disk config")?)?;
     let volume = options.get("volume").cloned().unwrap_or_default();
     let actual_storage = volume.split(':').next().unwrap_or("");
     let current = options
@@ -307,34 +307,36 @@ fn disk(
     Ok(())
 }
 
-fn changed(wanted: &BTreeMap<String, String>, actual: &Value) -> BTreeMap<String, String> {
-    wanted
-        .iter()
-        .filter(|(key, value)| {
-            if structured(key) {
-                let have = parse_options(actual.get(*key).and_then(Value::as_str).unwrap_or(""));
-                let want = parse_options(value);
-                want.iter().any(|(option, expected)| {
-                    have.get(option).map(String::as_str).unwrap_or(
-                        if option == "firewall" || option == "backup" {
-                            "0"
-                        } else {
-                            ""
-                        },
-                    ) != expected
-                })
-            } else {
-                actual.get(*key).map(value_string).unwrap_or_else(|| {
-                    if *key == "agent" {
-                        "0".into()
+fn changed(wanted: &BTreeMap<String, String>, actual: &Value) -> Result<BTreeMap<String, String>> {
+    let mut changes = BTreeMap::new();
+    for (key, value) in wanted {
+        let differs = if structured(key) {
+            let have =
+                super::property::parse(actual.get(key).and_then(Value::as_str).unwrap_or(""))?;
+            let want = super::property::parse(value)?;
+            want.iter().any(|(option, expected)| {
+                have.get(option).map(String::as_str).unwrap_or(
+                    if option == "firewall" || option == "backup" {
+                        "0"
                     } else {
-                        "".into()
-                    }
-                }) != **value
-            }
-        })
-        .map(|(key, value)| (key.clone(), value.clone()))
-        .collect()
+                        ""
+                    },
+                ) != expected
+            })
+        } else {
+            actual.get(key).map(value_string).unwrap_or_else(|| {
+                if key == "agent" {
+                    "0".into()
+                } else {
+                    "".into()
+                }
+            }) != *value
+        };
+        if differs {
+            changes.insert(key.clone(), value.clone());
+        }
+    }
+    Ok(changes)
 }
 
 fn structured(key: &str) -> bool {
@@ -351,13 +353,13 @@ fn desired_disk_value(actual: &Value, key: &str, desired: &super::VmDisk) -> Res
         }
         return Ok(value);
     };
-    let mut options = parse_options(current);
+    let mut options = super::property::parse(current)?;
     if desired.discard {
         options.insert("discard".into(), "on".into());
     } else {
         options.remove("discard");
     }
-    Ok(render_options(&options))
+    Ok(super::property::render(&options))
 }
 
 fn desired_efi(
@@ -367,8 +369,8 @@ fn desired_efi(
     pre_enrolled_keys: bool,
     blockers: &mut Vec<String>,
     id: u32,
-) -> String {
-    let mut options = parse_options(actual[key].as_str().unwrap_or(""));
+) -> Result<String> {
+    let mut options = super::property::parse(actual[key].as_str().unwrap_or(""))?;
     let volume = options
         .get("volume")
         .cloned()
@@ -385,15 +387,16 @@ fn desired_efi(
         "pre-enrolled-keys".into(),
         u8::from(pre_enrolled_keys).to_string(),
     );
-    render_options(&options)
+    Ok(super::property::render(&options))
 }
 
 fn add_removed_vm(
     actual: &Value,
     wanted: &BTreeMap<String, String>,
     changes: &mut BTreeMap<String, String>,
-) {
-    let removed = actual
+) -> Result<()> {
+    let mut removed = Vec::new();
+    for (key, value) in actual
         .as_object()
         .into_iter()
         .flat_map(|object| object.iter())
@@ -403,40 +406,28 @@ fn add_removed_vm(
                 .any(|prefix| numbered(key, prefix))
                 || key.parse::<crate::model::DiskInterface>().is_ok()
         })
-        .filter(|(key, value)| {
-            !wanted.contains_key(*key)
-                && !is_unmanaged_special_disk(key, value.as_str().unwrap_or_default())
-        })
-        .map(|(key, _)| key.clone())
-        .collect::<Vec<_>>();
+    {
+        if !wanted.contains_key(key)
+            && !is_unmanaged_special_disk(key, value.as_str().unwrap_or_default())?
+        {
+            removed.push(key.clone());
+        }
+    }
     if !removed.is_empty() {
         changes.insert("delete".into(), removed.join(","));
     }
+    Ok(())
 }
 
-pub(super) fn is_unmanaged_special_disk(key: &str, value: &str) -> bool {
+pub(super) fn is_unmanaged_special_disk(key: &str, value: &str) -> Result<bool> {
     if key.parse::<crate::model::DiskInterface>().is_err() {
-        return false;
+        return Ok(false);
     }
-    let options = parse_options(value);
-    options.get("media").is_some_and(|media| media == "cdrom")
+    let options = super::property::parse(value)?;
+    Ok(options.get("media").is_some_and(|media| media == "cdrom")
         || options
             .get("volume")
-            .is_some_and(|volume| volume.contains("cloudinit"))
-}
-
-fn render_options(options: &BTreeMap<String, String>) -> String {
-    let mut values = Vec::new();
-    if let Some(volume) = options.get("volume") {
-        values.push(volume.clone());
-    }
-    values.extend(
-        options
-            .iter()
-            .filter(|(key, _)| key.as_str() != "volume")
-            .map(|(key, value)| format!("{key}={value}")),
-    );
-    values.join(",")
+            .is_some_and(|volume| volume.contains("cloudinit")))
 }
 
 fn add_removed(
@@ -464,18 +455,6 @@ fn numbered(value: &str, prefix: &str) -> bool {
         .is_some_and(|suffix| !suffix.is_empty() && suffix.chars().all(|ch| ch.is_ascii_digit()))
 }
 
-fn parse_options(value: &str) -> BTreeMap<String, String> {
-    value
-        .split(',')
-        .enumerate()
-        .filter_map(|(index, item)| {
-            item.split_once('=')
-                .map(|(key, value)| (key.into(), value.into()))
-                .or_else(|| (index == 0).then(|| ("volume".into(), item.into())))
-        })
-        .collect()
-}
-
 fn value_string(value: &Value) -> String {
     value
         .as_str()
@@ -489,7 +468,8 @@ mod tests {
 
     #[test]
     fn parses_proxmox_volume_and_options() {
-        let parsed = parse_options("VMs:vm-107-disk-1,discard=on,size=64G");
+        let parsed =
+            super::super::property::parse("VMs:vm-107-disk-1,discard=on,size=64G").unwrap();
         assert_eq!(parsed["volume"], "VMs:vm-107-disk-1");
         assert_eq!(parsed["size"], "64G");
     }
@@ -572,8 +552,8 @@ mod tests {
             .unwrap(),
         );
 
-        let mut changes = changed(&wanted, &actual);
-        add_removed_vm(&actual, &wanted, &mut changes);
+        let mut changes = changed(&wanted, &actual).unwrap();
+        add_removed_vm(&actual, &wanted, &mut changes).unwrap();
 
         assert_eq!(changes["sata1"], "data:vm-201-disk-1,discard=on,size=64G");
         assert_eq!(changes["ide3"], "archive:20");
@@ -589,7 +569,7 @@ mod tests {
         });
         let mut changes = BTreeMap::new();
 
-        add_removed_vm(&actual, &BTreeMap::new(), &mut changes);
+        add_removed_vm(&actual, &BTreeMap::new(), &mut changes).unwrap();
 
         assert_eq!(changes["delete"], "sata2");
     }

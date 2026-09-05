@@ -135,7 +135,7 @@ fn datastore(
         );
         return Ok(());
     };
-    if normalize_options(text(current, "backend")?) != normalize_options(&wanted_backend) {
+    if normalize_options(text(current, "backend")?)? != normalize_options(&wanted_backend)? {
         blockers.push(format!(
             "pbs datastore {} backend changes require datastore migration",
             desired.name
@@ -430,11 +430,12 @@ fn value_string(value: &Value) -> String {
         .unwrap_or_else(|| value.to_string())
 }
 
-fn normalize_options(value: &str) -> BTreeMap<&str, &str> {
-    value
-        .split(',')
-        .filter_map(|item| item.split_once('='))
-        .collect()
+fn normalize_options(value: &str) -> Result<BTreeMap<&str, &str>> {
+    let parsed = crate::utility::property_string::parse(value)?;
+    if !parsed.positional.is_empty() {
+        anyhow::bail!("PBS backend does not support positional values")
+    }
+    Ok(parsed.keyed)
 }
 
 fn encoded(value: &str) -> String {
@@ -454,8 +455,21 @@ mod tests {
     #[test]
     fn backend_option_order_is_semantic() {
         assert_eq!(
-            normalize_options("bucket=b,client=c,type=s3"),
-            normalize_options("type=s3,client=c,bucket=b")
+            normalize_options("bucket=b,client=c,type=s3").unwrap(),
+            normalize_options("type=s3,client=c,bucket=b").unwrap()
         );
+    }
+
+    #[test]
+    fn backend_property_round_trip_preserves_unknown_keys() {
+        let parsed = normalize_options("type=s3,bucket=b,client=c,future=value").unwrap();
+        let rendered = parsed
+            .iter()
+            .map(|(key, value)| format!("{key}={value}"))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        assert_eq!(normalize_options(&rendered).unwrap(), parsed);
+        assert_eq!(parsed["future"], "value");
     }
 }
