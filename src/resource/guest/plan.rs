@@ -1,4 +1,4 @@
-use super::render;
+use super::{agent::QemuAgentOptions, render};
 use crate::{
     command::plan::{ApiMethod, ApiTarget, Operation},
     model::{GuestField, GuestKind, GuestRef, Lxc, Vm},
@@ -101,10 +101,6 @@ pub(crate) fn vm(
             u8::from(desired.start.onboot).to_string(),
         ),
         (
-            GuestField::Agent.api_name(),
-            u8::from(desired.qemu_guest_agent).to_string(),
-        ),
-        (
             GuestField::Startup.api_name(),
             format!(
                 "order={}{}",
@@ -145,6 +141,9 @@ pub(crate) fn vm(
         ),
     );
     let mut changes = changed(&wanted, actual);
+    if let Some(agent) = agent_change(desired.qemu_guest_agent, actual.get("agent"))? {
+        changes.insert(GuestField::Agent.api_name(), agent);
+    }
     add_removed(actual, &wanted, &["net", "usb"], &mut changes);
     let guest = GuestRef::new(GuestKind::Qemu, id);
     push_update(node, guest, changes, actual, operations);
@@ -160,6 +159,15 @@ pub(crate) fn vm(
         operations,
         blockers,
     )
+}
+
+fn agent_change(desired: bool, actual: Option<&Value>) -> Result<Option<String>> {
+    let mut options = QemuAgentOptions::from_api(actual)?;
+    if options.enabled == desired {
+        return Ok(None);
+    }
+    options.enabled = desired;
+    Ok(Some(options.render()))
 }
 
 fn push_update(
@@ -375,5 +383,16 @@ mod tests {
         add_removed(&actual, &BTreeMap::new(), &["net"], &mut changes);
 
         assert_eq!(changes["delete"], "net0,net1");
+    }
+
+    #[test]
+    fn compound_agent_values_converge_without_discarding_options() {
+        let live = serde_json::json!("1,fstrim_cloned_disks=1,type=virtio");
+        assert_eq!(agent_change(true, Some(&live)).unwrap(), None);
+
+        let mutation = agent_change(false, Some(&live)).unwrap().unwrap();
+        assert_eq!(mutation, "0,fstrim_cloned_disks=1,type=virtio");
+        let applied = serde_json::json!(mutation);
+        assert_eq!(agent_change(false, Some(&applied)).unwrap(), None);
     }
 }

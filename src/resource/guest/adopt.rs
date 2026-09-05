@@ -1,3 +1,4 @@
+use super::agent::QemuAgentOptions;
 use crate::{
     command::plan::Operation,
     config::{AdoptionCandidate, ConfigDocument, LocalPatch, LocalState},
@@ -93,7 +94,7 @@ fn captured_vm(local: &LocalState, guest: GuestRef, actual: &Value) -> Result<su
     assign_number(actual, "cores", &mut result.cpu.cores);
     assign_number(actual, "sockets", &mut result.cpu.sockets);
     assign_number(actual, "memory", &mut result.memory_mb);
-    assign_bool(actual, "agent", &mut result.qemu_guest_agent);
+    result.qemu_guest_agent = QemuAgentOptions::from_api(actual.get("agent"))?.enabled;
     assign_bool(actual, "onboot", &mut result.start.onboot);
     assign_start(actual, &mut result.start);
     let disk_key = result.disk.interface.to_string();
@@ -282,5 +283,43 @@ mod tests {
         let mount = parse_mount("/mnt/data,mp=/srv/data,backup=1").unwrap();
         assert_eq!(mount.source, "/mnt/data");
         assert!(mount.backed_up_by_pve);
+    }
+
+    #[test]
+    fn adoption_reads_enabled_state_from_compound_agent_value() {
+        let value = serde_json::json!("1,fstrim_cloned_disks=1,type=virtio");
+        assert!(QemuAgentOptions::from_api(Some(&value)).unwrap().enabled);
+    }
+
+    #[test]
+    fn adopted_compound_agent_state_survives_reload_and_replans_cleanly() {
+        let temp = tempfile::tempdir().unwrap();
+        crate::config::scaffold::initialize(temp.path()).unwrap();
+        let local = crate::config::open(temp.path()).unwrap();
+        let fixture: Value =
+            serde_json::from_str(include_str!("../../../tests/fixtures/planner/live.json"))
+                .unwrap();
+        let actual = &fixture["pve"]["/nodes/pve/qemu/201/config"];
+        let guest = GuestRef::new(GuestKind::Qemu, 201);
+
+        let adopted = captured_vm(&local, guest, actual).unwrap();
+        let yaml = serde_yaml::to_string(&adopted).unwrap();
+        let reloaded: crate::resource::guest::Vm = serde_yaml::from_str(&yaml).unwrap();
+        let mut operations = Vec::new();
+        let mut blockers = Vec::new();
+        crate::resource::guest::plan::vm(
+            "pve",
+            201,
+            &reloaded,
+            actual,
+            &mut operations,
+            &mut blockers,
+        )
+        .unwrap();
+
+        assert!(operations.iter().all(|operation| match operation {
+            Operation::ApiMutation { changes, .. } => !changes.contains_key("agent"),
+            _ => true,
+        }));
     }
 }

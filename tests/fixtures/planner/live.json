@@ -25,7 +25,7 @@
       "memory": 2048,
       "cpu": "host",
       "onboot": 1,
-      "agent": 1,
+      "agent": "1,fstrim_cloned_disks=1,type=virtio",
       "startup": "order=30",
       "net0": "virtio=02:00:00:00:02:01,bridge=vmbr0,firewall=1",
       "net1": "virtio=02:00:00:00:02:02,bridge=vmbr0",
