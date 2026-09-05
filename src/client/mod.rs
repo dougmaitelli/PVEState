@@ -7,7 +7,7 @@ use anyhow::Result;
 use serde_json::Value;
 use std::collections::BTreeMap;
 
-pub(crate) use pbs::{Pbs, capture as capture_pbs};
+pub(crate) use pbs::Pbs;
 pub(crate) use pve::Pve;
 pub(crate) use ssh::{Ssh, SshOutput};
 

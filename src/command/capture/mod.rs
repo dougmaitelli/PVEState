@@ -2,11 +2,11 @@ mod host;
 mod native;
 
 use crate::{
-    client::{PbsClient, PveClient, RemoteHost, capture_pbs},
+    client::{PbsClient, PveClient, RemoteHost},
     config::LocalState,
     discovery::{
-        CaptureManifest, CaptureStatus, SourceEvidence, capture_pve, collect_artifacts,
-        write_snapshot,
+        CaptureManifest, CaptureStatus, SourceEvidence, capture_pbs, capture_pve,
+        collect_artifacts, write_snapshot,
     },
     utility::{atomic_file, progress::EventSink, runtime_security},
 };

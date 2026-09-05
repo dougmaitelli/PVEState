@@ -1,10 +1,12 @@
 mod evidence;
+mod pbs;
 mod pve;
 mod response;
 mod snapshot;
 mod state;
 
 pub(crate) use evidence::{CaptureManifest, CaptureStatus, SourceEvidence, collect_artifacts};
+pub(crate) use pbs::capture as capture_pbs;
 pub(crate) use pve::{PveSnapshot, capture_pve};
 pub(crate) use response::{
     ApiObject, CapturedResponse, ObjectResponse, ObjectsResponse, RawResponse, capture_with_events,
