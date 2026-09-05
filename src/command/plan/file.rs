@@ -7,7 +7,7 @@ use anyhow::Result;
 use sha2::{Digest, Sha256};
 use std::fs;
 
-pub(super) fn operation(
+pub(crate) fn operation(
     repo: &LocalState,
     identity: (Domain, &str),
     local: &str,
@@ -40,7 +40,7 @@ pub(super) fn operation(
     Ok(())
 }
 
-pub(super) fn deletion(
+pub(crate) fn deletion(
     repo: &LocalState,
     identity: (Domain, &str),
     local: &str,

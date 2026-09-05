@@ -1,11 +1,95 @@
 use super::{agent::QemuAgentOptions, render};
 use crate::{
-    command::plan::{ApiMethod, ApiTarget, Operation},
+    client::PveClient,
+    command::plan::{ApiMethod, ApiTarget, Operation, PlanBuilder},
+    config::LocalState,
     model::{GuestField, GuestKind, GuestRef, Lxc, Vm},
 };
 use anyhow::{Context, Result};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+pub(crate) fn plan(
+    local: &LocalState,
+    pve: &dyn PveClient,
+    builder: &mut PlanBuilder,
+) -> Result<()> {
+    let live_lxcs = guest_ids(pve.get(&format!("/nodes/{}/lxc", local.guests.node))?)?;
+    let live_vms = guest_ids(pve.get(&format!("/nodes/{}/qemu", local.guests.node))?)?;
+
+    existence_blockers(
+        GuestKind::Lxc,
+        local.guests.lxcs.keys().copied().collect(),
+        &live_lxcs,
+        builder.blockers(),
+    );
+    existence_blockers(
+        GuestKind::Qemu,
+        local.guests.vms.keys().copied().collect(),
+        &live_vms,
+        builder.blockers(),
+    );
+
+    for (id, desired) in &local.guests.lxcs {
+        if live_lxcs.contains(id) {
+            let actual =
+                pve.get(&GuestRef::new(GuestKind::Lxc, *id).config_endpoint(&local.guests.node))?;
+            let (operations, blockers) = builder.parts();
+            lxc(
+                &local.guests.node,
+                *id,
+                desired,
+                &actual,
+                operations,
+                blockers,
+            )?;
+        }
+    }
+    for (id, desired) in &local.guests.vms {
+        if live_vms.contains(id) {
+            let actual =
+                pve.get(&GuestRef::new(GuestKind::Qemu, *id).config_endpoint(&local.guests.node))?;
+            let (operations, blockers) = builder.parts();
+            vm(
+                &local.guests.node,
+                *id,
+                desired,
+                &actual,
+                operations,
+                blockers,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn guest_ids(value: Value) -> Result<BTreeSet<u32>> {
+    value
+        .as_array()
+        .context("guest list response is not an array")?
+        .iter()
+        .map(|guest| {
+            let vmid = guest.get("vmid").context("guest list entry has no vmid")?;
+            vmid.as_u64()
+                .or_else(|| vmid.as_str().and_then(|value| value.parse().ok()))
+                .and_then(|value| u32::try_from(value).ok())
+                .context("guest list entry has an invalid vmid")
+        })
+        .collect()
+}
+
+fn existence_blockers(
+    kind: GuestKind,
+    local: BTreeSet<u32>,
+    captured: &BTreeSet<u32>,
+    blockers: &mut Vec<String>,
+) {
+    blockers.extend(
+        local
+            .difference(captured)
+            .map(|vmid| format!("{kind}/{vmid}: guest creation is not managed")),
+    );
+}
 
 pub(crate) fn lxc(
     node: &str,
@@ -546,5 +630,28 @@ mod tests {
             [Operation::GrowDisk { size_gb: 64, .. }]
         ));
         assert!(blockers.is_empty());
+    }
+
+    #[test]
+    fn guest_lists_require_valid_identifiers() {
+        assert_eq!(
+            guest_ids(serde_json::json!([{"vmid": 101}, {"vmid": "102"}])).unwrap(),
+            BTreeSet::from([101, 102])
+        );
+        assert!(guest_ids(serde_json::json!([{"name": "missing"}])).is_err());
+        assert!(guest_ids(serde_json::json!({"vmid": 101})).is_err());
+    }
+
+    #[test]
+    fn missing_local_guests_are_blocked_and_extra_live_guests_are_unowned() {
+        let mut blockers = Vec::new();
+        existence_blockers(
+            GuestKind::Qemu,
+            BTreeSet::from([201, 202]),
+            &BTreeSet::from([201, 203]),
+            &mut blockers,
+        );
+
+        assert_eq!(blockers, ["qemu/202: guest creation is not managed"]);
     }
 }

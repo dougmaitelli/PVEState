@@ -1,5 +1,5 @@
 mod builder;
-mod file;
+pub(crate) mod file;
 mod output;
 mod types;
 mod validation;
@@ -12,20 +12,17 @@ use crate::{
     client::{PbsClient, PveClient},
     config::LocalState,
     discovery::CapturedState,
-    resource::{backup, firewall, guest, network},
+    resource::{backup, dns, firewall, guest, network},
     utility::{
         atomic_file,
         plan_envelope::{self, PlanEnvelope},
         progress, runtime_security,
     },
 };
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
-};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "action", rename_all = "kebab-case")]
@@ -265,172 +262,11 @@ pub(super) fn build(
     events: &dyn progress::EventSink,
 ) -> Result<Plan> {
     let mut builder = PlanBuilder::new(capture_id, api.endpoint(), pbs.endpoint());
-
-    let live_lxcs = guest_ids(api.get(&format!("/nodes/{}/lxc", repo.guests.node))?)?;
-    let live_vms = guest_ids(api.get(&format!("/nodes/{}/qemu", repo.guests.node))?)?;
-
-    guest_existence_blockers(
-        crate::model::GuestKind::Lxc,
-        repo.guests.lxcs.keys().copied().collect(),
-        &live_lxcs,
-        builder.blockers(),
-    );
-    guest_existence_blockers(
-        crate::model::GuestKind::Qemu,
-        repo.guests.vms.keys().copied().collect(),
-        &live_vms,
-        builder.blockers(),
-    );
-
-    for (id, desired) in &repo.guests.lxcs {
-        if !live_lxcs.contains(id) {
-            continue;
-        }
-        let actual = api.get(
-            &crate::model::GuestRef::new(crate::model::GuestKind::Lxc, *id)
-                .config_endpoint(&repo.guests.node),
-        )?;
-        let (operations, blockers) = builder.parts();
-        guest::lxc(
-            &repo.guests.node,
-            *id,
-            desired,
-            &actual,
-            operations,
-            blockers,
-        )?;
-    }
-    for (id, desired) in &repo.guests.vms {
-        if !live_vms.contains(id) {
-            continue;
-        }
-        let actual = api.get(
-            &crate::model::GuestRef::new(crate::model::GuestKind::Qemu, *id)
-                .config_endpoint(&repo.guests.node),
-        )?;
-        let (operations, blockers) = builder.parts();
-        guest::vm(
-            &repo.guests.node,
-            *id,
-            desired,
-            &actual,
-            operations,
-            blockers,
-        )?;
-    }
-
-    let dns = api.get(&format!("/nodes/{}/dns", repo.guests.node))?;
-    let changes = dns_changes(&repo.network.dns.search, &repo.network.dns.servers, &dns);
-    if !changes.is_empty() {
-        builder.operations().push(Operation::ApiMutation {
-            target: ApiTarget::Pve,
-            method: ApiMethod::Put,
-            domain: Domain::Dns,
-            resource: ResourceId::Named(repo.guests.node.clone()),
-            endpoint: format!("/nodes/{}/dns", repo.guests.node).into(),
-            changes,
-            environment_changes: BTreeMap::new(),
-            digest: None,
-        });
-    }
-
-    let (operations, blockers) = builder.parts();
-    backup::plan(repo, api, pbs, operations, blockers)?;
-
-    if let Ok(captured_network) = fs::read_to_string(
-        repo.observed()
-            .join(crate::resource::native_paths::NETWORK_ARTIFACT),
-    ) {
-        builder
-            .blockers()
-            .extend(network_safety_blockers(&captured_network, &repo.network)?);
-    }
-    for (resource, path) in firewall_artifacts(repo) {
-        if let Ok(content) = fs::read_to_string(repo.observed().join(path)) {
-            builder
-                .blockers()
-                .extend(firewall_safety_blockers(&content, &resource));
-        }
-    }
-    file::operation(
-        repo,
-        (Domain::Network, &repo.guests.node),
-        crate::resource::native_paths::NETWORK_ARTIFACT,
-        ManagedFile::NetworkInterfaces,
-        network::render::render(&repo.network),
-        builder.operations(),
-    )?;
-    if let Some(policy) = &repo.cluster.firewall {
-        file::operation(
-            repo,
-            (Domain::Firewall, "cluster"),
-            crate::resource::native_paths::CLUSTER_FIREWALL_ARTIFACT,
-            ManagedFile::ClusterFirewall,
-            firewall::render::render(policy),
-            builder.operations(),
-        )?;
-    } else {
-        file::deletion(
-            repo,
-            (Domain::Firewall, "cluster"),
-            crate::resource::native_paths::CLUSTER_FIREWALL_ARTIFACT,
-            ManagedFile::ClusterFirewall,
-            builder.operations(),
-        )?;
-    }
-    let guest_firewalls = repo
-        .guests
-        .lxcs
-        .iter()
-        .map(|(id, guest)| (id, guest.firewall.as_ref()))
-        .chain(
-            repo.guests
-                .vms
-                .iter()
-                .map(|(id, guest)| (id, guest.firewall.as_ref())),
-        );
-    for (vmid, policy) in guest_firewalls {
-        let resource = vmid.to_string();
-        let local = crate::resource::native_paths::guest_firewall_artifact(vmid);
-        if let Some(policy) = policy {
-            file::operation(
-                repo,
-                (Domain::Firewall, &resource),
-                &local,
-                ManagedFile::GuestFirewall { vmid: *vmid },
-                firewall::render::render(policy),
-                builder.operations(),
-            )?;
-        } else {
-            file::deletion(
-                repo,
-                (Domain::Firewall, &resource),
-                &local,
-                ManagedFile::GuestFirewall { vmid: *vmid },
-                builder.operations(),
-            )?;
-        }
-    }
-    let node = &repo.node.node.name;
-    let local = crate::resource::native_paths::node_firewall_artifact(node);
-    if let Some(policy) = &repo.node.firewall {
-        file::operation(
-            repo,
-            (Domain::Firewall, &format!("node/{node}")),
-            &local,
-            ManagedFile::NodeFirewall { node: node.clone() },
-            firewall::render::render(policy),
-            builder.operations(),
-        )?;
-    } else {
-        file::deletion(
-            repo,
-            (Domain::Firewall, &format!("node/{node}")),
-            &local,
-            ManagedFile::NodeFirewall { node: node.clone() },
-            builder.operations(),
-        )?;
-    }
+    guest::plan(repo, api, &mut builder)?;
+    dns::plan::plan(repo, api, &mut builder)?;
+    backup::plan(repo, api, pbs, &mut builder)?;
+    network::plan::plan(repo, &mut builder)?;
+    firewall::plan::plan(repo, &mut builder)?;
 
     let plan = builder.finish()?;
     for operation in &plan.operations {
@@ -446,132 +282,6 @@ pub(super) fn build(
     Ok(plan)
 }
 
-fn guest_ids(value: serde_json::Value) -> Result<BTreeSet<u32>> {
-    value
-        .as_array()
-        .context("guest list response is not an array")?
-        .iter()
-        .map(|guest| {
-            let vmid = guest.get("vmid").context("guest list entry has no vmid")?;
-            vmid.as_u64()
-                .or_else(|| vmid.as_str().and_then(|value| value.parse().ok()))
-                .and_then(|value| u32::try_from(value).ok())
-                .context("guest list entry has an invalid vmid")
-        })
-        .collect()
-}
-
-fn guest_existence_blockers(
-    kind: crate::model::GuestKind,
-    local: BTreeSet<u32>,
-    captured: &BTreeSet<u32>,
-    blockers: &mut Vec<String>,
-) {
-    blockers.extend(
-        local
-            .difference(captured)
-            .map(|vmid| format!("{kind}/{vmid}: guest creation is not managed")),
-    );
-}
-
-fn compare(
-    changes: &mut BTreeMap<String, String>,
-    key: &str,
-    wanted: &impl ToString,
-    actual: &serde_json::Value,
-) {
-    let wanted = wanted.to_string();
-    let current = actual.get(key).map(value_string);
-    if current.as_deref() != Some(&wanted) {
-        changes.insert(key.into(), wanted);
-    }
-}
-
-fn network_safety_blockers(content: &str, current: &crate::model::Network) -> Result<Vec<String>> {
-    let parsed = crate::resource::native::parse_network(content, current)?;
-    Ok(parsed
-        .unmodeled
-        .iter()
-        .map(|directive| {
-            format!(
-                "network configuration cannot be represented safely: {}",
-                directive.diagnostic()
-            )
-        })
-        .collect())
-}
-
-fn firewall_artifacts(repo: &LocalState) -> Vec<(String, String)> {
-    let mut artifacts = vec![
-        (
-            "cluster".into(),
-            crate::resource::native_paths::CLUSTER_FIREWALL_ARTIFACT.into(),
-        ),
-        (
-            format!("node/{}", repo.guests.node),
-            crate::resource::native_paths::node_firewall_artifact(&repo.guests.node),
-        ),
-    ];
-    artifacts.extend(
-        repo.guests
-            .lxcs
-            .keys()
-            .chain(repo.guests.vms.keys())
-            .map(|id| {
-                (
-                    id.to_string(),
-                    crate::resource::native_paths::guest_firewall_artifact(id),
-                )
-            }),
-    );
-    artifacts
-}
-
-fn firewall_safety_blockers(content: &str, resource: &str) -> Vec<String> {
-    crate::resource::native::parse_firewall(content)
-        .unmodeled
-        .iter()
-        .map(|directive| {
-            format!(
-                "firewall {resource} cannot be represented safely: {}",
-                directive.diagnostic()
-            )
-        })
-        .collect()
-}
-
-fn dns_changes(
-    search: &str,
-    servers: &[String],
-    actual: &serde_json::Value,
-) -> BTreeMap<String, String> {
-    let mut changes = BTreeMap::new();
-    compare(&mut changes, "search", &search, actual);
-    for (index, server) in servers.iter().enumerate() {
-        compare(&mut changes, &format!("dns{}", index + 1), server, actual);
-    }
-    let delete = actual
-        .as_object()
-        .into_iter()
-        .flat_map(|object| object.keys())
-        .filter(|key| key.starts_with("dns"))
-        .filter_map(|key| key[3..].parse::<usize>().ok().map(|index| (key, index)))
-        .filter(|(_, index)| *index > servers.len())
-        .map(|(key, _)| key.clone())
-        .collect::<Vec<_>>();
-    if !delete.is_empty() {
-        changes.insert("delete".into(), delete.join(","));
-    }
-    changes
-}
-
-fn value_string(value: &serde_json::Value) -> String {
-    value
-        .as_str()
-        .map(str::to_string)
-        .unwrap_or_else(|| value.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -582,7 +292,7 @@ mod tests {
     };
     use anyhow::{Context, bail};
     use serde_json::Value;
-    use std::{collections::BTreeMap, path::Path};
+    use std::{collections::BTreeMap, fs, path::Path};
 
     #[derive(Deserialize)]
     struct LiveFixture {
@@ -792,80 +502,6 @@ mod tests {
     }
 
     #[test]
-    fn firewall_option_order_is_not_drift() {
-        let a = "[OPTIONS]\nenable: 1\nlog_level_in: nolog\n";
-        let b = "[OPTIONS]\nlog_level_in: nolog\nenable: 1\n";
-        assert_eq!(firewall::render::semantic(a), firewall::render::semantic(b));
-    }
-
-    #[test]
-    fn firewall_rule_order_remains_semantic() {
-        let a = "[RULES]\nIN ACCEPT -dport 22\nIN DROP\n";
-        let b = "[RULES]\nIN DROP\nIN ACCEPT -dport 22\n";
-
-        assert_ne!(firewall::render::semantic(a), firewall::render::semantic(b));
-    }
-
-    #[test]
-    fn extra_dns_servers_are_deleted() {
-        let actual =
-            serde_json::json!({"search":"example.test", "dns1":"1.1.1.1", "dns2":"8.8.8.8"});
-        let changes = dns_changes("example.test", &["1.1.1.1".into()], &actual);
-        assert_eq!(changes.get("delete").map(String::as_str), Some("dns2"));
-    }
-
-    #[test]
-    fn missing_local_guests_are_blocked_and_extra_live_guests_are_unowned() {
-        let mut blockers = Vec::new();
-        guest_existence_blockers(
-            crate::model::GuestKind::Qemu,
-            BTreeSet::from([201, 202]),
-            &BTreeSet::from([201, 203]),
-            &mut blockers,
-        );
-
-        assert_eq!(blockers, ["qemu/202: guest creation is not managed"]);
-    }
-
-    #[test]
-    fn guest_lists_require_valid_identifiers() {
-        assert_eq!(
-            guest_ids(serde_json::json!([{"vmid": 101}, {"vmid": "102"}])).unwrap(),
-            BTreeSet::from([101, 102])
-        );
-        assert!(guest_ids(serde_json::json!([{"name": "missing"}])).is_err());
-        assert!(guest_ids(serde_json::json!({"vmid": 101})).is_err());
-    }
-
-    #[test]
-    fn unsupported_native_network_syntax_becomes_a_plan_blocker() {
-        let network: crate::model::Network =
-            serde_yaml::from_str(include_str!("../../../examples/basic/config/network.yml"))
-                .unwrap();
-        let blockers = network_safety_blockers(
-            "iface vmbr0 inet manual\n    bridge-ports none\n    bridge-vlan-aware yes\n",
-            &network,
-        )
-        .unwrap();
-
-        assert_eq!(blockers.len(), 1);
-        assert!(blockers[0].contains("cannot be represented safely"));
-        assert!(blockers[0].contains("bridge-vlan-aware yes"));
-    }
-
-    #[test]
-    fn unsupported_native_firewall_syntax_becomes_a_plan_blocker() {
-        let blockers = firewall_safety_blockers(
-            "[RULES]\nIN ACCEPT -p tcp -m conntrack -dport 443\n",
-            "cluster",
-        );
-
-        assert_eq!(blockers.len(), 1);
-        assert!(blockers[0].contains("firewall cluster cannot be represented safely"));
-        assert!(blockers[0].contains("-m"));
-    }
-
-    #[test]
     fn fixture_plans_guest_backup_dns_and_file_mutations() {
         let temp = tempfile::tempdir().unwrap();
         config::scaffold::initialize(temp.path()).unwrap();
@@ -908,5 +544,23 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(actual, expected);
+
+        let mut domains = plan
+            .operations
+            .iter()
+            .map(Operation::domain)
+            .collect::<Vec<_>>();
+        domains.dedup();
+        assert_eq!(
+            domains,
+            [
+                Domain::Guest,
+                Domain::Dns,
+                Domain::Backup,
+                Domain::Pbs,
+                Domain::Network,
+                Domain::Firewall,
+            ]
+        );
     }
 }

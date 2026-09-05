@@ -1,6 +1,6 @@
 use crate::{
     client::{PbsClient, PveClient},
-    command::plan::{ApiMethod, ApiTarget, Operation},
+    command::plan::{ApiMethod, ApiTarget, Operation, PlanBuilder},
     config::LocalState,
     model::{PruneJob, SyncJob, VerifyJob},
 };
@@ -13,9 +13,9 @@ pub(crate) fn plan(
     repo: &LocalState,
     pve: &dyn PveClient,
     pbs: &dyn PbsClient,
-    operations: &mut Vec<Operation>,
-    blockers: &mut Vec<String>,
+    builder: &mut PlanBuilder,
 ) -> Result<()> {
+    let (operations, blockers) = builder.parts();
     pve_jobs(repo, &pve.get("/cluster/backup")?, operations)?;
     let datastores = pbs.get("/config/datastore")?;
     let s3 = pbs.get("/config/s3")?;
