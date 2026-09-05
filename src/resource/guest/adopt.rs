@@ -3,7 +3,9 @@ use crate::{
     command::plan::Operation,
     config::{AdoptionCandidate, ConfigDocument, LocalPatch, LocalState},
     discovery::CapturedState,
-    model::{BindMount, GuestKind, GuestRef, Nic, VmNic},
+    model::{
+        BindMount, DiskInterface, EfiSlot, GuestKind, GuestRef, NetworkSlot, Nic, UsbSlot, VmNic,
+    },
     utility::yaml_patch::Segment,
 };
 use anyhow::{Context, Result};
@@ -97,44 +99,62 @@ fn captured_vm(local: &LocalState, guest: GuestRef, actual: &Value) -> Result<su
     result.qemu_guest_agent = QemuAgentOptions::from_api(actual.get("agent"))?.enabled;
     assign_bool(actual, "onboot", &mut result.start.onboot);
     assign_start(actual, &mut result.start);
-    let disk_key = result.disk.interface.to_string();
-    if let Some(disk) = actual.get(&disk_key).and_then(Value::as_str) {
-        let options = options(disk);
-        if let Some(volume) = options.get("volume") {
-            result.disk.storage = volume.split(':').next().unwrap_or(volume).into();
-        }
-        if let Some(size) = options.get("size").and_then(|size| gigabytes(size)) {
-            result.disk.size_gb = size;
-        }
-        result.disk.discard = options.get("discard").is_some_and(|value| *value == "on");
-    }
-    if let Some(efi) = actual.get("efidisk0").and_then(Value::as_str) {
-        let options = options(efi);
-        if let Some(volume) = options.get("volume") {
-            result.efi.storage = volume.split(':').next().unwrap_or(volume).into();
-        }
-        result.efi.pre_enrolled_keys = options
-            .get("pre-enrolled-keys")
-            .is_some_and(|value| matches!(*value, "1" | "true"));
-    }
+    result.disks = actual
+        .as_object()
+        .into_iter()
+        .flat_map(|object| object.iter())
+        .filter_map(|(key, value)| Some((key.parse::<DiskInterface>().ok()?, value.as_str()?)))
+        .filter(|(slot, value)| !super::plan::is_unmanaged_special_disk(&slot.to_string(), value))
+        .map(|(slot, value)| Ok((slot, parse_vm_disk(value)?)))
+        .collect::<Result<_>>()?;
+    result.efi_disks = numbered(actual, "efidisk")
+        .into_iter()
+        .map(|(index, value)| Ok((EfiSlot(index as u8), parse_efi(value)?)))
+        .collect::<Result<_>>()?;
     result.networks = numbered(actual, "net")
         .into_iter()
-        .map(|(_, value)| parse_vm_nic(value))
+        .map(|(index, value)| Ok((NetworkSlot(index as u8), parse_vm_nic(value)?)))
         .collect::<Result<_>>()?;
-    result.usb_passthrough = numbered(actual, "usb")
+    result.usb_devices = numbered(actual, "usb")
         .into_iter()
         .map(|(index, value)| {
-            Ok(super::Usb {
-                slot: format!("usb{index}").parse()?,
-                host: options(value)
-                    .get("host")
-                    .copied()
-                    .unwrap_or(value.split(',').next().unwrap_or_default())
-                    .into(),
-            })
+            Ok((
+                UsbSlot(index as u8),
+                super::Usb {
+                    host: options(value)
+                        .get("host")
+                        .copied()
+                        .unwrap_or(value.split(',').next().unwrap_or_default())
+                        .into(),
+                },
+            ))
         })
         .collect::<Result<_>>()?;
     Ok(result)
+}
+
+fn parse_vm_disk(value: &str) -> Result<super::VmDisk> {
+    let item = options(value);
+    let volume = required(&item, "volume")?;
+    Ok(super::VmDisk {
+        storage: volume.split(':').next().unwrap_or(volume).into(),
+        size_gb: item
+            .get("size")
+            .and_then(|size| gigabytes(size))
+            .context("captured VM disk size")?,
+        discard: item.get("discard").is_some_and(|value| *value == "on"),
+    })
+}
+
+fn parse_efi(value: &str) -> Result<super::Efi> {
+    let item = options(value);
+    let volume = required(&item, "volume")?;
+    Ok(super::Efi {
+        storage: volume.split(':').next().unwrap_or(volume).into(),
+        pre_enrolled_keys: item
+            .get("pre-enrolled-keys")
+            .is_some_and(|value| matches!(*value, "1" | "true")),
+    })
 }
 
 fn parse_lxc_nic(value: &str) -> Result<Nic> {
@@ -321,5 +341,28 @@ mod tests {
             Operation::ApiMutation { changes, .. } => !changes.contains_key("agent"),
             _ => true,
         }));
+    }
+
+    #[test]
+    fn adoption_captures_multiple_disks_and_preserves_special_media() {
+        let temp = tempfile::tempdir().unwrap();
+        crate::config::scaffold::initialize(temp.path()).unwrap();
+        let local = crate::config::open(temp.path()).unwrap();
+        let guest = GuestRef::new(GuestKind::Qemu, 201);
+        let mut actual: Value =
+            serde_json::from_str(include_str!("../../../tests/fixtures/planner/live.json"))
+                .unwrap();
+        let config = &mut actual["pve"]["/nodes/pve/qemu/201/config"];
+        config["sata1"] = serde_json::json!("data:vm-201-disk-1,size=64G,discard=on");
+        config["ide2"] = serde_json::json!("local:iso/installer.iso,media=cdrom");
+        config["scsi2"] = serde_json::json!("local-lvm:cloudinit");
+
+        let adopted = captured_vm(&local, guest, config).unwrap();
+
+        assert!(adopted.disks.contains_key(&DiskInterface::Scsi(0)));
+        assert!(adopted.disks.contains_key(&DiskInterface::Sata(1)));
+        assert!(!adopted.disks.contains_key(&DiskInterface::Ide(2)));
+        assert!(!adopted.disks.contains_key(&DiskInterface::Scsi(2)));
+        assert_eq!(adopted.disks[&DiskInterface::Sata(1)].size_gb, 64);
     }
 }

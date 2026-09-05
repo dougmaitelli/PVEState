@@ -87,14 +87,14 @@
     },
     {
       "document": "guests.yml",
-      "fields": "vms.*.{name,machine,bios,cpu,memory_mb,networks,usb_passthrough,qemu_guest_agent,start}",
+      "fields": "vms.*.{name,machine,bios,cpu,memory_mb,networks,usb_devices,qemu_guest_agent,start}",
       "class": "production-managed",
       "level": "applicable",
       "behavior": "Compared with the live QEMU API; listed NIC/USB devices are updated and removed devices are deleted."
     },
     {
       "document": "guests.yml",
-      "fields": "vms.*.{disk,efi}",
+      "fields": "vms.*.{disks,efi_disks}",
       "class": "production-managed",
       "level": "applicable",
       "behavior": "Disk growth, discard, and EFI options are managed; storage moves and shrinking are blocked."

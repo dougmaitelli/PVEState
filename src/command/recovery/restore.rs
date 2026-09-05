@@ -31,10 +31,15 @@ pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost, events: &dyn EventSin
                 shell::quote(&guest.rootfs.storage)
             ))?;
         } else if let Some(guest) = repo.guests.vms.get(&id) {
+            let storage = guest
+                .disks
+                .values()
+                .next()
+                .context("VM has no restore storage")?;
             ssh.run(&format!(
                 "qmrestore {} {id} --storage {}",
                 shell::quote(archive),
-                shell::quote(&guest.disk.storage)
+                shell::quote(&storage.storage)
             ))?;
         }
     }

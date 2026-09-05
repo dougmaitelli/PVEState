@@ -92,7 +92,6 @@ pub(crate) enum GuestField {
     Agent,
     Startup,
     RootFs,
-    EfiDisk,
     BindMount(u8),
     Network(u8),
 }
@@ -114,20 +113,66 @@ impl GuestField {
             Self::Agent => "agent".into(),
             Self::Startup => "startup".into(),
             Self::RootFs => "rootfs".into(),
-            Self::EfiDisk => "efidisk0".into(),
             Self::BindMount(index) => format!("mp{index}"),
             Self::Network(index) => format!("net{index}"),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum DiskInterface {
     Scsi(u8),
     Sata(u8),
     Virtio(u8),
     Ide(u8),
 }
+
+macro_rules! numbered_slot {
+    ($name:ident, $prefix:literal, $description:literal) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub(crate) struct $name(pub u8);
+
+        impl fmt::Display for $name {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(formatter, "{}{}", $prefix, self.0)
+            }
+        }
+
+        impl FromStr for $name {
+            type Err = anyhow::Error;
+            fn from_str(value: &str) -> Result<Self> {
+                Ok(Self(
+                    value
+                        .strip_prefix($prefix)
+                        .context(concat!($description, " must be ", $prefix, "N"))?
+                        .parse()?,
+                ))
+            }
+        }
+
+        impl Serialize for $name {
+            fn serialize<S: serde::Serializer>(
+                &self,
+                serializer: S,
+            ) -> std::result::Result<S::Ok, S::Error> {
+                serializer.serialize_str(&self.to_string())
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: serde::Deserializer<'de>>(
+                deserializer: D,
+            ) -> std::result::Result<Self, D::Error> {
+                String::deserialize(deserializer)?
+                    .parse()
+                    .map_err(serde::de::Error::custom)
+            }
+        }
+    };
+}
+
+numbered_slot!(EfiSlot, "efidisk", "EFI slot");
+numbered_slot!(NetworkSlot, "net", "network slot");
 
 impl fmt::Display for DiskInterface {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

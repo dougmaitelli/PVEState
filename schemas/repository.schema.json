@@ -52,6 +52,14 @@
     "required_secrets"
   ],
   "$defs": {
+    "AddressMethod": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "static",
+        "dhcp"
+      ]
+    },
     "BackupConfig": {
       "type": "object",
       "properties": {
@@ -144,6 +152,14 @@
       },
       "additionalProperties": false
     },
+    "BackupMode": {
+      "type": "string",
+      "enum": [
+        "snapshot",
+        "suspend",
+        "stop"
+      ]
+    },
     "BindMount": {
       "type": "object",
       "properties": {
@@ -200,7 +216,7 @@
           "default": null
         },
         "method": {
-          "type": "string"
+          "$ref": "#/$defs/AddressMethod"
         },
         "name": {
           "type": "string"
@@ -365,7 +381,7 @@
       "type": "object",
       "properties": {
         "backend": {
-          "type": "string"
+          "$ref": "#/$defs/DatastoreBackend"
         },
         "bucket": {
           "type": "string"
@@ -391,6 +407,13 @@
         "bucket",
         "s3_endpoint_id",
         "garbage_collection_schedule"
+      ]
+    },
+    "DatastoreBackend": {
+      "type": "string",
+      "enum": [
+        "local",
+        "s3"
       ]
     },
     "Disk": {
@@ -446,51 +469,196 @@
         "pre_enrolled_keys"
       ]
     },
-    "FirewallPolicy": {
+    "FirewallAction": {
+      "type": "string",
+      "enum": [
+        "ACCEPT",
+        "DROP",
+        "REJECT",
+        "RETURN"
+      ]
+    },
+    "FirewallAlias": {
       "type": "object",
       "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "log_level_in": {
+        "comment": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "default": null
+        },
+        "name": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "network"
+      ]
+    },
+    "FirewallDirection": {
+      "type": "string",
+      "enum": [
+        "IN",
+        "OUT",
+        "GROUP"
+      ]
+    },
+    "FirewallIpSet": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FirewallIpSetEntry"
+          }
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "FirewallIpSetEntry": {
+      "type": "object",
+      "properties": {
+        "comment": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "network": {
+          "type": "string"
+        },
+        "nomatch": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "network"
+      ]
+    },
+    "FirewallLogLevel": {
+      "type": "string",
+      "enum": [
+        "nolog",
+        "emerg",
+        "alert",
+        "crit",
+        "err",
+        "warning",
+        "notice",
+        "info",
+        "debug"
+      ]
+    },
+    "FirewallPolicy": {
+      "type": "object",
+      "properties": {
+        "aliases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FirewallAlias"
+          }
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "ip_sets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FirewallIpSet"
+          }
+        },
+        "log_level_in": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirewallLogLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "rules": {
           "type": "array",
+          "default": [],
           "items": {
             "$ref": "#/$defs/FirewallRule"
+          }
+        },
+        "security_groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FirewallSecurityGroup"
           }
         }
       },
       "additionalProperties": false,
       "required": [
-        "enabled",
-        "rules"
+        "enabled"
+      ]
+    },
+    "FirewallProtocol": {
+      "type": "string",
+      "enum": [
+        "tcp",
+        "udp",
+        "icmp",
+        "icmpv6",
+        "esp",
+        "ah"
       ]
     },
     "FirewallRule": {
       "type": "object",
       "properties": {
         "action": {
-          "type": "string"
+          "$ref": "#/$defs/FirewallAction"
         },
         "comment": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "default": null
+        },
+        "destination": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "destination_port": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "default": null
         },
         "direction": {
-          "type": "string"
+          "$ref": "#/$defs/FirewallDirection"
         },
         "enabled": {
           "type": "boolean",
@@ -500,23 +668,69 @@
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "default": null
         },
         "log": {
-          "type": "string"
+          "$ref": "#/$defs/FirewallLogLevel",
+          "default": "nolog"
         },
-        "protocol": {
+        "macro_name": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "default": null
+        },
+        "protocol": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FirewallProtocol"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "source_port": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false,
       "required": [
         "direction",
-        "action",
-        "log"
+        "action"
+      ]
+    },
+    "FirewallSecurityGroup": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "rules": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FirewallRule"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
       ]
     },
     "Guests": {
@@ -575,7 +789,7 @@
       "type": "object",
       "properties": {
         "method": {
-          "type": "string"
+          "$ref": "#/$defs/AddressMethod"
         },
         "name": {
           "type": "string"
@@ -980,7 +1194,7 @@
           }
         },
         "mode": {
-          "type": "string"
+          "$ref": "#/$defs/BackupMode"
         },
         "retention": {
           "$ref": "#/$defs/Retention"
@@ -1612,11 +1826,18 @@
         "device_class"
       ]
     },
+    "SyncDirection": {
+      "type": "string",
+      "enum": [
+        "pull",
+        "push"
+      ]
+    },
     "SyncJob": {
       "type": "object",
       "properties": {
         "direction": {
-          "type": "string",
+          "$ref": "#/$defs/SyncDirection",
           "default": "pull"
         },
         "remote": {
@@ -1667,14 +1888,10 @@
       "properties": {
         "host": {
           "type": "string"
-        },
-        "slot": {
-          "type": "string"
         }
       },
       "additionalProperties": false,
       "required": [
-        "slot",
         "host"
       ]
     },
@@ -1713,11 +1930,17 @@
         "cpu": {
           "$ref": "#/$defs/Cpu"
         },
-        "disk": {
-          "$ref": "#/$defs/VmDisk"
+        "disks": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/VmDisk"
+          }
         },
-        "efi": {
-          "$ref": "#/$defs/Efi"
+        "efi_disks": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Efi"
+          }
         },
         "firewall": {
           "anyOf": [
@@ -1742,8 +1965,8 @@
           "type": "string"
         },
         "networks": {
-          "type": "array",
-          "items": {
+          "type": "object",
+          "additionalProperties": {
             "$ref": "#/$defs/VmNic"
           }
         },
@@ -1753,10 +1976,9 @@
         "start": {
           "$ref": "#/$defs/Start"
         },
-        "usb_passthrough": {
-          "type": "array",
-          "default": [],
-          "items": {
+        "usb_devices": {
+          "type": "object",
+          "additionalProperties": {
             "$ref": "#/$defs/Usb"
           }
         }
@@ -1768,9 +1990,10 @@
         "bios",
         "cpu",
         "memory_mb",
-        "disk",
-        "efi",
+        "disks",
+        "efi_disks",
         "networks",
+        "usb_devices",
         "qemu_guest_agent",
         "start"
       ]
@@ -1781,9 +2004,6 @@
         "discard": {
           "type": "boolean",
           "default": false
-        },
-        "interface": {
-          "type": "string"
         },
         "size_gb": {
           "type": "integer",
@@ -1797,7 +2017,6 @@
       "additionalProperties": false,
       "required": [
         "storage",
-        "interface",
         "size_gb"
       ]
     },

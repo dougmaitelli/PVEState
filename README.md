@@ -173,6 +173,13 @@ are reconciled. A declared guest missing from the capture blocks the plan becaus
 creation is unsupported. Extra live guests remain archived evidence, are outside
 ownership, and are never implicitly deleted.
 
+VM hardware is keyed by its Proxmox slot (`scsi0`, `efidisk0`, `net0`, `usb0`),
+so non-contiguous and mixed-bus devices retain their identity. The former singular
+`disk`/`efi` fields and list-based network/USB fields remain accepted when loading
+older repositories and are normalized to the slot-keyed format when rewritten.
+Normal disks absent from the local slot map are removed through the guarded guest
+plan; unmodeled CD-ROM and cloud-init drives are preserved.
+
 ### Safety model
 
 `apply` requires a plan less than 30 minutes old, an exact plan SHA, an exact

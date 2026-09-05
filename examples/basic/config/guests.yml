@@ -25,11 +25,13 @@ vms:
     bios: ovmf
     cpu: {type: host, sockets: 1, cores: 2}
     memory_mb: 4096
-    disk: {storage: local-lvm, interface: scsi0, size_gb: 32, discard: true}
-    efi: {storage: local-lvm, pre_enrolled_keys: true}
+    disks:
+      scsi0: {storage: local-lvm, size_gb: 32, discard: true}
+    efi_disks:
+      efidisk0: {storage: local-lvm, pre_enrolled_keys: true}
     networks:
-      - {model: virtio, mac: "02:00:00:00:02:01", bridge: vmbr0, firewall: true, vlan: null}
-    usb_passthrough:
-      - {slot: usb0, host: "1a86:7523"}
+      net0: {model: virtio, mac: "02:00:00:00:02:01", bridge: vmbr0, firewall: true, vlan: null}
+    usb_devices:
+      usb0: {host: "1a86:7523"}
     qemu_guest_agent: true
     start: {onboot: true, order: 30, delay_seconds: null}

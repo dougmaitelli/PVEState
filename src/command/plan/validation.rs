@@ -25,18 +25,12 @@ pub(super) fn validate(repo: &LocalState, events: &dyn EventSink) -> Result<()> 
         }
     }
     for (id, vm) in &repo.guests.vms {
-        let mut slots = BTreeSet::new();
-        for nic in &vm.networks {
+        for nic in vm.networks.values() {
             if !bridges.contains(&nic.bridge) {
                 bail!("qemu/{id}: unknown bridge {}", nic.bridge);
             }
             if !macs.insert(nic.mac.to_string()) {
                 bail!("duplicate MAC: {}", nic.mac);
-            }
-        }
-        for usb in &vm.usb_passthrough {
-            if !slots.insert(&usb.slot) {
-                bail!("qemu/{id}: duplicate USB slot {}", usb.slot);
             }
         }
     }

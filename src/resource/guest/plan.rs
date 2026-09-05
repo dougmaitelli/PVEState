@@ -113,52 +113,51 @@ pub(crate) fn vm(
             ),
         ),
     ]);
-    for (index, nic) in desired.networks.iter().enumerate() {
+    for (slot, nic) in &desired.networks {
+        wanted.insert(slot.to_string(), render::vm_nic(nic));
+    }
+    for (slot, usb) in &desired.usb_devices {
+        wanted.insert(slot.to_string(), format!("host={}", usb.host));
+    }
+    for (slot, desired_disk) in &desired.disks {
+        let key = slot.to_string();
+        wanted.insert(key.clone(), desired_disk_value(actual, &key, desired_disk)?);
+    }
+    for (slot, efi) in &desired.efi_disks {
+        let key = slot.to_string();
         wanted.insert(
-            GuestField::Network(index as u8).api_name(),
-            render::vm_nic(nic),
+            key.clone(),
+            desired_efi(
+                actual,
+                &key,
+                &efi.storage,
+                efi.pre_enrolled_keys,
+                blockers,
+                id,
+            ),
         );
     }
-    for usb in &desired.usb_passthrough {
-        wanted.insert(usb.slot.to_string(), format!("host={}", usb.host));
-    }
-    wanted.insert(
-        desired.disk.interface.to_string(),
-        desired_disk(
-            actual,
-            &desired.disk.interface.to_string(),
-            desired.disk.discard,
-        )?,
-    );
-    wanted.insert(
-        GuestField::EfiDisk.api_name(),
-        desired_efi(
-            actual,
-            &desired.efi.storage,
-            desired.efi.pre_enrolled_keys,
-            blockers,
-            id,
-        ),
-    );
     let mut changes = changed(&wanted, actual);
     if let Some(agent) = agent_change(desired.qemu_guest_agent, actual.get("agent"))? {
         changes.insert(GuestField::Agent.api_name(), agent);
     }
-    add_removed(actual, &wanted, &["net", "usb"], &mut changes);
+    add_removed_vm(actual, &wanted, &mut changes);
     let guest = GuestRef::new(GuestKind::Qemu, id);
     push_update(node, guest, changes, actual, operations);
-    disk(
-        node,
-        guest,
-        (
-            &desired.disk.interface.to_string(),
-            &desired.disk.storage,
-            desired.disk.size_gb,
-        ),
-        actual,
-        operations,
-        blockers,
-    )
+    for (slot, desired) in &desired.disks {
+        let key = slot.to_string();
+        if actual.get(&key).is_some() {
+            disk(
+                node,
+                guest,
+                (&key, &desired.storage, desired.size_gb),
+                actual,
+                operations,
+                blockers,
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn agent_change(desired: bool, actual: Option<&Value>) -> Result<Option<String>> {
@@ -260,9 +259,16 @@ fn structured(key: &str) -> bool {
         .any(|prefix| key.starts_with(prefix))
 }
 
-fn desired_disk(actual: &Value, key: &str, discard: bool) -> Result<String> {
-    let mut options = parse_options(actual[key].as_str().context("disk config")?);
-    if discard {
+fn desired_disk_value(actual: &Value, key: &str, desired: &super::VmDisk) -> Result<String> {
+    let Some(current) = actual.get(key).and_then(Value::as_str) else {
+        let mut value = format!("{}:{}", desired.storage, desired.size_gb);
+        if desired.discard {
+            value.push_str(",discard=on");
+        }
+        return Ok(value);
+    };
+    let mut options = parse_options(current);
+    if desired.discard {
         options.insert("discard".into(), "on".into());
     } else {
         options.remove("discard");
@@ -272,12 +278,13 @@ fn desired_disk(actual: &Value, key: &str, discard: bool) -> Result<String> {
 
 fn desired_efi(
     actual: &Value,
+    key: &str,
     storage: &str,
     pre_enrolled_keys: bool,
     blockers: &mut Vec<String>,
     id: u32,
 ) -> String {
-    let mut options = parse_options(actual["efidisk0"].as_str().unwrap_or(""));
+    let mut options = parse_options(actual[key].as_str().unwrap_or(""));
     let volume = options
         .get("volume")
         .cloned()
@@ -295,6 +302,43 @@ fn desired_efi(
         u8::from(pre_enrolled_keys).to_string(),
     );
     render_options(&options)
+}
+
+fn add_removed_vm(
+    actual: &Value,
+    wanted: &BTreeMap<String, String>,
+    changes: &mut BTreeMap<String, String>,
+) {
+    let removed = actual
+        .as_object()
+        .into_iter()
+        .flat_map(|object| object.iter())
+        .filter(|(key, _)| {
+            ["net", "usb", "efidisk"]
+                .iter()
+                .any(|prefix| numbered(key, prefix))
+                || key.parse::<crate::model::DiskInterface>().is_ok()
+        })
+        .filter(|(key, value)| {
+            !wanted.contains_key(*key)
+                && !is_unmanaged_special_disk(key, value.as_str().unwrap_or_default())
+        })
+        .map(|(key, _)| key.clone())
+        .collect::<Vec<_>>();
+    if !removed.is_empty() {
+        changes.insert("delete".into(), removed.join(","));
+    }
+}
+
+pub(super) fn is_unmanaged_special_disk(key: &str, value: &str) -> bool {
+    if key.parse::<crate::model::DiskInterface>().is_err() {
+        return false;
+    }
+    let options = parse_options(value);
+    options.get("media").is_some_and(|media| media == "cdrom")
+        || options
+            .get("volume")
+            .is_some_and(|volume| volume.contains("cloudinit"))
 }
 
 fn render_options(options: &BTreeMap<String, String>) -> String {
@@ -394,5 +438,113 @@ mod tests {
         assert_eq!(mutation, "0,fstrim_cloned_disks=1,type=virtio");
         let applied = serde_json::json!(mutation);
         assert_eq!(agent_change(false, Some(&applied)).unwrap(), None);
+    }
+
+    #[test]
+    fn arbitrary_owned_disks_are_added_modified_and_removed() {
+        let actual = serde_json::json!({
+            "scsi0": "local-lvm:vm-201-disk-0,size=16G",
+            "sata1": "data:vm-201-disk-1,size=64G,discard=off",
+            "virtio2": "stale:vm-201-disk-2,size=8G"
+        });
+        let mut wanted = BTreeMap::new();
+        wanted.insert(
+            "scsi0".into(),
+            desired_disk_value(
+                &actual,
+                "scsi0",
+                &crate::resource::guest::VmDisk {
+                    storage: "local-lvm".into(),
+                    size_gb: 32,
+                    discard: false,
+                },
+            )
+            .unwrap(),
+        );
+        wanted.insert(
+            "sata1".into(),
+            desired_disk_value(
+                &actual,
+                "sata1",
+                &crate::resource::guest::VmDisk {
+                    storage: "data".into(),
+                    size_gb: 64,
+                    discard: true,
+                },
+            )
+            .unwrap(),
+        );
+        wanted.insert(
+            "ide3".into(),
+            desired_disk_value(
+                &actual,
+                "ide3",
+                &crate::resource::guest::VmDisk {
+                    storage: "archive".into(),
+                    size_gb: 20,
+                    discard: false,
+                },
+            )
+            .unwrap(),
+        );
+
+        let mut changes = changed(&wanted, &actual);
+        add_removed_vm(&actual, &wanted, &mut changes);
+
+        assert_eq!(changes["sata1"], "data:vm-201-disk-1,discard=on,size=64G");
+        assert_eq!(changes["ide3"], "archive:20");
+        assert_eq!(changes["delete"], "virtio2");
+    }
+
+    #[test]
+    fn cdrom_and_cloud_init_drives_are_preserved_when_unmodeled() {
+        let actual = serde_json::json!({
+            "ide2": "local:iso/installer.iso,media=cdrom",
+            "scsi1": "local-lvm:vm-201-cloudinit,media=cdrom",
+            "sata2": "data:vm-201-disk-2,size=8G"
+        });
+        let mut changes = BTreeMap::new();
+
+        add_removed_vm(&actual, &BTreeMap::new(), &mut changes);
+
+        assert_eq!(changes["delete"], "sata2");
+    }
+
+    #[test]
+    fn existing_disks_only_grow_and_never_move_or_shrink_automatically() {
+        let actual = serde_json::json!({"scsi0": "local-lvm:vm-201-disk-0,size=32G"});
+        let guest = GuestRef::new(GuestKind::Qemu, 201);
+        let mut operations = Vec::new();
+        let mut blockers = Vec::new();
+
+        disk(
+            "pve",
+            guest,
+            ("scsi0", "other-storage", 16),
+            &actual,
+            &mut operations,
+            &mut blockers,
+        )
+        .unwrap();
+
+        assert!(operations.is_empty());
+        assert!(blockers.iter().any(|value| value.contains("storage moves")));
+        assert!(blockers.iter().any(|value| value.contains("shrinking")));
+
+        blockers.clear();
+        disk(
+            "pve",
+            guest,
+            ("scsi0", "local-lvm", 64),
+            &actual,
+            &mut operations,
+            &mut blockers,
+        )
+        .unwrap();
+        assert!(matches!(
+            operations.as_slice(),
+            [Operation::GrowDisk { size_gb: 64, .. }]
+        ));
+        assert!(blockers.is_empty());
     }
 }

@@ -121,13 +121,13 @@ const ENTRIES: &[ScopeEntry] = &[
     ),
     entry(
         "guests.yml",
-        "vms.*.{name,machine,bios,cpu,memory_mb,networks,usb_passthrough,qemu_guest_agent,start}",
+        "vms.*.{name,machine,bios,cpu,memory_mb,networks,usb_devices,qemu_guest_agent,start}",
         ManagementClass::ProductionManaged,
         "Compared with the live QEMU API; listed NIC/USB devices are updated and removed devices are deleted.",
     ),
     entry(
         "guests.yml",
-        "vms.*.{disk,efi}",
+        "vms.*.{disks,efi_disks}",
         ManagementClass::ProductionManaged,
         "Disk growth, discard, and EFI options are managed; storage moves and shrinking are blocked.",
     ),

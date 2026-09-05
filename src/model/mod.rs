@@ -20,7 +20,9 @@ pub(crate) use crate::resource::{
 pub(crate) use cluster::ClusterConfig;
 pub(crate) use manifest::RepositoryManifest;
 pub(crate) use node::NodeConfig;
-pub(crate) use proxmox::{DiskInterface, GuestField, GuestKind, GuestRef, UsbSlot};
+pub(crate) use proxmox::{
+    DiskInterface, EfiSlot, GuestField, GuestKind, GuestRef, NetworkSlot, UsbSlot,
+};
 pub(crate) use recovery_check::RecoveryChecks;
 pub(crate) use restore::{RestoreConfig, RestoreMount};
 pub(crate) use secrets::RequiredSecretsConfig;
