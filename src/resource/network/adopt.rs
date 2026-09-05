@@ -5,7 +5,6 @@ use crate::{
     utility::yaml_patch::Segment,
 };
 use anyhow::Result;
-use serde_json::Value;
 
 pub(crate) fn candidates(
     local: &LocalState,
@@ -18,34 +17,14 @@ pub(crate) fn candidates(
     else {
         return Ok(Vec::new());
     };
-    let actual = captured
-        .pve
-        .response(&format!("/nodes/{}/dns", local.guests.node))?;
-    let search = actual
-        .get("search")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let mut servers = actual
-        .as_object()
-        .into_iter()
-        .flat_map(|object| object.iter())
-        .filter_map(|(key, value)| {
-            key.strip_prefix("dns")?
-                .parse::<usize>()
-                .ok()
-                .zip(value.as_str())
-        })
-        .collect::<Vec<_>>();
-    servers.sort_by_key(|(index, _)| *index);
-    let servers = servers
-        .into_iter()
-        .map(|(_, server)| server.to_owned())
-        .collect::<Vec<_>>();
+    let actual = captured.node_dns(&local.guests.node)?;
+    let search = actual.search.clone().unwrap_or_default();
+    let servers = actual.servers.values().cloned().collect::<Vec<_>>();
     let patches = vec![
         LocalPatch::SetScalar {
             document: ConfigDocument::Network,
             path: vec![Segment::Key("dns".into()), Segment::Key("search".into())],
-            value: serde_yaml::Value::String(search.into()),
+            value: serde_yaml::Value::String(search),
         },
         LocalPatch::ReplaceResource {
             document: ConfigDocument::Network,

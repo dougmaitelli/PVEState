@@ -11,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::CaptureManifest;
+use super::{CaptureManifest, managed};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CaptureId(String);
@@ -30,6 +30,9 @@ pub(crate) struct CapturedState {
     pub(crate) pve: CapturedPve,
     pub(crate) pbs: CapturedPbs,
     pub(crate) native: CapturedNative,
+    pub(crate) guests: BTreeMap<crate::model::GuestRef, managed::CapturedGuest>,
+    pub(crate) dns: BTreeMap<String, managed::CapturedDns>,
+    pub(crate) backup: managed::CapturedBackup,
 }
 
 struct CapturedApi {
@@ -62,6 +65,7 @@ impl CapturedState {
             &observed.join(crate::config::artifacts::PBS_SNAPSHOT),
             source_endpoint(&manifest, "pbs-api")?,
         )?);
+        let managed = managed::decode(&pve.0.responses, &pbs.0.responses)?;
 
         Ok(Self {
             id,
@@ -69,12 +73,30 @@ impl CapturedState {
             pve,
             pbs,
             native: CapturedNative { root: observed },
+            guests: managed.guests,
+            dns: managed.dns,
+            backup: managed.backup,
         })
     }
 
     pub(crate) fn id(&self) -> &CaptureId {
         debug_assert_eq!(self.id.as_str(), self.manifest.0.capture_id);
         &self.id
+    }
+
+    pub(crate) fn guest(
+        &self,
+        reference: crate::model::GuestRef,
+    ) -> Result<&managed::CapturedGuest> {
+        self.guests
+            .get(&reference)
+            .with_context(|| format!("complete capture has no managed guest {reference}"))
+    }
+
+    pub(crate) fn node_dns(&self, node: &str) -> Result<&managed::CapturedDns> {
+        self.dns.get(node).with_context(|| {
+            format!("complete capture has no managed DNS response for node {node}")
+        })
     }
 
     #[cfg(test)]
@@ -87,6 +109,7 @@ impl CapturedState {
         native_root: PathBuf,
     ) -> Self {
         let manifest = CaptureManifest::new(chrono::Utc::now(), BTreeMap::new(), BTreeMap::new());
+        let managed = managed::decode(&pve, &pbs).expect("fixture managed responses are valid");
         Self {
             id: CaptureId(id.into()),
             manifest: VerifiedCaptureManifest(manifest),
@@ -99,6 +122,9 @@ impl CapturedState {
                 responses: pbs,
             }),
             native: CapturedNative { root: native_root },
+            guests: managed.guests,
+            dns: managed.dns,
+            backup: managed.backup,
         }
     }
 }
@@ -131,18 +157,6 @@ impl CapturedApi {
             .get(path)
             .cloned()
             .with_context(|| format!("complete capture has no successful response for {path}"))
-    }
-}
-
-impl CapturedPve {
-    pub(crate) fn response(&self, path: &str) -> Result<Value> {
-        self.0.response(path)
-    }
-}
-
-impl CapturedPbs {
-    pub(crate) fn response(&self, path: &str) -> Result<Value> {
-        self.0.response(path)
     }
 }
 

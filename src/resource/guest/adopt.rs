@@ -2,9 +2,7 @@ use super::agent::QemuAgentOptions;
 use crate::{
     config::{AdoptionCandidate, ConfigDocument, LocalPatch, LocalState},
     discovery::CapturedState,
-    model::{
-        BindMount, DiskInterface, EfiSlot, GuestKind, GuestRef, NetworkSlot, Nic, UsbSlot, VmNic,
-    },
+    model::{BindMount, DiskInterface, EfiSlot, GuestKind, NetworkSlot, Nic, UsbSlot, VmNic},
     reconcile::Operation,
     utility::yaml_patch::Segment,
 };
@@ -19,13 +17,12 @@ pub(crate) fn candidates(
 ) -> Result<Vec<AdoptionCandidate>> {
     let resource = operation.resource();
     let guest = resource.guest().context("guest operation resource")?;
-    let actual = captured
-        .pve
-        .response(&guest.config_endpoint(&local.guests.node))?;
+    let managed = captured.guest(guest)?;
+    debug_assert_eq!(managed.reference, guest);
     let parsed = match guest.kind {
-        GuestKind::Lxc => captured_lxc(local, guest, &actual)
+        GuestKind::Lxc => captured_lxc(local, managed)
             .and_then(|value| serde_yaml::to_value(value).map_err(Into::into)),
-        GuestKind::Qemu => captured_vm(local, guest, &actual)
+        GuestKind::Qemu => captured_vm(local, managed)
             .and_then(|value| serde_yaml::to_value(value).map_err(Into::into)),
     };
     let value = match parsed {
@@ -57,13 +54,18 @@ pub(crate) fn candidates(
     )])
 }
 
-fn captured_lxc(local: &LocalState, guest: GuestRef, actual: &Value) -> Result<super::Lxc> {
+fn captured_lxc(
+    local: &LocalState,
+    captured: &crate::discovery::managed::CapturedGuest,
+) -> Result<super::Lxc> {
+    let guest = captured.reference;
+    let actual = captured.config();
     let mut result = local.guests.lxcs[&guest.vmid].clone();
-    assign_string(actual, "hostname", &mut result.hostname);
+    result.hostname = captured.name.clone();
+    result.cores = captured.cores;
+    result.memory_mb = captured.memory_mb;
     assign_string(actual, "ostype", &mut result.os);
     assign_bool(actual, "unprivileged", &mut result.unprivileged);
-    assign_number(actual, "cores", &mut result.cores);
-    assign_number(actual, "memory", &mut result.memory_mb);
     assign_number(actual, "swap", &mut result.swap_mb);
     assign_bool(actual, "onboot", &mut result.start.onboot);
     assign_start(actual, &mut result.start);
@@ -87,15 +89,20 @@ fn captured_lxc(local: &LocalState, guest: GuestRef, actual: &Value) -> Result<s
     Ok(result)
 }
 
-fn captured_vm(local: &LocalState, guest: GuestRef, actual: &Value) -> Result<super::Vm> {
+fn captured_vm(
+    local: &LocalState,
+    captured: &crate::discovery::managed::CapturedGuest,
+) -> Result<super::Vm> {
+    let guest = captured.reference;
+    let actual = captured.config();
     let mut result = local.guests.vms[&guest.vmid].clone();
-    assign_string(actual, "name", &mut result.name);
+    result.name = captured.name.clone();
+    result.cpu.cores = captured.cores;
+    result.memory_mb = captured.memory_mb;
     assign_string(actual, "machine", &mut result.machine);
     assign_string(actual, "bios", &mut result.bios);
     assign_string(actual, "cpu", &mut result.cpu.r#type);
-    assign_number(actual, "cores", &mut result.cpu.cores);
     assign_number(actual, "sockets", &mut result.cpu.sockets);
-    assign_number(actual, "memory", &mut result.memory_mb);
     result.qemu_guest_agent = QemuAgentOptions::from_api(actual.get("agent"))?.enabled;
     assign_bool(actual, "onboot", &mut result.start.onboot);
     assign_start(actual, &mut result.start);
@@ -286,6 +293,7 @@ fn operation_fields(operation: &Operation) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::GuestRef;
 
     #[test]
     fn parses_guest_devices_from_captured_api_values() {
@@ -322,7 +330,13 @@ mod tests {
         let actual = &fixture["pve"]["/nodes/pve/qemu/201/config"];
         let guest = GuestRef::new(GuestKind::Qemu, 201);
 
-        let adopted = captured_vm(&local, guest, actual).unwrap();
+        let captured = crate::discovery::managed::CapturedGuest::decode(
+            guest,
+            actual,
+            "/nodes/pve/qemu/201/config",
+        )
+        .unwrap();
+        let adopted = captured_vm(&local, &captured).unwrap();
         let yaml = serde_yaml::to_string(&adopted).unwrap();
         let reloaded: crate::resource::guest::Vm = serde_yaml::from_str(&yaml).unwrap();
         let mut operations = Vec::new();
@@ -357,7 +371,13 @@ mod tests {
         config["ide2"] = serde_json::json!("local:iso/installer.iso,media=cdrom");
         config["scsi2"] = serde_json::json!("local-lvm:cloudinit");
 
-        let adopted = captured_vm(&local, guest, config).unwrap();
+        let captured = crate::discovery::managed::CapturedGuest::decode(
+            guest,
+            config,
+            "/nodes/pve/qemu/201/config",
+        )
+        .unwrap();
+        let adopted = captured_vm(&local, &captured).unwrap();
 
         assert!(adopted.disks.contains_key(&DiskInterface::Scsi(0)));
         assert!(adopted.disks.contains_key(&DiskInterface::Sata(1)));

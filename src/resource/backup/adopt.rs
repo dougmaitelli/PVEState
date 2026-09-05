@@ -1,6 +1,6 @@
 use crate::{
     config::{AdoptionCandidate, ConfigDocument, LocalPatch, LocalState},
-    discovery::CapturedState,
+    discovery::{BackupCollection, CapturedState},
     model::{PruneJob, SyncJob, VerifyJob},
     reconcile::{ApiMethod, Operation},
     resource::backup::{BackupMode, Datastore, PveBackupJob, Retention, S3Endpoint},
@@ -78,8 +78,8 @@ pub(crate) fn candidates(
 }
 
 fn pve_job(captured: &CapturedState, id: &str) -> Result<Option<Vec<LocalPatch>>> {
-    let actual = captured.pve.response("/cluster/backup")?;
-    let item = find(&actual, "id", id)?;
+    let actual = captured.backup.collection(BackupCollection::PveJobs);
+    let item = find(actual, id)?;
     let resource_path = ["pve_backup_jobs", id];
     let resource = if let Some(item) = item {
         replace(&resource_path, parse_pve_job(item)?)?
@@ -93,8 +93,14 @@ fn pve_job(captured: &CapturedState, id: &str) -> Result<Option<Vec<LocalPatch>>
 }
 
 fn pbs_job(captured: &CapturedState, kind: &str, id: &str) -> Result<Option<Vec<LocalPatch>>> {
-    let actual = captured.pbs.response(&format!("/config/{kind}"))?;
-    let item = find(&actual, "id", id)?;
+    let collection = match kind {
+        "prune" => BackupCollection::PruneJobs,
+        "verify" => BackupCollection::VerifyJobs,
+        "sync" => BackupCollection::SyncJobs,
+        _ => bail!("unsupported PBS job kind {kind}"),
+    };
+    let actual = captured.backup.collection(collection);
+    let item = find(actual, id)?;
     let (resource, absent) = match kind {
         "prune" => (
             item.map(parse_prune)
@@ -133,13 +139,13 @@ fn fixed_pbs_resource(
     kind: &str,
     id: &str,
 ) -> Result<Option<Vec<LocalPatch>>> {
-    let (path, key) = match kind {
-        "datastore" => ("/config/datastore", "name"),
-        "s3" => ("/config/s3", "id"),
+    let collection = match kind {
+        "datastore" => BackupCollection::Datastores,
+        "s3" => BackupCollection::S3Endpoints,
         _ => bail!("unsupported PBS resource kind {kind}"),
     };
-    let actual = captured.pbs.response(path)?;
-    let item = find(&actual, key, id)?;
+    let actual = captured.backup.collection(collection);
+    let item = find(actual, id)?;
     let patch = match (kind, item) {
         ("datastore", Some(item)) => replace(&["pbs", "datastore"], parse_datastore(item)?)?,
         ("s3", Some(item)) => replace(&["pbs", "s3_endpoint"], parse_s3(item)?)?,
@@ -265,21 +271,14 @@ fn remove_absent(path: &[&str], id: &str) -> LocalPatch {
     }
 }
 
-fn find<'a>(items: &'a Value, key: &str, wanted: &str) -> Result<Option<&'a Value>> {
+fn find<'a>(
+    items: &'a [crate::discovery::CapturedBackupResource],
+    wanted: &str,
+) -> Result<Option<&'a Value>> {
     let mut found = None;
-    for item in items
-        .as_array()
-        .context("captured backup collection is not an array")?
-    {
-        let identity = item
-            .as_object()
-            .context("captured backup collection entry is not an object")?
-            .get(key)
-            .with_context(|| format!("captured backup collection entry has no {key}"))?
-            .as_str()
-            .with_context(|| format!("captured backup collection field {key} is not a string"))?;
-        if identity == wanted && found.replace(item).is_some() {
-            bail!("captured backup collection has duplicate {key} `{wanted}`")
+    for item in items {
+        if item.id == wanted && found.replace(item.raw()).is_some() {
+            bail!("captured backup collection has duplicate identity `{wanted}`")
         }
     }
     Ok(found)
