@@ -1,7 +1,7 @@
 use crate::{
     config::LocalState,
     reconcile::{Domain, ManagedFile, PlanBuilder},
-    resource::{native, native_paths},
+    resource::native_paths,
 };
 use anyhow::Result;
 use std::fs;
@@ -109,7 +109,7 @@ fn artifacts(local: &LocalState) -> Vec<(String, String)> {
 }
 
 fn safety_blockers(content: &str, resource: &str) -> Vec<String> {
-    native::parse_firewall(content)
+    super::native::parse(content)
         .unmodeled
         .iter()
         .map(|directive| {

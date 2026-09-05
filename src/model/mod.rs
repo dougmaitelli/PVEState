@@ -10,12 +10,9 @@ mod storage;
 
 pub(crate) use crate::resource::{
     backup::{BackupConfig, PruneJob, SyncJob, VerifyJob},
-    firewall::{
-        FirewallAction, FirewallAlias, FirewallDirection, FirewallIpSet, FirewallIpSetEntry,
-        FirewallLogLevel, FirewallPolicy, FirewallProtocol, FirewallRule, FirewallSecurityGroup,
-    },
+    firewall::{FirewallPolicy, FirewallRule},
     guest::{BindMount, Guests, Lxc, Nic, Vm, VmNic},
-    network::{Bridge, Interface, Network},
+    network::Network,
 };
 pub(crate) use cluster::ClusterConfig;
 pub(crate) use manifest::RepositoryManifest;

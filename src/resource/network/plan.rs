@@ -1,7 +1,7 @@
 use crate::{
     config::LocalState,
     reconcile::{Domain, ManagedFile, PlanBuilder},
-    resource::{native, native_paths},
+    resource::native_paths,
 };
 use anyhow::Result;
 use std::fs;
@@ -24,7 +24,7 @@ pub(crate) fn plan(local: &LocalState, builder: &mut PlanBuilder) -> Result<()> 
 }
 
 fn safety_blockers(content: &str, local: &super::Network) -> Result<Vec<String>> {
-    let parsed = native::parse_network(content, local)?;
+    let parsed = super::native::parse(content, local)?;
     Ok(parsed
         .unmodeled
         .iter()

@@ -4,7 +4,7 @@ use crate::{
     config::{AdoptionCandidate, ConfigDocument, LocalPatch, LocalState},
     discovery::CapturedState,
     reconcile::{Domain, Operation, Plan},
-    resource::{backup, guest, native, network},
+    resource::{backup, firewall, guest, network},
     utility::{progress::EventSink, runtime_security, yaml_patch},
 };
 use anyhow::{Context, Result, bail};
@@ -136,8 +136,27 @@ fn candidates(
                 domain: Domain::Backup | Domain::Pbs,
                 ..
             } => backup::adopt::candidates(local, captured, operation)?,
-            Operation::WriteFile { .. } | Operation::DeleteFile { .. } => {
-                vec![native::adoption_candidate(
+            Operation::WriteFile {
+                domain: Domain::Network,
+                ..
+            }
+            | Operation::DeleteFile {
+                domain: Domain::Network,
+                ..
+            } => vec![network::adopt::native_candidate(
+                local,
+                &captured.native,
+                operation,
+            )?],
+            Operation::WriteFile {
+                domain: Domain::Firewall,
+                ..
+            }
+            | Operation::DeleteFile {
+                domain: Domain::Firewall,
+                ..
+            } => {
+                vec![firewall::adopt::candidate(
                     local,
                     &captured.native,
                     operation,
