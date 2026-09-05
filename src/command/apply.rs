@@ -6,10 +6,9 @@ use crate::{
     command::plan::{ApiMethod, ApiTarget, Operation, Plan},
     config::Repository,
     settings::{ApplySettings, Settings},
-    utility::{authorization, progress, runtime_security, shell},
+    utility::{authorization, progress, remote_file, runtime_security, shell},
 };
 use anyhow::{Context, Result, bail};
-use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -212,34 +211,22 @@ fn execute(
                     ..
                 } => {
                     let s = ssh.context("plan requires apply SSH settings")?;
-                    shell::verify_remote_file(s, path, before_sha256.as_deref())?;
-                    let stamp = Utc::now().format("%Y%m%dT%H%M%SZ");
-                    let backup = format!("/root/pves-preapply/{stamp}{path}");
-                    let encoded = STANDARD.encode(content);
                     let mode = if path == "/etc/network/interfaces" {
                         "0644"
                     } else {
                         "0640"
                     };
-                    let cmd = format!(
-                        "install -d {} && if test -e {}; then cp -a {} {}; fi && base64 -d > {}.pves-new && install -m {} {}.pves-new {} && rm -f {}.pves-new",
-                        shell::quote(
-                            std::path::Path::new(&backup)
-                                .parent()
-                                .unwrap()
-                                .to_str()
-                                .unwrap()
-                        ),
-                        shell::quote(path),
-                        shell::quote(path),
-                        shell::quote(&backup),
-                        shell::quote(path),
-                        mode,
-                        shell::quote(path),
-                        shell::quote(path),
-                        shell::quote(path)
-                    );
-                    s.stdin(&cmd, encoded.as_bytes())?;
+                    remote_file::write(
+                        s,
+                        path,
+                        content,
+                        remote_file::WriteOptions {
+                            mode,
+                            expected_sha256: before_sha256.as_deref(),
+                            verify_expected: true,
+                            backup_existing: true,
+                        },
+                    )?;
                     if *activate && settings.activate_network {
                         s.run("ifreload -a")?;
                     }
