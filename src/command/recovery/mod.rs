@@ -12,6 +12,7 @@ use crate::{
     utility::{progress::EventSink, runtime_security},
 };
 use anyhow::{Context, Result};
+use serde::Serialize;
 
 #[derive(Clone, Copy)]
 pub(crate) enum Stage {
@@ -23,6 +24,18 @@ pub(crate) enum Stage {
     All,
 }
 
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub(crate) enum RecoveryReport {
+    Plan {
+        plan: plan::RecoveryPlan,
+    },
+    Completed {
+        stage: String,
+        message: Option<String>,
+    },
+}
+
 pub(crate) fn run(
     repo: &LocalState,
     stage: Stage,
@@ -30,12 +43,14 @@ pub(crate) fn run(
     settings: &RecoverySettings,
     ssh: Option<&dyn RemoteHost>,
     events: &dyn EventSink,
-) -> Result<()> {
+) -> Result<RecoveryReport> {
     events.section(&format!("Recovery: {}", stage.name()));
     runtime_security::prepare(&repo.runtime())?;
 
     if matches!(stage, Stage::Plan) {
-        return plan::create(repo, target, events);
+        return Ok(RecoveryReport::Plan {
+            plan: plan::create(repo, target, events)?,
+        });
     }
 
     let recovery_plan = plan::load(repo)?;
@@ -55,7 +70,15 @@ pub(crate) fn run(
             configure::run(repo, ssh)
         },
         Stage::Plan => unreachable!(),
-    }
+    }?;
+
+    Ok(RecoveryReport::Completed {
+        stage: stage.name().into(),
+        message: matches!(stage, Stage::BootstrapPve | Stage::All).then(|| {
+            "replacement PVE configuration staged; activate networking only with console access"
+                .into()
+        }),
+    })
 }
 
 impl Stage {

@@ -13,13 +13,21 @@ use std::{
     fs,
 };
 
+#[derive(Debug, serde::Serialize)]
+pub(crate) struct AdoptionReport {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) candidates: Option<Vec<AdoptionCandidate>>,
+    pub(crate) selected: usize,
+    pub(crate) changed_documents: Vec<ConfigDocument>,
+}
+
 pub(crate) fn run(
     local: &LocalState,
     preview: bool,
     all: bool,
     requested: &[String],
     events: &dyn EventSink,
-) -> Result<()> {
+) -> Result<AdoptionReport> {
     events.section(if preview {
         "Previewing captured drift"
     } else {
@@ -47,8 +55,11 @@ pub(crate) fn run(
 
     if preview {
         events.finish(true);
-        events.output(&serde_json::to_string_pretty(&candidates)?);
-        return Ok(());
+        return Ok(AdoptionReport {
+            candidates: Some(candidates),
+            selected: 0,
+            changed_documents: Vec::new(),
+        });
     }
     let selected = selection(&candidates, all, requested)?;
     let known = candidates
@@ -82,12 +93,17 @@ pub(crate) fn run(
     transaction::validate(local, &documents)?;
     transaction::publish(local, &documents)?;
     events.finish(true);
-    events.output(&format!(
-        "adopted {} captured value(s) into {}",
-        selected.len(),
-        documents.keys().cloned().collect::<Vec<_>>().join(", ")
-    ));
-    Ok(())
+    Ok(AdoptionReport {
+        candidates: None,
+        selected: selected.len(),
+        changed_documents: documents
+            .keys()
+            .map(|path| {
+                ConfigDocument::from_path(path)
+                    .with_context(|| format!("unknown changed configuration document {path}"))
+            })
+            .collect::<Result<_>>()?,
+    })
 }
 
 fn selection(

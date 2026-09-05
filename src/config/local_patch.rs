@@ -3,7 +3,8 @@ use serde_yaml::Value;
 
 type ConfigPath = Vec<Segment>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum ConfigDocument {
     Guests,
     Network,
@@ -21,6 +22,18 @@ impl ConfigDocument {
             Self::Node => "config/node.yml",
             Self::Backup => "config/backup.yml",
         }
+    }
+
+    pub(crate) fn from_path(path: &str) -> Option<Self> {
+        [
+            Self::Guests,
+            Self::Network,
+            Self::Cluster,
+            Self::Node,
+            Self::Backup,
+        ]
+        .into_iter()
+        .find(|document| document.path() == path)
     }
 }
 

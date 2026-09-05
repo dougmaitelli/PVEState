@@ -1,4 +1,4 @@
-use super::resource;
+use super::{ApplyReport, resource};
 use crate::{
     reconcile::{Operation, Plan},
     utility::atomic_file,
@@ -140,6 +140,19 @@ impl ApplyJournal {
         atomic_file::write_json(&self.path, self)?;
         atomic_file::write_json(&self.latest, self)?;
         Ok(())
+    }
+
+    pub(crate) fn report(&self) -> ApplyReport {
+        ApplyReport {
+            journal_id: self.apply_id.clone(),
+            journal_path: self.path.display().to_string(),
+            completed: self
+                .operations
+                .iter()
+                .filter(|operation| operation.status == OperationStatus::Applied)
+                .count(),
+            failed: self.failure.clone(),
+        }
     }
 }
 

@@ -11,7 +11,6 @@ pub(crate) trait EventSink {
     fn operation(&self, message: &str);
     fn detail(&self, message: &str);
     fn finish(&self, success: bool);
-    fn output(&self, message: &str);
 }
 
 pub(crate) struct TerminalEventSink {
@@ -112,10 +111,6 @@ impl EventSink for TerminalEventSink {
     fn finish(&self, success: bool) {
         Self::finish_stage(self.active.borrow_mut().take(), success);
     }
-
-    fn output(&self, message: &str) {
-        println!("{message}");
-    }
 }
 
 impl Drop for TerminalEventSink {
@@ -133,7 +128,6 @@ impl EventSink for NullEventSink {
     fn operation(&self, _: &str) {}
     fn detail(&self, _: &str) {}
     fn finish(&self, _: bool) {}
-    fn output(&self, _: &str) {}
 }
 
 fn interactive() -> bool {
@@ -162,9 +156,6 @@ mod tests {
         }
         fn finish(&self, success: bool) {
             self.0.lock().unwrap().push(format!("finish:{success}"));
-        }
-        fn output(&self, message: &str) {
-            self.0.lock().unwrap().push(format!("output:{message}"));
         }
     }
 

@@ -16,13 +16,27 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{collections::BTreeMap, fs, path::Path};
 
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub(crate) struct CaptureReport {
+    pub(crate) capture_id: String,
+    pub(crate) endpoint_count: usize,
+    pub(crate) failures: Vec<String>,
+    pub(crate) destination: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub(crate) struct ValidationReport {
+    pub(crate) check_count: usize,
+    pub(crate) failures: Vec<String>,
+}
+
 pub(crate) fn run(
     repo: &LocalState,
     pve: &dyn PveClient,
     pbs: &dyn PbsClient,
     ssh: &dyn RemoteHost,
     events: &dyn EventSink,
-) -> Result<()> {
+) -> Result<CaptureReport> {
     events.section("Capturing live state");
     events.detail(&format!("configuration: {}", repo.root().display()));
     runtime_security::prepare(&repo.runtime())?;
@@ -70,11 +84,12 @@ pub(crate) fn run(
     publish_observed(repo, &staged_observed, &manifest.capture_id, events)?;
     write_runtime_manifest(repo, &manifest)?;
     events.finish(true);
-    events.output(&format!(
-        "captured live state into {}",
-        repo.root().display()
-    ));
-    Ok(())
+    Ok(CaptureReport {
+        capture_id: manifest.capture_id,
+        endpoint_count: manifest.sources.len(),
+        failures: manifest.failures,
+        destination: repo.root().display().to_string(),
+    })
 }
 
 fn perform(
@@ -311,7 +326,7 @@ pub(crate) fn validate(
     repo: &LocalState,
     ssh: &dyn RemoteHost,
     events: &dyn EventSink,
-) -> Result<()> {
+) -> Result<ValidationReport> {
     runtime_security::prepare(&repo.runtime())?;
     let mut failures = Vec::new();
     let mut report = Vec::new();
@@ -338,8 +353,10 @@ pub(crate) fn validate(
     )?;
     if failures.is_empty() {
         events.finish(true);
-        events.output(&format!("validation passed: {} checks", report.len()));
-        Ok(())
+        Ok(ValidationReport {
+            check_count: report.len(),
+            failures,
+        })
     } else {
         bail!(failures.join("\n"))
     }

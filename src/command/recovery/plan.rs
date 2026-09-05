@@ -13,7 +13,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
-pub(super) struct RecoveryPlan {
+pub(crate) struct RecoveryPlan {
     schema_version: u8,
     pub(super) created_at: DateTime<Utc>,
     pub(super) target: String,
@@ -40,7 +40,11 @@ impl PlanEnvelope for RecoveryPlan {
     }
 }
 
-pub(super) fn create(repo: &LocalState, target: &str, events: &dyn EventSink) -> Result<()> {
+pub(super) fn create(
+    repo: &LocalState,
+    target: &str,
+    events: &dyn EventSink,
+) -> Result<RecoveryPlan> {
     let mut blockers = Vec::new();
     if repo.restore.target.expected_host_key_sha256.is_none() {
         blockers.push("target.expected_host_key_sha256".into());
@@ -90,8 +94,7 @@ pub(super) fn create(repo: &LocalState, target: &str, events: &dyn EventSink) ->
         &plan,
     )?;
     events.finish(true);
-    events.output(&serde_json::to_string_pretty(&plan)?);
-    Ok(())
+    Ok(plan)
 }
 
 pub(super) fn load(repo: &LocalState) -> Result<RecoveryPlan> {

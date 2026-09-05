@@ -12,6 +12,14 @@ use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[derive(Debug, serde::Serialize, PartialEq, Eq)]
+pub(crate) struct ApplyReport {
+    pub(crate) journal_id: String,
+    pub(crate) journal_path: String,
+    pub(crate) completed: usize,
+    pub(crate) failed: Option<String>,
+}
+
 struct MutationClients {
     pve: Box<dyn PveClient>,
     pbs: Option<Box<dyn PbsClient>>,
@@ -38,7 +46,11 @@ impl MutationClients {
     }
 }
 
-pub(crate) fn run(repo: &LocalState, settings: &Settings, events: &dyn EventSink) -> Result<()> {
+pub(crate) fn run(
+    repo: &LocalState,
+    settings: &Settings,
+    events: &dyn EventSink,
+) -> Result<ApplyReport> {
     run_with_factory(
         repo,
         &settings.apply,
@@ -52,7 +64,7 @@ fn run_with_factory(
     settings: &ApplySettings,
     factory: impl FnOnce() -> Result<MutationClients>,
     events: &dyn EventSink,
-) -> Result<()> {
+) -> Result<ApplyReport> {
     events.section("Applying local configuration to live system");
     runtime_security::prepare(&repo.runtime())?;
     let plan = authorize(repo, settings)?;
@@ -75,8 +87,7 @@ fn run_with_factory(
             journal.succeed();
             journal.persist()?;
             events.finish(true);
-            events.output(&serde_json::to_string_pretty(&journal)?);
-            Ok(())
+            Ok(journal.report())
         },
         Err(error) => {
             if journal.failure.is_none() {
@@ -487,6 +498,32 @@ mod tests {
                 .join(crate::config::artifacts::APPLY_LATEST)
                 .exists()
         );
+    }
+
+    #[test]
+    fn successful_service_returns_an_apply_report() {
+        let (_temp, repo, settings) = authorized_apply();
+
+        let report = run_with_factory(
+            &repo,
+            &settings,
+            || {
+                Ok(MutationClients {
+                    pve: Box::new(FakePve {
+                        calls: AtomicUsize::new(0),
+                    }),
+                    pbs: None,
+                    ssh: None,
+                })
+            },
+            &crate::utility::progress::NullEventSink,
+        )
+        .unwrap();
+
+        assert_eq!(report.completed, 0);
+        assert_eq!(report.failed, None);
+        assert!(std::path::Path::new(&report.journal_path).is_file());
+        assert!(!report.journal_id.is_empty());
     }
 
     #[test]

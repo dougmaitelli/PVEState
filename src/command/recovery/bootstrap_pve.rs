@@ -48,9 +48,6 @@ pub(super) fn run(repo: &LocalState, ssh: &dyn RemoteHost, events: &dyn EventSin
         )?;
     }
     events.finish(true);
-    events.output(
-        "replacement PVE configuration staged; activate networking only with console access",
-    );
     Ok(())
 }
 

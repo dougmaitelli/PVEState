@@ -83,7 +83,7 @@ pub(super) fn validate(repo: &LocalState, events: &dyn EventSink) -> Result<()> 
             validate_firewall(&resource, policy)?;
         }
     }
-    events.output(&format!(
+    events.detail(&format!(
         "configuration structurally valid: {} guests, {} NICs; management scope is documented in management-scope.json",
         managed.len(),
         macs.len()
