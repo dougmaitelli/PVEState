@@ -5,6 +5,7 @@ use std::{fs, path::Path};
 
 pub(crate) fn open(root: &Path) -> Result<LocalState> {
     let layout = RepositoryLayout::new(root);
+    super::transaction::recover(&layout)?;
 
     let state = LocalState {
         guests: read(&layout, "guests.yml")?,

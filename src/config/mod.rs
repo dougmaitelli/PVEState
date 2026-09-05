@@ -6,6 +6,7 @@ mod local_patch;
 mod local_state;
 pub(crate) mod scaffold;
 pub(crate) mod schema;
+pub(crate) mod transaction;
 
 pub(crate) use adoption::AdoptionCandidate;
 pub(crate) use layout::RepositoryLayout;

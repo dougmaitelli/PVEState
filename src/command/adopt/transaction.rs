@@ -2,63 +2,11 @@ use crate::{
     config::{self, LocalState},
     utility::atomic_file,
 };
-use anyhow::{Context, Result, bail};
-use chrono::{DateTime, Utc};
-use serde::Serialize;
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::{Component, Path},
-};
-
-#[derive(Serialize)]
-struct Journal {
-    schema_version: u8,
-    adoption_id: String,
-    started_at: DateTime<Utc>,
-    finished_at: Option<DateTime<Utc>>,
-    status: &'static str,
-    failure: Option<String>,
-    documents: Vec<DocumentStatus>,
-}
-
-#[derive(Serialize)]
-struct DocumentStatus {
-    path: String,
-    status: &'static str,
-}
-
-impl Journal {
-    fn new(documents: &BTreeMap<String, String>) -> Self {
-        let started_at = Utc::now();
-        Self {
-            schema_version: 1,
-            adoption_id: started_at.format("%Y%m%dT%H%M%S%.fZ").to_string(),
-            started_at,
-            finished_at: None,
-            status: "publishing",
-            failure: None,
-            documents: documents
-                .keys()
-                .map(|path| DocumentStatus {
-                    path: path.clone(),
-                    status: "pending",
-                })
-                .collect(),
-        }
-    }
-
-    fn persist(&self, runtime: &Path) -> Result<()> {
-        atomic_file::write_json(
-            &runtime.join(format!("adopt-{}.json", self.adoption_id)),
-            self,
-        )?;
-        atomic_file::write_json(&runtime.join(crate::config::artifacts::ADOPT_LATEST), self)
-    }
-}
+use anyhow::{Context, Result};
+use std::{collections::BTreeMap, fs};
 
 pub(super) fn validate(repo: &LocalState, documents: &BTreeMap<String, String>) -> Result<()> {
-    validate_paths(documents)?;
+    crate::config::transaction::validate_paths(documents)?;
     let staging = tempfile::Builder::new()
         .prefix("adopt-validation-")
         .tempdir_in(repo.runtime())?;
@@ -84,125 +32,13 @@ pub(super) fn validate(repo: &LocalState, documents: &BTreeMap<String, String>) 
 }
 
 pub(super) fn publish(repo: &LocalState, documents: &BTreeMap<String, String>) -> Result<()> {
-    publish_with(repo, documents, atomic_file::write)
-}
-
-fn publish_with(
-    repo: &LocalState,
-    documents: &BTreeMap<String, String>,
-    mut writer: impl FnMut(&Path, &[u8]) -> Result<()>,
-) -> Result<()> {
-    validate_paths(documents)?;
-    let originals = documents
-        .keys()
-        .map(|path| {
-            fs::read(repo.root().join(path))
-                .map(|content| (path.clone(), content))
-                .with_context(|| format!("read original {path}"))
-        })
-        .collect::<Result<BTreeMap<_, _>>>()?;
-    let mut journal = Journal::new(documents);
-    journal.persist(&repo.runtime())?;
-    let mut published = Vec::new();
-
-    for (index, (path, content)) in documents.iter().enumerate() {
-        if let Err(error) = writer(&repo.root().join(path), content.as_bytes()) {
-            journal.status = "rolling-back";
-            journal.failure = Some(format!("publish {path}: {error:#}"));
-            let _ = journal.persist(&repo.runtime());
-            let rollback_failures = rollback(
-                repo,
-                documents,
-                &originals,
-                &published,
-                &mut journal,
-                &mut writer,
-            );
-            journal.status = "failed";
-            journal.finished_at = Some(Utc::now());
-            journal.persist(&repo.runtime())?;
-            if !rollback_failures.is_empty() {
-                bail!(
-                    "adoption failed publishing {path}; rollback also failed: {}",
-                    rollback_failures.join("; ")
-                )
-            }
-            return Err(error).with_context(|| format!("publish adopted document {path}"));
-        }
-        journal.documents[index].status = "published";
-        published.push(path.clone());
-        if let Err(error) = journal.persist(&repo.runtime()) {
-            journal.status = "rolling-back";
-            journal.failure = Some(format!("persist adoption journal: {error:#}"));
-            let rollback_failures = rollback(
-                repo,
-                documents,
-                &originals,
-                &published,
-                &mut journal,
-                &mut writer,
-            );
-            journal.status = "failed";
-            journal.finished_at = Some(Utc::now());
-            let _ = journal.persist(&repo.runtime());
-            if !rollback_failures.is_empty() {
-                bail!(
-                    "adoption journal failed; rollback also failed: {}",
-                    rollback_failures.join("; ")
-                )
-            }
-            return Err(error).context("persist adoption journal; published documents restored");
-        }
-    }
-
-    journal.status = "succeeded";
-    journal.finished_at = Some(Utc::now());
-    journal.persist(&repo.runtime())
-}
-
-fn rollback(
-    repo: &LocalState,
-    documents: &BTreeMap<String, String>,
-    originals: &BTreeMap<String, Vec<u8>>,
-    published: &[String],
-    journal: &mut Journal,
-    writer: &mut impl FnMut(&Path, &[u8]) -> Result<()>,
-) -> Vec<String> {
-    let mut failures = Vec::new();
-    for published_path in published.iter().rev() {
-        let original = &originals[published_path];
-        match writer(&repo.root().join(published_path), original) {
-            Ok(()) => {
-                let position = documents
-                    .keys()
-                    .position(|path| path == published_path)
-                    .expect("published document belongs to transaction");
-                journal.documents[position].status = "rolled-back";
-            },
-            Err(error) => failures.push(format!("{published_path}: {error:#}")),
-        }
-    }
-    failures
-}
-
-fn validate_paths(documents: &BTreeMap<String, String>) -> Result<()> {
-    for path in documents.keys() {
-        let path = Path::new(path);
-        if path.is_absolute()
-            || !path.starts_with("config")
-            || path
-                .components()
-                .any(|part| matches!(part, Component::ParentDir))
-        {
-            bail!("unsafe adopted document path {}", path.display());
-        }
-    }
-    Ok(())
+    crate::config::transaction::publish(&repo.layout, documents)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::bail;
     use std::cell::Cell;
 
     fn repository() -> (tempfile::TempDir, LocalState) {
@@ -226,15 +62,16 @@ mod tests {
         ]);
         let calls = Cell::new(0);
 
-        let error = publish_with(&repo, &documents, |path, content| {
-            let call = calls.get() + 1;
-            calls.set(call);
-            if call == 2 {
-                bail!("injected second-file failure")
-            }
-            atomic_file::write(path, content)
-        })
-        .unwrap_err();
+        let error =
+            crate::config::transaction::publish_with(&repo.layout, &documents, |path, content| {
+                let call = calls.get() + 1;
+                calls.set(call);
+                if call == 2 {
+                    bail!("injected second-file failure")
+                }
+                atomic_file::write(path, content)
+            })
+            .unwrap_err();
 
         assert!(format!("{error:#}").contains("injected second-file failure"));
         assert_eq!(fs::read(repo.root().join(paths[0])).unwrap(), before[0]);
@@ -243,8 +80,8 @@ mod tests {
             &fs::read(repo.runtime().join(crate::config::artifacts::ADOPT_LATEST)).unwrap(),
         )
         .unwrap();
-        assert_eq!(journal["status"], "failed");
-        assert_eq!(journal["documents"][0]["status"], "rolled-back");
+        assert_eq!(journal["state"], "failed");
+        assert_eq!(journal["files"][0]["state"], "rolled-back");
     }
 
     #[test]
@@ -293,6 +130,6 @@ mod tests {
             &fs::read(repo.runtime().join(crate::config::artifacts::ADOPT_LATEST)).unwrap(),
         )
         .unwrap();
-        assert_eq!(journal["status"], "succeeded");
+        assert_eq!(journal["state"], "complete");
     }
 }

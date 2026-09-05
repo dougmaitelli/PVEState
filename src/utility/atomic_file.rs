@@ -59,6 +59,10 @@ fn sync_parent(parent: &Path) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn sync_directory(path: &Path) -> Result<()> {
+    sync_parent(path)
+}
+
 #[cfg(windows)]
 fn sync_parent(_: &Path) -> Result<()> {
     // Windows does not allow opening a directory as a regular File. The

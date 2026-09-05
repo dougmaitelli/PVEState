@@ -10,8 +10,9 @@ use crate::{
     },
     utility::{atomic_file, progress::EventSink, runtime_security},
 };
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{collections::BTreeMap, fs, path::Path};
 
@@ -26,6 +27,7 @@ pub(crate) fn run(
     events.detail(&format!("configuration: {}", repo.root().display()));
     runtime_security::prepare(&repo.runtime())?;
     fs::create_dir_all(repo.root().join("observed"))?;
+    recover_observed(repo, events)?;
     let staging = tempfile::Builder::new()
         .prefix(".capture-")
         .tempdir_in(repo.root().join("observed"))?;
@@ -161,26 +163,146 @@ fn publish_observed(
     capture_id: &str,
     events: &dyn EventSink,
 ) -> Result<()> {
+    let observed_root = repo.root().join("observed");
     let current = repo.observed();
-    let previous = repo
-        .root()
-        .join("observed")
-        .join(format!(".previous-{capture_id}"));
+    let previous_name = format!(".previous-{capture_id}");
+    let previous = observed_root.join(&previous_name);
+    let staged_name = staged
+        .strip_prefix(&observed_root)
+        .context("capture staging directory is outside observed root")?
+        .to_string_lossy()
+        .into_owned();
+    let mut transaction = CaptureTransaction {
+        schema_version: 1,
+        capture_id: capture_id.into(),
+        state: CaptureTransactionState::Ready,
+        staged: staged_name,
+        previous: previous_name,
+        had_current: current.exists(),
+    };
+    transaction.persist(repo)?;
+
     let had_current = current.exists();
     if had_current {
         fs::rename(&current, &previous)?;
+        atomic_file::sync_directory(&observed_root)?;
     }
+    transaction.state = CaptureTransactionState::Publishing;
+    transaction.persist(repo)?;
     if let Err(error) = fs::rename(staged, &current) {
         if had_current {
             fs::rename(&previous, &current)?;
+            atomic_file::sync_directory(&observed_root)?;
         }
         return Err(error.into());
     }
+    atomic_file::sync_directory(&observed_root)?;
     if had_current && let Err(error) = fs::remove_dir_all(&previous) {
         events.detail(&format!(
             "could not remove previous capture {}: {error}",
             previous.display()
         ));
+    }
+    transaction.state = CaptureTransactionState::Complete;
+    transaction.persist(repo)?;
+    Ok(())
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct CaptureTransaction {
+    schema_version: u8,
+    capture_id: String,
+    state: CaptureTransactionState,
+    staged: String,
+    previous: String,
+    had_current: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+enum CaptureTransactionState {
+    Ready,
+    Publishing,
+    Complete,
+}
+
+impl CaptureTransaction {
+    fn path(repo: &LocalState) -> std::path::PathBuf {
+        repo.runtime()
+            .join(crate::config::artifacts::CAPTURE_TRANSACTION)
+    }
+
+    fn persist(&self, repo: &LocalState) -> Result<()> {
+        atomic_file::write_json(&Self::path(repo), self)
+    }
+}
+
+fn recover_observed(repo: &LocalState, events: &dyn EventSink) -> Result<()> {
+    let journal_path = CaptureTransaction::path(repo);
+    if !journal_path.exists() {
+        return Ok(());
+    }
+    let mut transaction: CaptureTransaction = serde_json::from_slice(
+        &fs::read(&journal_path).context("read interrupted capture transaction")?,
+    )
+    .context("parse interrupted capture transaction")?;
+    if transaction.schema_version != 1 {
+        bail!("unsupported capture transaction schema; manual recovery required")
+    }
+    validate_capture_path(&transaction.staged)?;
+    validate_capture_path(&transaction.previous)?;
+    if transaction.state == CaptureTransactionState::Complete {
+        return Ok(());
+    }
+
+    events.detail(&format!(
+        "recovering interrupted capture {}",
+        transaction.capture_id
+    ));
+    let observed_root = repo.root().join("observed");
+    let current = repo.observed();
+    let staged = observed_root.join(&transaction.staged);
+    let previous = observed_root.join(&transaction.previous);
+
+    if staged.exists() {
+        if current.exists() && !previous.exists() && transaction.had_current {
+            fs::rename(&current, &previous)?;
+            atomic_file::sync_directory(&observed_root)?;
+        }
+        if !current.exists() {
+            fs::rename(&staged, &current)?;
+            atomic_file::sync_directory(&observed_root)?;
+        }
+    } else if !current.exists() {
+        if previous.exists() {
+            fs::rename(&previous, &current)?;
+            bail!(
+                "interrupted capture {} lacked its staged generation; restored previous capture",
+                transaction.capture_id
+            )
+        } else {
+            bail!(
+                "interrupted capture {} has no current, staged, or previous generation",
+                transaction.capture_id
+            )
+        }
+    }
+    if previous.exists() {
+        fs::remove_dir_all(&previous)?;
+        atomic_file::sync_directory(&observed_root)?;
+    }
+    transaction.state = CaptureTransactionState::Complete;
+    transaction.persist(repo)
+}
+
+fn validate_capture_path(path: &str) -> Result<()> {
+    let path = Path::new(path);
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        bail!("unsafe capture transaction path {}", path.display())
     }
     Ok(())
 }
@@ -257,5 +379,100 @@ mod tests {
         );
         assert!(!repo.observed().join("previous.txt").exists());
         assert!(!root.join("observed/.previous-fixture").exists());
+    }
+
+    #[test]
+    fn interrupted_capture_finishes_publication_on_restart() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("environment");
+        config::scaffold::initialize(&root).unwrap();
+        let repo = config::open(&root).unwrap();
+        fs::write(repo.observed().join("old.txt"), "old").unwrap();
+        let staged_parent = root.join("observed/.capture-interrupted");
+        let staged = staged_parent.join("production");
+        fs::create_dir_all(&staged).unwrap();
+        fs::write(staged.join("new.txt"), "new").unwrap();
+        let previous = root.join("observed/.previous-interrupted");
+        fs::rename(repo.observed(), &previous).unwrap();
+        CaptureTransaction {
+            schema_version: 1,
+            capture_id: "interrupted".into(),
+            state: CaptureTransactionState::Publishing,
+            staged: ".capture-interrupted/production".into(),
+            previous: ".previous-interrupted".into(),
+            had_current: true,
+        }
+        .persist(&repo)
+        .unwrap();
+
+        recover_observed(&repo, &crate::utility::progress::NullEventSink).unwrap();
+        recover_observed(&repo, &crate::utility::progress::NullEventSink).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(repo.observed().join("new.txt")).unwrap(),
+            "new"
+        );
+        assert!(!previous.exists());
+    }
+
+    #[test]
+    fn ready_capture_replaces_the_old_current_generation() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("environment");
+        config::scaffold::initialize(&root).unwrap();
+        let repo = config::open(&root).unwrap();
+        fs::write(repo.observed().join("old.txt"), "old").unwrap();
+        let staged = root.join("observed/.capture-ready/production");
+        fs::create_dir_all(&staged).unwrap();
+        fs::write(staged.join("new.txt"), "new").unwrap();
+        CaptureTransaction {
+            schema_version: 1,
+            capture_id: "ready".into(),
+            state: CaptureTransactionState::Ready,
+            staged: ".capture-ready/production".into(),
+            previous: ".previous-ready".into(),
+            had_current: true,
+        }
+        .persist(&repo)
+        .unwrap();
+
+        recover_observed(&repo, &crate::utility::progress::NullEventSink).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(repo.observed().join("new.txt")).unwrap(),
+            "new"
+        );
+        assert!(!repo.observed().join("old.txt").exists());
+        assert!(!root.join("observed/.previous-ready").exists());
+    }
+
+    #[test]
+    fn interrupted_capture_after_final_rename_only_cleans_previous() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("environment");
+        config::scaffold::initialize(&root).unwrap();
+        let repo = config::open(&root).unwrap();
+        let previous = root.join("observed/.previous-interrupted");
+        fs::rename(repo.observed(), &previous).unwrap();
+        fs::create_dir(repo.observed()).unwrap();
+        fs::write(repo.observed().join("new.txt"), "new").unwrap();
+        CaptureTransaction {
+            schema_version: 1,
+            capture_id: "interrupted".into(),
+            state: CaptureTransactionState::Publishing,
+            staged: ".capture-interrupted/production".into(),
+            previous: ".previous-interrupted".into(),
+            had_current: true,
+        }
+        .persist(&repo)
+        .unwrap();
+
+        recover_observed(&repo, &crate::utility::progress::NullEventSink).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(repo.observed().join("new.txt")).unwrap(),
+            "new"
+        );
+        assert!(!previous.exists());
     }
 }

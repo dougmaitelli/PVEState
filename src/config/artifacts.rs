@@ -7,5 +7,7 @@ pub(crate) const PRODUCTION_PLAN: &str = "production-plan.json";
 pub(crate) const RECOVERY_PLAN: &str = "recovery-plan.json";
 pub(crate) const APPLY_LATEST: &str = "apply-latest.json";
 pub(crate) const ADOPT_LATEST: &str = "adopt-latest.json";
+pub(crate) const ADOPT_TRANSACTION: &str = "adopt-transaction.json";
+pub(crate) const CAPTURE_TRANSACTION: &str = "capture-transaction.json";
 pub(crate) const HOST_LATEST: &str = "host-latest.json";
 pub(crate) const VALIDATION: &str = "validation.json";
