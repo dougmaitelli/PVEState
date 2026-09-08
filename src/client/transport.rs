@@ -16,7 +16,6 @@ pub(super) struct JsonApiClient {
 
 #[derive(serde::Deserialize)]
 struct Envelope<T> {
-    #[serde(default)]
     data: Option<T>,
 }
 
@@ -54,7 +53,7 @@ impl JsonApiClient {
         self.endpoint.as_str().trim_end_matches('/')
     }
 
-    pub(crate) fn get_data<T: DeserializeOwned + Default>(&self, path: &str) -> Result<T> {
+    pub(crate) fn get_data<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
         let response = self
             .http
             .get(self.url(path)?)
@@ -63,7 +62,7 @@ impl JsonApiClient {
             .header(USER_AGENT, concat!("pvestate/", env!("CARGO_PKG_VERSION")))
             .send()?
             .error_for_status()?;
-        Ok(response.json::<Envelope<T>>()?.data.unwrap_or_default())
+        require_data(response.json::<Envelope<T>>()?, path)
     }
 
     pub(crate) fn form(&self, method: Method, path: &str, data: &impl Serialize) -> Result<()> {
@@ -82,6 +81,12 @@ impl JsonApiClient {
             .join(path.trim_start_matches('/'))
             .with_context(|| format!("invalid API path {path}"))
     }
+}
+
+fn require_data<T>(envelope: Envelope<T>, path: &str) -> Result<T> {
+    envelope
+        .data
+        .with_context(|| format!("API response from {path} has no data field"))
 }
 
 #[cfg(test)]
@@ -116,5 +121,17 @@ mod tests {
         .unwrap();
 
         assert!(error.to_string().contains("valid HTTP header"));
+    }
+
+    #[test]
+    fn missing_envelope_data_is_not_defaulted() {
+        let envelope: Envelope<serde_json::Value> = serde_json::from_str("{}").unwrap();
+
+        let error = require_data(envelope, "/version").unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "API response from /version has no data field"
+        );
     }
 }

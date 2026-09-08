@@ -13,6 +13,8 @@ pub(crate) struct PbsSnapshot {
     pub(crate) endpoint: String,
     pub(crate) requests: Responses,
     pub(crate) datastores: BTreeMap<String, Datastore>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) enumeration_failures: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -50,26 +52,43 @@ pub(crate) fn capture(client: &dyn PbsClient, events: &dyn EventSink) -> PbsSnap
     };
 
     let mut datastores = BTreeMap::new();
+    let mut enumeration_failures = Vec::new();
     if let Some(items) = requests.datastores.data.as_ref() {
-        for config in items {
+        for (index, config) in items.iter().enumerate() {
             let Some(name) = config
                 .get("name")
                 .or_else(|| config.get("store"))
                 .and_then(Value::as_str)
             else {
+                enumeration_failures.push(format!(
+                    "/config/datastore[{index}]: missing non-empty string field name or store"
+                ));
                 continue;
             };
+            if name.is_empty() {
+                enumeration_failures.push(format!(
+                    "/config/datastore[{index}]: datastore identity is empty"
+                ));
+                continue;
+            }
             let encoded = utf8_percent_encode(name, NON_ALPHANUMERIC);
             let root = format!("/admin/datastore/{encoded}");
-            datastores.insert(
-                name.into(),
-                Datastore {
-                    config: config.clone(),
-                    status: get(client, &format!("{root}/status"), events),
-                    groups: get(client, &format!("{root}/groups"), events),
-                    snapshots: get(client, &format!("{root}/snapshots"), events),
-                },
-            );
+            if datastores
+                .insert(
+                    name.into(),
+                    Datastore {
+                        config: config.clone(),
+                        status: get(client, &format!("{root}/status"), events),
+                        groups: get(client, &format!("{root}/groups"), events),
+                        snapshots: get(client, &format!("{root}/snapshots"), events),
+                    },
+                )
+                .is_some()
+            {
+                enumeration_failures.push(format!(
+                    "/config/datastore: duplicate datastore identity {name}"
+                ));
+            }
         }
     }
 
@@ -80,6 +99,7 @@ pub(crate) fn capture(client: &dyn PbsClient, events: &dyn EventSink) -> PbsSnap
         endpoint: client.endpoint().into(),
         requests,
         datastores,
+        enumeration_failures,
     }
 }
 
@@ -93,7 +113,7 @@ fn get<T: serde::de::DeserializeOwned>(
 
 impl PbsSnapshot {
     pub(crate) fn failures(&self) -> Vec<String> {
-        let mut failures = Vec::new();
+        let mut failures = self.enumeration_failures.clone();
         add_failure("version", &self.requests.version, &mut failures);
         add_failure(
             "datastore_usage",
@@ -229,6 +249,7 @@ mod tests {
                     snapshots: failed("/snapshots"),
                 },
             )]),
+            enumeration_failures: Vec::new(),
         };
         assert_eq!(snapshot.failures().len(), 12);
     }
@@ -305,5 +326,58 @@ mod tests {
         assert!(value.get("endpoint").is_some());
         assert!(value["requests"].get("datastore_usage").is_some());
         assert!(value.get("datastores").is_some());
+    }
+
+    struct MalformedInventoryPbs;
+
+    impl PbsClient for MalformedInventoryPbs {
+        fn endpoint(&self) -> &str {
+            "https://pbs.test:8007"
+        }
+
+        fn get(&self, path: &str) -> Result<Value> {
+            match path {
+                "/version" | "/nodes/localhost/status" => Ok(serde_json::json!({})),
+                "/config/datastore" => Ok(serde_json::json!([
+                    {},
+                    { "name": "" },
+                    { "name": "backup" },
+                    { "store": "backup" }
+                ])),
+                path if path.starts_with("/admin/datastore/backup/") => {
+                    if path.ends_with("/status") {
+                        Ok(serde_json::json!({}))
+                    } else {
+                        Ok(serde_json::json!([]))
+                    }
+                },
+                _ => Ok(serde_json::json!([])),
+            }
+        }
+
+        fn put(&self, _: &str, _: &BTreeMap<String, String>) -> Result<()> {
+            unreachable!()
+        }
+
+        fn post(&self, _: &str, _: &BTreeMap<String, String>) -> Result<()> {
+            unreachable!()
+        }
+
+        fn delete(&self, _: &str, _: &BTreeMap<String, String>) -> Result<()> {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn malformed_and_duplicate_datastore_identities_are_failures() {
+        let snapshot = capture(
+            &MalformedInventoryPbs,
+            &crate::utility::progress::NullEventSink,
+        );
+
+        assert_eq!(snapshot.enumeration_failures.len(), 3);
+        assert!(snapshot.enumeration_failures[0].contains("missing non-empty"));
+        assert!(snapshot.enumeration_failures[1].contains("identity is empty"));
+        assert!(snapshot.enumeration_failures[2].contains("duplicate datastore"));
     }
 }

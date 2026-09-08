@@ -3,7 +3,7 @@ use crate::{client::PveClient, model::GuestKind, utility::progress::EventSink};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Serialize)]
 pub(crate) struct PveSnapshot {
@@ -13,6 +13,8 @@ pub(crate) struct PveSnapshot {
     pub(crate) endpoint: String,
     pub(crate) requests: ClusterResponses,
     pub(crate) nodes: BTreeMap<String, Node>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) enumeration_failures: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -66,21 +68,46 @@ pub(crate) fn capture_pve(client: &dyn PveClient, events: &dyn EventSink) -> Pve
         firewall_aliases: get(client, "/cluster/firewall/aliases", events),
     };
 
-    let mut node_names: Vec<String> = requests
-        .cluster_status
-        .data
-        .as_ref()
-        .into_iter()
-        .flatten()
-        .filter(|item| item.get("type").and_then(Value::as_str) == Some("node"))
-        .filter_map(|item| item.get("name").and_then(Value::as_str).map(str::to_owned))
-        .collect();
+    let mut enumeration_failures = Vec::new();
+    let mut node_names = Vec::new();
+    if let Some(items) = &requests.cluster_status.data {
+        for (index, item) in items.iter().enumerate() {
+            let Some(kind) = item.get("type").and_then(Value::as_str) else {
+                enumeration_failures.push(format!(
+                    "/cluster/status[{index}]: missing string field type"
+                ));
+                continue;
+            };
+            if kind != "node" {
+                continue;
+            }
+            match item.get("name").and_then(Value::as_str) {
+                Some(name) if !name.is_empty() => node_names.push(name.to_owned()),
+                _ => enumeration_failures.push(format!(
+                    "/cluster/status[{index}]: node has no non-empty string field name"
+                )),
+            }
+        }
+    }
     node_names.sort();
+    let mut unique_nodes = BTreeSet::new();
+    node_names.retain(|node| {
+        if unique_nodes.insert(node.clone()) {
+            true
+        } else {
+            enumeration_failures.push(format!("/cluster/status: duplicate node identity {node}"));
+            false
+        }
+    });
 
     let mut nodes = BTreeMap::new();
     for node in node_names {
         let lxc_list = get(client, &format!("/nodes/{node}/lxc"), events);
         let qemu_list = get(client, &format!("/nodes/{node}/qemu"), events);
+        let (lxcs, lxc_failures) = capture_guests(client, &node, GuestKind::Lxc, &lxc_list, events);
+        let (vms, vm_failures) = capture_guests(client, &node, GuestKind::Qemu, &qemu_list, events);
+        enumeration_failures.extend(lxc_failures);
+        enumeration_failures.extend(vm_failures);
         nodes.insert(
             node.clone(),
             Node {
@@ -90,8 +117,8 @@ pub(crate) fn capture_pve(client: &dyn PveClient, events: &dyn EventSink) -> Pve
                 storage: get(client, &format!("/nodes/{node}/storage"), events),
                 firewall_options: get(client, &format!("/nodes/{node}/firewall/options"), events),
                 firewall_rules: get(client, &format!("/nodes/{node}/firewall/rules"), events),
-                lxcs: capture_guests(client, &node, GuestKind::Lxc, &lxc_list, events),
-                vms: capture_guests(client, &node, GuestKind::Qemu, &qemu_list, events),
+                lxcs,
+                vms,
             },
         );
     }
@@ -103,12 +130,13 @@ pub(crate) fn capture_pve(client: &dyn PveClient, events: &dyn EventSink) -> Pve
         endpoint: client.endpoint().into(),
         requests,
         nodes,
+        enumeration_failures,
     }
 }
 
 impl PveSnapshot {
     pub(crate) fn failures(&self) -> Vec<String> {
-        let mut failures = Vec::new();
+        let mut failures = self.enumeration_failures.clone();
         add_failure("cluster", &self.requests.version, &mut failures);
         add_failure("cluster", &self.requests.cluster_status, &mut failures);
         add_failure("cluster", &self.requests.cluster_resources, &mut failures);
@@ -147,28 +175,40 @@ fn capture_guests(
     kind: GuestKind,
     list: &ObjectsResponse,
     events: &dyn EventSink,
-) -> BTreeMap<String, Guest> {
+) -> (BTreeMap<String, Guest>, Vec<String>) {
     let mut guests = BTreeMap::new();
+    let mut failures = Vec::new();
     let Some(items) = list.data.as_ref() else {
-        return guests;
+        return (guests, failures);
     };
-    for summary in items {
-        let Some(vmid) = summary.get("vmid").and_then(Value::as_u64) else {
+    for (index, summary) in items.iter().enumerate() {
+        let vmid = summary.get("vmid").and_then(|value| {
+            value
+                .as_u64()
+                .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
+                .and_then(|value| u32::try_from(value).ok())
+        });
+        let Some(vmid) = vmid else {
+            failures.push(format!(
+                "/nodes/{node}/{kind}[{index}]: missing or invalid vmid"
+            ));
             continue;
         };
         let base = format!("/nodes/{node}/{kind}/{vmid}");
-        guests.insert(
-            vmid.to_string(),
-            Guest {
-                summary: summary.clone(),
-                config: get(client, &format!("{base}/config"), events),
-                snapshots: get(client, &format!("{base}/snapshot"), events),
-                firewall_options: get(client, &format!("{base}/firewall/options"), events),
-                firewall_rules: get(client, &format!("{base}/firewall/rules"), events),
-            },
-        );
+        let guest = Guest {
+            summary: summary.clone(),
+            config: get(client, &format!("{base}/config"), events),
+            snapshots: get(client, &format!("{base}/snapshot"), events),
+            firewall_options: get(client, &format!("{base}/firewall/options"), events),
+            firewall_rules: get(client, &format!("{base}/firewall/rules"), events),
+        };
+        if guests.insert(vmid.to_string(), guest).is_some() {
+            failures.push(format!(
+                "/nodes/{node}/{kind}: duplicate guest identity {vmid}"
+            ));
+        }
     }
-    guests
+    (guests, failures)
 }
 
 fn get<T: serde::de::DeserializeOwned>(
@@ -182,5 +222,80 @@ fn get<T: serde::de::DeserializeOwned>(
 fn add_failure<T>(prefix: &str, response: &super::CapturedResponse<T>, failures: &mut Vec<String>) {
     if let Some(error) = response.failure() {
         failures.push(format!("{prefix}{}: {error}", response.path));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::Result;
+
+    struct FakePve;
+
+    impl PveClient for FakePve {
+        fn endpoint(&self) -> &str {
+            "https://pve.test:8006"
+        }
+
+        fn get(&self, path: &str) -> Result<Value> {
+            if path.ends_with("/snapshot") || path.ends_with("/firewall/rules") {
+                Ok(serde_json::json!([]))
+            } else {
+                Ok(serde_json::json!({}))
+            }
+        }
+
+        fn put(&self, _: &str, _: &BTreeMap<String, String>) -> Result<()> {
+            unreachable!()
+        }
+
+        fn post(&self, _: &str, _: &BTreeMap<String, String>) -> Result<()> {
+            unreachable!()
+        }
+
+        fn delete(&self, _: &str, _: &BTreeMap<String, String>) -> Result<()> {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn guest_enumeration_accepts_numeric_strings() {
+        let list = crate::discovery::response::capture("/nodes/pve/qemu", || {
+            Ok(serde_json::json!([{ "vmid": "101" }]))
+        });
+
+        let (guests, failures) = capture_guests(
+            &FakePve,
+            "pve",
+            GuestKind::Qemu,
+            &list,
+            &crate::utility::progress::NullEventSink,
+        );
+
+        assert!(guests.contains_key("101"));
+        assert!(failures.is_empty());
+    }
+
+    #[test]
+    fn malformed_and_duplicate_guest_identities_are_failures() {
+        let list = crate::discovery::response::capture("/nodes/pve/lxc", || {
+            Ok(serde_json::json!([
+                { "vmid": "not-a-number" },
+                { "vmid": 101 },
+                { "vmid": "101" }
+            ]))
+        });
+
+        let (_, failures) = capture_guests(
+            &FakePve,
+            "pve",
+            GuestKind::Lxc,
+            &list,
+            &crate::utility::progress::NullEventSink,
+        );
+
+        assert_eq!(failures.len(), 2);
+        assert!(failures[0].contains("missing or invalid vmid"));
+        assert!(failures[1].contains("duplicate guest identity 101"));
     }
 }
