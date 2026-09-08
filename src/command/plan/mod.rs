@@ -185,7 +185,7 @@ mod tests {
     #[test]
     fn plan_hash_detects_tampering() {
         let mut plan = Plan {
-            schema_version: 3,
+            schema_version: 4,
             created_at: Utc::now(),
             capture_id: "fixture-capture".into(),
             target: "https://pve.example:8006".into(),
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn plan_verification_rejects_cross_domain_operations() {
         let mut plan = Plan {
-            schema_version: 3,
+            schema_version: 4,
             created_at: Utc::now(),
             capture_id: "fixture-capture".into(),
             target: "https://pve.example:8006".into(),
@@ -230,7 +230,7 @@ mod tests {
     #[test]
     fn plan_verification_rejects_managed_file_identity_mismatch() {
         let mut plan = Plan {
-            schema_version: 3,
+            schema_version: 4,
             created_at: Utc::now(),
             capture_id: "fixture-capture".into(),
             target: "https://pve.example:8006".into(),

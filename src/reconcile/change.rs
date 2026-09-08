@@ -279,6 +279,106 @@ macro_rules! validated_string {
 
 validated_string!(ApiPath, "API path", |value: &str| value.starts_with('/')
     && !value.contains(".."));
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(transparent)]
+pub(crate) struct MutationEndpoint(String);
+
+impl MutationEndpoint {
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub(crate) fn family(&self) -> Option<MutationEndpointFamily<'_>> {
+        mutation_endpoint_family(&self.0)
+    }
+}
+
+impl Deref for MutationEndpoint {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for MutationEndpoint {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl From<&str> for MutationEndpoint {
+    fn from(value: &str) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<String> for MutationEndpoint {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl<'de> Deserialize<'de> for MutationEndpoint {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        mutation_endpoint_family(&value).ok_or_else(|| {
+            de::Error::custom(format!("API mutation endpoint is not managed `{value}`"))
+        })?;
+        Ok(Self(value))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MutationEndpointFamily<'a> {
+    GuestConfig {
+        node: &'a str,
+        kind: &'a str,
+        vmid: &'a str,
+    },
+    NodeDns {
+        node: &'a str,
+    },
+    PveBackupCollection,
+    PveBackupJob {
+        id: &'a str,
+    },
+    PbsCollection {
+        kind: &'a str,
+    },
+    PbsResource {
+        kind: &'a str,
+        id: &'a str,
+    },
+}
+
+fn mutation_endpoint_family(value: &str) -> Option<MutationEndpointFamily<'_>> {
+    let segments = value.strip_prefix('/')?.split('/').collect::<Vec<_>>();
+    if segments.iter().any(|segment| {
+        segment.is_empty() || *segment == "." || *segment == ".." || segment.contains('\\')
+    }) {
+        return None;
+    }
+    match segments.as_slice() {
+        ["nodes", node, kind @ ("lxc" | "qemu"), vmid, "config"] => {
+            Some(MutationEndpointFamily::GuestConfig { node, kind, vmid })
+        },
+        ["nodes", node, "dns"] => Some(MutationEndpointFamily::NodeDns { node }),
+        ["cluster", "backup"] => Some(MutationEndpointFamily::PveBackupCollection),
+        ["cluster", "backup", id] => Some(MutationEndpointFamily::PveBackupJob { id }),
+        [
+            "config",
+            kind @ ("datastore" | "s3" | "prune" | "verify" | "sync"),
+        ] => Some(MutationEndpointFamily::PbsCollection { kind }),
+        [
+            "config",
+            kind @ ("datastore" | "s3" | "prune" | "verify" | "sync"),
+            id,
+        ] => Some(MutationEndpointFamily::PbsResource { kind, id }),
+        _ => None,
+    }
+}
 validated_string!(
     SecretName,
     "secret environment variable",
@@ -378,6 +478,7 @@ mod tests {
     #[test]
     fn transport_identifiers_validate_when_deserialized() {
         assert!(serde_json::from_str::<ApiPath>("\"relative\"").is_err());
+        assert!(serde_json::from_str::<MutationEndpoint>("\"/access/users\"").is_err());
         assert!(serde_json::from_str::<DiskId>("\"not-a-disk\"").is_err());
         assert!(serde_json::from_str::<SecretName>("\"lower-case\"").is_err());
         assert!("unknown".parse::<Domain>().is_err());

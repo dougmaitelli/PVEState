@@ -23,7 +23,7 @@ impl Plan {
             .get("schema_version")
             .and_then(serde_json::Value::as_u64)
             .unwrap_or_default();
-        if schema_version != 3 {
+        if schema_version != 4 {
             bail!("unsupported plan schema {schema_version}; run plan again")
         }
         if let Some(operations) = value
@@ -70,7 +70,7 @@ mod tests {
     #[test]
     fn plan_deserialization_reports_invalid_domain_field() {
         let bytes = serde_json::to_vec(&serde_json::json!({
-            "schema_version": 3,
+            "schema_version": 4,
             "created_at": "2026-09-05T00:00:00Z",
             "capture_id": "capture-1",
             "target": "https://pve.test:8006",
@@ -94,5 +94,17 @@ mod tests {
 
         assert!(format!("{error:#}").contains("operations[0].domain"));
         assert!(format!("{error:#}").contains("unknown operation domain `Guest`"));
+    }
+
+    #[test]
+    fn old_plan_schema_requires_replanning() {
+        let bytes = br#"{"schema_version":3}"#;
+
+        let error = Plan::from_slice(bytes).unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "unsupported plan schema 3; run plan again"
+        );
     }
 }

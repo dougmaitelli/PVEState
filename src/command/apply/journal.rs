@@ -173,7 +173,7 @@ mod tests {
 
     fn plan() -> Plan {
         Plan {
-            schema_version: 3,
+            schema_version: 4,
             created_at: Utc::now(),
             capture_id: "fixture-capture".into(),
             target: "https://pve.test:8006".into(),

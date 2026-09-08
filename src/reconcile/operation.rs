@@ -1,4 +1,4 @@
-use super::{ApiPath, DiskId, Domain, ManagedFile, ResourceId, SecretName};
+use super::{ApiPath, DiskId, Domain, ManagedFile, MutationEndpoint, ResourceId, SecretName};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -10,7 +10,7 @@ pub(crate) enum Operation {
         method: ApiMethod,
         domain: Domain,
         resource: ResourceId,
-        endpoint: ApiPath,
+        endpoint: MutationEndpoint,
         changes: BTreeMap<String, String>,
         #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
         environment_changes: BTreeMap<String, SecretName>,

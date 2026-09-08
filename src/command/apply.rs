@@ -445,7 +445,7 @@ mod tests {
         config::scaffold::initialize(temp.path()).unwrap();
         let repo = config::open(temp.path()).unwrap();
         let mut plan = Plan {
-            schema_version: 3,
+            schema_version: 4,
             created_at: Utc::now(),
             capture_id: "fixture-capture".into(),
             target: "https://pve.test:8006".into(),
@@ -556,7 +556,7 @@ mod tests {
     fn injected_client_failure_is_journaled_without_network() {
         let temp = tempfile::tempdir().unwrap();
         let plan = Plan {
-            schema_version: 3,
+            schema_version: 4,
             created_at: Utc::now(),
             capture_id: "fixture-capture".into(),
             target: "https://pve.test:8006".into(),
@@ -606,7 +606,7 @@ mod tests {
         ))
         .unwrap();
         let plan = Plan {
-            schema_version: 3,
+            schema_version: 4,
             created_at: Utc::now(),
             capture_id: "fixture-capture".into(),
             target: fixture.pve_target.clone(),
