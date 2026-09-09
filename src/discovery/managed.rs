@@ -216,7 +216,10 @@ fn guest_config_reference(path: &str) -> Option<GuestRef> {
 
 fn node_dns(path: &str) -> Option<&str> {
     let parts = path.trim_matches('/').split('/').collect::<Vec<_>>();
-    (parts.len() == 3 && parts[0] == "nodes" && parts[2] == "dns").then_some(parts[1])
+    match parts.as_slice() {
+        ["nodes", node, "dns"] => Some(node),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -282,6 +285,13 @@ mod tests {
 
         assert!(error.to_string().contains(path));
         assert!(error.to_string().contains("cores"));
+    }
+
+    #[test]
+    fn unrelated_short_paths_do_not_panic_during_managed_decoding() {
+        for path in ["/", "/version", "/nodes", "/nodes/pve"] {
+            assert_eq!(node_dns(path), None);
+        }
     }
 
     #[test]

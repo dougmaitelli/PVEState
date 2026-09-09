@@ -14,7 +14,7 @@ use crate::{
 use anyhow::Result;
 
 pub(crate) fn run(repo: &LocalState, events: &dyn progress::EventSink) -> Result<Plan> {
-    events.section("Comparing local configuration with live state");
+    events.section("Comparing local configuration with captured state");
     runtime_security::prepare(&repo.runtime())?;
     validation::validate(repo, events)?;
     let captured = CapturedState::load(repo, chrono::Duration::minutes(30))?;

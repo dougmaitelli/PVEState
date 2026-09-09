@@ -146,6 +146,7 @@ impl CapturedApi {
         }
         let mut responses = BTreeMap::new();
         collect_responses(&snapshot, &mut responses);
+        collect_legacy_guest_collections(&snapshot, &mut responses)?;
         Ok(Self {
             endpoint: endpoint.trim_end_matches('/').into(),
             responses,
@@ -158,6 +159,37 @@ impl CapturedApi {
             .cloned()
             .with_context(|| format!("complete capture has no successful response for {path}"))
     }
+}
+
+fn collect_legacy_guest_collections(
+    snapshot: &Value,
+    responses: &mut BTreeMap<String, Value>,
+) -> Result<()> {
+    let Some(nodes) = snapshot.get("nodes").and_then(Value::as_object) else {
+        return Ok(());
+    };
+    for (node, captured_node) in nodes {
+        for (kind, key) in [("lxc", "lxcs"), ("qemu", "vms")] {
+            let path = format!("/nodes/{node}/{kind}");
+            if responses.contains_key(&path) {
+                continue;
+            }
+            let guests = captured_node
+                .get(key)
+                .and_then(Value::as_object)
+                .with_context(|| format!("captured node {node} has no {key} inventory"))?;
+            let summaries = guests
+                .values()
+                .map(|guest| {
+                    guest.get("summary").cloned().with_context(|| {
+                        format!("captured {kind} guest on node {node} has no summary")
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            responses.insert(path, Value::Array(summaries));
+        }
+    }
+    Ok(())
 }
 
 impl CapturedNative {
@@ -271,5 +303,55 @@ mod tests {
                 .to_string()
                 .contains("does not match manifest endpoint")
         );
+    }
+
+    #[test]
+    fn reconstructs_guest_collections_from_legacy_snapshot_summaries() {
+        let snapshot = serde_json::json!({
+            "nodes": {
+                "pve": {
+                    "lxcs": {
+                        "101": {"summary": {"vmid": 101, "name": "apps"}}
+                    },
+                    "vms": {
+                        "201": {"summary": {"vmid": 201, "name": "home"}}
+                    }
+                }
+            }
+        });
+        let mut responses = BTreeMap::new();
+
+        collect_legacy_guest_collections(&snapshot, &mut responses).unwrap();
+
+        assert_eq!(responses["/nodes/pve/lxc"][0]["vmid"], 101);
+        assert_eq!(responses["/nodes/pve/qemu"][0]["vmid"], 201);
+    }
+
+    #[test]
+    fn explicit_guest_collection_responses_take_precedence() {
+        let snapshot = serde_json::json!({
+            "nodes": {
+                "pve": {
+                    "lxc_list": {
+                        "ok": true,
+                        "path": "/nodes/pve/lxc",
+                        "data": [{"vmid": 102}]
+                    },
+                    "lxcs": {},
+                    "qemu_list": {
+                        "ok": true,
+                        "path": "/nodes/pve/qemu",
+                        "data": []
+                    },
+                    "vms": {}
+                }
+            }
+        });
+        let mut responses = BTreeMap::new();
+        collect_responses(&snapshot, &mut responses);
+
+        collect_legacy_guest_collections(&snapshot, &mut responses).unwrap();
+
+        assert_eq!(responses["/nodes/pve/lxc"][0]["vmid"], 102);
     }
 }

@@ -178,7 +178,9 @@ fn publish_observed(
     capture_id: &str,
     events: &dyn EventSink,
 ) -> Result<()> {
-    let observed_root = repo.root().join("observed");
+    let observed_root = fs::canonicalize(repo.root().join("observed"))
+        .context("resolve observed root for capture publication")?;
+    let staged = fs::canonicalize(staged).context("resolve capture staging directory")?;
     let current = repo.observed();
     let previous_name = format!(".previous-{capture_id}");
     let previous = observed_root.join(&previous_name);
@@ -204,7 +206,7 @@ fn publish_observed(
     }
     transaction.state = CaptureTransactionState::Publishing;
     transaction.persist(repo)?;
-    if let Err(error) = fs::rename(staged, &current) {
+    if let Err(error) = fs::rename(&staged, &current) {
         if had_current {
             fs::rename(&previous, &current)?;
             atomic_file::sync_directory(&observed_root)?;
@@ -396,6 +398,35 @@ mod tests {
         );
         assert!(!repo.observed().join("previous.txt").exists());
         assert!(!root.join("observed/.previous-fixture").exists());
+    }
+
+    #[test]
+    fn capture_publication_accepts_a_relative_repository_root() {
+        let temp = tempfile::tempdir_in(".").unwrap();
+        let relative = temp.path().strip_prefix(".").unwrap_or(temp.path());
+        let root = relative.join("environment");
+        config::scaffold::initialize(&root).unwrap();
+        let repo = config::open(&root).unwrap();
+        let staging = tempfile::Builder::new()
+            .prefix(".capture-")
+            .tempdir_in(root.join("observed"))
+            .unwrap();
+        let staged = staging.path().join("production");
+        fs::create_dir(&staged).unwrap();
+        fs::write(staged.join("current.txt"), "current").unwrap();
+
+        publish_observed(
+            &repo,
+            &staged,
+            "relative-fixture",
+            &crate::utility::progress::NullEventSink,
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(repo.observed().join("current.txt")).unwrap(),
+            "current"
+        );
     }
 
     #[test]

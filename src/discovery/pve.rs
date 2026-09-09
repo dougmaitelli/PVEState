@@ -40,6 +40,8 @@ pub(crate) struct Node {
     pub(crate) storage: ObjectsResponse,
     pub(crate) firewall_options: ObjectResponse,
     pub(crate) firewall_rules: ObjectsResponse,
+    pub(crate) lxc_list: ObjectsResponse,
+    pub(crate) qemu_list: ObjectsResponse,
     pub(crate) lxcs: BTreeMap<String, Guest>,
     pub(crate) vms: BTreeMap<String, Guest>,
 }
@@ -117,6 +119,8 @@ pub(crate) fn capture_pve(client: &dyn PveClient, events: &dyn EventSink) -> Pve
                 storage: get(client, &format!("/nodes/{node}/storage"), events),
                 firewall_options: get(client, &format!("/nodes/{node}/firewall/options"), events),
                 firewall_rules: get(client, &format!("/nodes/{node}/firewall/rules"), events),
+                lxc_list,
+                qemu_list,
                 lxcs,
                 vms,
             },
@@ -155,6 +159,8 @@ impl PveSnapshot {
             add_failure(node_name, &node.storage, &mut failures);
             add_failure(node_name, &node.firewall_options, &mut failures);
             add_failure(node_name, &node.firewall_rules, &mut failures);
+            add_failure(node_name, &node.lxc_list, &mut failures);
+            add_failure(node_name, &node.qemu_list, &mut failures);
             for (kind, guests) in [(GuestKind::Lxc, &node.lxcs), (GuestKind::Qemu, &node.vms)] {
                 for (vmid, guest) in guests {
                     let prefix = format!("{node_name}/{kind}/{vmid}");
