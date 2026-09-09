@@ -141,10 +141,7 @@ pub(crate) fn lxc(
             wanted.insert(key.clone(), value.clone());
         }
     } else if !captured_options.is_empty() {
-        blockers.push(format!(
-            "lxc/{id}: {} captured option(s) are not locally managed; run adopt",
-            captured_options.len()
-        ));
+        blockers.push(unmanaged_lxc_options_blocker(id, &captured_options)?);
     }
     let mut changes = changed(&wanted, actual)?;
     add_removed(actual, &wanted, &["net", "mp"], &mut changes);
@@ -179,6 +176,29 @@ pub(crate) fn lxc(
         operations,
         blockers,
     )
+}
+
+fn unmanaged_lxc_options_blocker(id: u32, captured: &BTreeMap<String, String>) -> Result<String> {
+    let mut blocker = format!(
+        "lxc/{id}: {} captured option(s) are not locally managed; run adopt\n      --- local\n      +++ captured",
+        captured.len()
+    );
+    for (field, value) in captured {
+        blocker.push_str(&format!("\n      +{field}: {}", blocker_value(value)?));
+    }
+    Ok(blocker)
+}
+
+fn blocker_value(value: &str) -> Result<String> {
+    const LIMIT: usize = 120;
+    let rendered = serde_json::to_string(value)?;
+    if rendered.chars().count() <= LIMIT {
+        return Ok(rendered);
+    }
+    Ok(format!(
+        "{}…",
+        rendered.chars().take(LIMIT).collect::<String>()
+    ))
 }
 
 pub(crate) fn vm(
@@ -768,5 +788,17 @@ mod tests {
         assert!(validate_lxc_option_key("password").is_err());
         assert!(validate_lxc_option_key("rootfs").is_err());
         assert!(validate_lxc_option_key("features").is_ok());
+
+        let blocker = unmanaged_lxc_options_blocker(
+            101,
+            &BTreeMap::from([
+                ("arch".into(), "amd64".into()),
+                ("features".into(), "nesting=1".into()),
+            ]),
+        )
+        .unwrap();
+        assert!(blocker.contains("--- local\n      +++ captured"));
+        assert!(blocker.contains("+arch: \"amd64\""));
+        assert!(blocker.contains("+features: \"nesting=1\""));
     }
 }

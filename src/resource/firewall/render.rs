@@ -39,32 +39,41 @@ pub(crate) fn render(policy: &FirewallPolicy) -> String {
 
 fn rules(output: &mut String, rules: &[FirewallRule]) {
     for rule in rules {
-        if !rule.enabled {
-            output.push('|');
-        }
-        *output += &format!("{} ", rule.direction);
-        if let Some(name) = &rule.macro_name {
-            *output += &format!("{name}({})", rule.action);
-        } else {
-            *output += &rule.action.to_string();
-        }
-        if let Some(protocol) = &rule.protocol {
-            *output += &format!(" -p {protocol}");
-        }
-        for (flag, value) in [
-            ("-i", rule.interface.as_ref()),
-            ("-source", rule.source.as_ref()),
-            ("-dest", rule.destination.as_ref()),
-            ("-sport", rule.source_port.as_ref()),
-            ("-dport", rule.destination_port.as_ref()),
-        ] {
-            if let Some(value) = value {
-                *output += &format!(" {flag} {value}");
-            }
-        }
-        *output += &format!(" -log {}", rule.log);
-        comment(output, rule.comment.as_deref());
+        output.push_str(&rule_line(rule));
+        output.push('\n');
     }
+}
+
+fn rule_line(rule: &FirewallRule) -> String {
+    let mut output = String::new();
+    if !rule.enabled {
+        output.push('|');
+    }
+    output += &format!("{} ", rule.direction);
+    if let Some(name) = &rule.macro_name {
+        output += &format!("{name}({})", rule.action);
+    } else {
+        output += &rule.action.to_string();
+    }
+    if let Some(protocol) = &rule.protocol {
+        output += &format!(" -p {protocol}");
+    }
+    for (flag, value) in [
+        ("-i", rule.interface.as_ref()),
+        ("-source", rule.source.as_ref()),
+        ("-dest", rule.destination.as_ref()),
+        ("-sport", rule.source_port.as_ref()),
+        ("-dport", rule.destination_port.as_ref()),
+    ] {
+        if let Some(value) = value {
+            output += &format!(" {flag} {value}");
+        }
+    }
+    output += &format!(" -log {}", rule.log);
+    if let Some(value) = &rule.comment {
+        output += &format!(" # {value}");
+    }
+    output
 }
 fn comment(output: &mut String, value: Option<&str>) {
     if let Some(value) = value {
@@ -87,7 +96,11 @@ pub(crate) fn semantic(s: &str) -> (Vec<String>, Vec<String>) {
         {
             unordered.push(format!("{section}:{line}"));
         } else if section == "[RULES]" || section.starts_with("[group ") {
-            ordered.push(line);
+            ordered.push(
+                super::native::parse_rule(&line)
+                    .map(|rule| rule_line(&rule))
+                    .unwrap_or(line),
+            );
         }
     }
     unordered.sort();

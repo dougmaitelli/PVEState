@@ -153,4 +153,18 @@ mod tests {
             super::super::render::semantic(rules_b)
         );
     }
+
+    #[test]
+    fn equivalent_rule_flag_order_converges_after_adoption() {
+        let captured = "[OPTIONS]\n\nlog_level_in: nolog\nenable: 1\n\n[RULES]\n\nIN ACCEPT -i net1 -p tcp -dport 2375 -log nolog # Docker API\n";
+        let adopted = super::super::native::parse(captured);
+
+        assert!(adopted.unmodeled.is_empty());
+        let rendered = super::super::render::render(&adopted.managed);
+
+        assert_eq!(
+            super::super::render::semantic(captured),
+            super::super::render::semantic(&rendered)
+        );
+    }
 }

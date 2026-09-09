@@ -236,7 +236,7 @@ fn parse_ip_set_entry(line: &str) -> Option<FirewallIpSetEntry> {
     })
 }
 
-fn parse_rule(line: &str) -> Result<FirewallRule> {
+pub(super) fn parse_rule(line: &str) -> Result<FirewallRule> {
     let (enabled, line) = line
         .strip_prefix('|')
         .map_or((true, line), |line| (false, line));
