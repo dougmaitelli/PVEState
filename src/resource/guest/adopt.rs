@@ -10,6 +10,40 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
+pub(crate) fn option_candidates(
+    local: &LocalState,
+    captured: &CapturedState,
+) -> Result<Vec<AdoptionCandidate>> {
+    let mut candidates = Vec::new();
+    for (vmid, lxc) in &local.guests.lxcs {
+        if lxc.options.is_some() {
+            continue;
+        }
+        let guest = crate::model::GuestRef::new(GuestKind::Lxc, *vmid);
+        let options = super::plan::lxc_options(captured.guest(guest)?.config())?;
+        if options.is_empty() {
+            continue;
+        }
+        let resource = crate::reconcile::ResourceId::Guest(guest);
+        candidates.push(AdoptionCandidate::adoptable(
+            &resource,
+            "options",
+            "not locally managed",
+            format!("{} captured option(s)", options.len()),
+            vec![LocalPatch::ReplaceResource {
+                document: ConfigDocument::Guests,
+                path: vec![
+                    Segment::Key("lxcs".into()),
+                    Segment::Key(vmid.to_string()),
+                    Segment::Key("options".into()),
+                ],
+                value: serde_yaml::to_value(options)?,
+            }],
+        ));
+    }
+    Ok(candidates)
+}
+
 pub(crate) fn candidates(
     local: &LocalState,
     captured: &CapturedState,
@@ -86,6 +120,7 @@ fn captured_lxc(
         .into_iter()
         .map(|(_, value)| parse_mount(value))
         .collect::<Result<_>>()?;
+    result.options = Some(super::plan::lxc_options(actual)?);
     Ok(result)
 }
 
@@ -383,5 +418,47 @@ mod tests {
         assert!(!adopted.disks.contains_key(&DiskInterface::Ide(2)));
         assert!(!adopted.disks.contains_key(&DiskInterface::Scsi(2)));
         assert_eq!(adopted.disks[&DiskInterface::Sata(1)].size_gb, 64);
+    }
+
+    #[test]
+    fn lxc_adoption_captures_every_additional_scalar_option() {
+        let temp = tempfile::tempdir().unwrap();
+        crate::config::scaffold::initialize(temp.path()).unwrap();
+        let local = crate::config::open(temp.path()).unwrap();
+        let guest = GuestRef::new(GuestKind::Lxc, 101);
+        let actual = serde_json::json!({
+            "hostname": "apps",
+            "cores": 2,
+            "memory": 2048,
+            "ostype": "debian-13",
+            "swap": 512,
+            "unprivileged": 1,
+            "onboot": 1,
+            "startup": "order=20,up=10",
+            "rootfs": "local-lvm:subvol-101-disk-0,size=16G",
+            "net0": "name=eth0,bridge=vmbr0,hwaddr=02:00:00:00:01:01,ip=192.0.2.101/24",
+            "arch": "amd64",
+            "description": "application container",
+            "features": "nesting=1,keyctl=1",
+            "protection": 1,
+            "tags": "apps;production",
+            "digest": "ignored"
+        });
+        let captured = crate::discovery::managed::CapturedGuest::decode(
+            guest,
+            &actual,
+            "/nodes/pve/lxc/101/config",
+        )
+        .unwrap();
+
+        let adopted = captured_lxc(&local, &captured).unwrap();
+        let options = adopted.options.unwrap();
+
+        assert_eq!(options["arch"], "amd64");
+        assert_eq!(options["description"], "application container");
+        assert_eq!(options["features"], "nesting=1,keyctl=1");
+        assert_eq!(options["protection"], "1");
+        assert_eq!(options["tags"], "apps;production");
+        assert!(!options.contains_key("digest"));
     }
 }

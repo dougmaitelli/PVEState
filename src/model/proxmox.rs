@@ -91,12 +91,31 @@ pub(crate) enum GuestField {
     Cpu,
     Agent,
     Startup,
+    Unprivileged,
     RootFs,
     BindMount(u8),
     Network(u8),
 }
 
 impl GuestField {
+    const NAMED: [Self; 15] = [
+        Self::Hostname,
+        Self::OsType,
+        Self::Name,
+        Self::Machine,
+        Self::Bios,
+        Self::Cores,
+        Self::Sockets,
+        Self::Memory,
+        Self::Swap,
+        Self::OnBoot,
+        Self::Cpu,
+        Self::Agent,
+        Self::Startup,
+        Self::Unprivileged,
+        Self::RootFs,
+    ];
+
     pub(crate) fn api_name(self) -> String {
         match self {
             Self::Hostname => "hostname".into(),
@@ -112,11 +131,132 @@ impl GuestField {
             Self::Cpu => "cpu".into(),
             Self::Agent => "agent".into(),
             Self::Startup => "startup".into(),
+            Self::Unprivileged => "unprivileged".into(),
             Self::RootFs => "rootfs".into(),
             Self::BindMount(index) => format!("mp{index}"),
             Self::Network(index) => format!("net{index}"),
         }
     }
+
+    pub(crate) fn from_api_name(value: &str) -> Option<Self> {
+        Self::NAMED
+            .into_iter()
+            .find(|field| field.api_name() == value)
+            .or_else(|| parse_numbered_field(value, "mp").map(Self::BindMount))
+            .or_else(|| parse_numbered_field(value, "net").map(Self::Network))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum LxcConfigField {
+    Managed(GuestField),
+    Device(LxcDeviceField),
+    Additional(LxcOptionName),
+    ReadOnly(LxcMetadataField),
+    Sensitive(LxcSensitiveField),
+    Invalid,
+}
+
+impl LxcConfigField {
+    pub(crate) fn classify(value: &str) -> Self {
+        if let Some(field) = GuestField::from_api_name(value) {
+            return match field {
+                GuestField::BindMount(index) => Self::Device(LxcDeviceField::BindMount(index)),
+                GuestField::Network(index) => Self::Device(LxcDeviceField::Network(index)),
+                GuestField::Hostname
+                | GuestField::OsType
+                | GuestField::Cores
+                | GuestField::Memory
+                | GuestField::Swap
+                | GuestField::OnBoot
+                | GuestField::Startup
+                | GuestField::Unprivileged
+                | GuestField::RootFs => Self::Managed(field),
+                GuestField::Name
+                | GuestField::Machine
+                | GuestField::Bios
+                | GuestField::Sockets
+                | GuestField::Cpu
+                | GuestField::Agent => Self::Additional(LxcOptionName(value.into())),
+            };
+        }
+        if let Some(field) = LxcMetadataField::from_api_name(value) {
+            return Self::ReadOnly(field);
+        }
+        if let Some(field) = LxcSensitiveField::from_api_name(value) {
+            return Self::Sensitive(field);
+        }
+        if valid_lxc_option_name(value) {
+            return Self::Additional(LxcOptionName(value.into()));
+        }
+        Self::Invalid
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LxcDeviceField {
+    BindMount(u8),
+    Network(u8),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LxcMetadataField {
+    Digest,
+    RawConfig,
+}
+
+impl LxcMetadataField {
+    pub(crate) const fn api_name(self) -> &'static str {
+        match self {
+            Self::Digest => "digest",
+            Self::RawConfig => "lxc",
+        }
+    }
+
+    fn from_api_name(value: &str) -> Option<Self> {
+        [Self::Digest, Self::RawConfig]
+            .into_iter()
+            .find(|field| field.api_name() == value)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LxcSensitiveField {
+    Password,
+}
+
+impl LxcSensitiveField {
+    pub(crate) const fn api_name(self) -> &'static str {
+        match self {
+            Self::Password => "password",
+        }
+    }
+
+    fn from_api_name(value: &str) -> Option<Self> {
+        [Self::Password]
+            .into_iter()
+            .find(|field| field.api_name() == value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LxcOptionName(String);
+
+impl LxcOptionName {
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+fn parse_numbered_field(value: &str, prefix: &str) -> Option<u8> {
+    value.strip_prefix(prefix)?.parse().ok()
+}
+
+fn valid_lxc_option_name(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -273,5 +413,46 @@ mod tests {
     fn guest_references_generate_api_paths() {
         let guest: GuestRef = "qemu/201".parse().unwrap();
         assert_eq!(guest.config_endpoint("pve"), "/nodes/pve/qemu/201/config");
+    }
+
+    #[test]
+    fn lxc_fields_have_one_authoritative_classification() {
+        for field in [
+            GuestField::Hostname,
+            GuestField::RootFs,
+            GuestField::Unprivileged,
+        ] {
+            assert_eq!(
+                LxcConfigField::classify(&field.api_name()),
+                LxcConfigField::Managed(field)
+            );
+        }
+        assert_eq!(
+            LxcConfigField::classify(&GuestField::Network(0).api_name()),
+            LxcConfigField::Device(LxcDeviceField::Network(0))
+        );
+        assert_eq!(
+            LxcConfigField::classify(&GuestField::BindMount(12).api_name()),
+            LxcConfigField::Device(LxcDeviceField::BindMount(12))
+        );
+        for field in ["arch", "features", "searchdomain", "future-option"] {
+            let LxcConfigField::Additional(name) = LxcConfigField::classify(field) else {
+                panic!("expected additional LXC option")
+            };
+            assert_eq!(name.as_str(), field);
+        }
+        for field in ["digest", "lxc"] {
+            assert!(matches!(
+                LxcConfigField::classify(field),
+                LxcConfigField::ReadOnly(_)
+            ));
+        }
+        assert!(matches!(
+            LxcConfigField::classify("password"),
+            LxcConfigField::Sensitive(LxcSensitiveField::Password)
+        ));
+        for field in ["", "UPPERCASE", "path/name"] {
+            assert_eq!(LxcConfigField::classify(field), LxcConfigField::Invalid);
+        }
     }
 }

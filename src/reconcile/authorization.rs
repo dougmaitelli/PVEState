@@ -117,6 +117,10 @@ fn verify_api_mutation(
     let family = endpoint
         .family()
         .ok_or_else(|| anyhow::anyhow!("API mutation endpoint is not managed `{endpoint}`"))?;
+    let allows_lxc_options = matches!(
+        family,
+        MutationEndpointFamily::GuestConfig { kind: "lxc", .. }
+    );
     let allowed = match family {
         MutationEndpointFamily::GuestConfig { node, kind, vmid } => {
             let ResourceId::Guest(guest) = resource else {
@@ -181,7 +185,7 @@ fn verify_api_mutation(
         },
     };
     for key in changes.keys() {
-        if !allowed(key) {
+        if !allowed(key) && !(allows_lxc_options && lxc_option_parameter(key)) {
             bail!("parameter `{key}` is not authorized for API endpoint {endpoint}")
         }
     }
@@ -250,6 +254,13 @@ fn guest_parameters(key: &str) -> bool {
         key.strip_prefix(prefix)
             .is_some_and(|suffix| suffix.parse::<u8>().is_ok())
     })
+}
+
+fn lxc_option_parameter(key: &str) -> bool {
+    match crate::model::LxcConfigField::classify(key) {
+        crate::model::LxcConfigField::Additional(name) => name.as_str() == key,
+        _ => false,
+    }
 }
 
 fn dns_parameters(key: &str) -> bool {

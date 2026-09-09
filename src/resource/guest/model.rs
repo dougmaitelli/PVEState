@@ -60,6 +60,8 @@ pub(crate) struct Lxc {
     pub(crate) start: Start,
     #[serde(default)]
     pub(crate) bind_mounts: Vec<BindMount>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) options: Option<BTreeMap<String, String>>,
     #[serde(default)]
     pub(crate) firewall: Option<FirewallPolicy>,
 }

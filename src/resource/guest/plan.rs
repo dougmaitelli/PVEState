@@ -2,7 +2,7 @@ use super::{agent::QemuAgentOptions, render};
 use crate::{
     client::PveClient,
     config::LocalState,
-    model::{GuestField, GuestKind, GuestRef, Lxc, Vm},
+    model::{GuestField, GuestKind, GuestRef, Lxc, LxcConfigField, Vm},
     reconcile::{ApiMethod, ApiTarget, Domain, Operation, PlanBuilder},
 };
 use anyhow::{Context, Result};
@@ -134,10 +134,30 @@ pub(crate) fn lxc(
             render::bind_mount(mount),
         );
     }
+    let captured_options = lxc_options(actual)?;
+    if let Some(options) = &desired.options {
+        for (key, value) in options {
+            validate_lxc_option_key(key)?;
+            wanted.insert(key.clone(), value.clone());
+        }
+    } else if !captured_options.is_empty() {
+        blockers.push(format!(
+            "lxc/{id}: {} captured option(s) are not locally managed; run adopt",
+            captured_options.len()
+        ));
+    }
     let mut changes = changed(&wanted, actual)?;
     add_removed(actual, &wanted, &["net", "mp"], &mut changes);
+    if let Some(options) = &desired.options {
+        let removed = captured_options
+            .keys()
+            .filter(|key| !options.contains_key(*key))
+            .cloned()
+            .collect::<Vec<_>>();
+        add_deletions(&mut changes, removed);
+    }
     let actual_unprivileged = actual
-        .get("unprivileged")
+        .get(GuestField::Unprivileged.api_name())
         .map(value_string)
         .unwrap_or_else(|| "0".into());
     if actual_unprivileged != if desired.unprivileged { "1" } else { "0" } {
@@ -445,8 +465,58 @@ fn add_removed(
         .cloned()
         .collect::<Vec<_>>();
     if !removed.is_empty() {
-        changes.insert("delete".into(), removed.join(","));
+        add_deletions(changes, removed);
     }
+}
+
+fn add_deletions(changes: &mut BTreeMap<String, String>, removed: Vec<String>) {
+    if removed.is_empty() {
+        return;
+    }
+    let mut fields = changes
+        .remove("delete")
+        .into_iter()
+        .flat_map(|value| value.split(',').map(str::to_owned).collect::<Vec<_>>())
+        .chain(removed)
+        .collect::<Vec<_>>();
+    fields.sort();
+    fields.dedup();
+    changes.insert("delete".into(), fields.join(","));
+}
+
+pub(super) fn lxc_options(actual: &Value) -> Result<BTreeMap<String, String>> {
+    actual
+        .as_object()
+        .context("LXC config response is not an object")?
+        .iter()
+        .filter(|(key, _)| is_lxc_option(key))
+        .map(|(key, value)| {
+            let value = match value {
+                Value::String(value) => value.clone(),
+                Value::Number(value) => value.to_string(),
+                Value::Bool(value) => value.to_string(),
+                Value::Null => String::new(),
+                Value::Array(_) | Value::Object(_) => {
+                    anyhow::bail!("LXC option {key} has an unsupported structured value")
+                },
+            };
+            Ok((key.clone(), value))
+        })
+        .collect()
+}
+
+fn is_lxc_option(key: &str) -> bool {
+    match LxcConfigField::classify(key) {
+        LxcConfigField::Additional(name) => name.as_str() == key,
+        _ => false,
+    }
+}
+
+pub(super) fn validate_lxc_option_key(key: &str) -> Result<()> {
+    if !matches!(LxcConfigField::classify(key), LxcConfigField::Additional(_)) {
+        anyhow::bail!("invalid or reserved LXC option key `{key}`")
+    }
+    Ok(())
 }
 
 fn numbered(value: &str, prefix: &str) -> bool {
@@ -633,5 +703,70 @@ mod tests {
         );
 
         assert_eq!(blockers, ["qemu/202: guest creation is not managed"]);
+    }
+
+    #[test]
+    fn lxc_additional_options_plan_updates_and_removals_generically() {
+        let temp = tempfile::tempdir().unwrap();
+        crate::config::scaffold::initialize(temp.path()).unwrap();
+        let local = crate::config::open(temp.path()).unwrap();
+        let mut desired = local.guests.lxcs[&101].clone();
+        desired.options = Some(BTreeMap::from([
+            ("arch".into(), "arm64".into()),
+            ("features".into(), "nesting=1".into()),
+        ]));
+        let mut actual = serde_json::json!({
+            "hostname": "apps",
+            "ostype": "debian-13",
+            "cores": 2,
+            "memory": 2048,
+            "swap": 512,
+            "onboot": 1,
+            "startup": "order=20,up=10",
+            "unprivileged": 1,
+            "rootfs": "local-lvm:subvol-101-disk-0,size=16G",
+            "net0": "name=eth0,bridge=vmbr0,firewall=1,gw=192.0.2.1,hwaddr=02:00:00:00:01:01,ip=192.0.2.101/24",
+            "mp0": "/mnt/data/apps,mp=/srv/data,backup=0",
+            "arch": "amd64",
+            "features": "nesting=1",
+            "tags": "old",
+            "digest": "fixture"
+        });
+        let mut operations = Vec::new();
+        let mut blockers = Vec::new();
+
+        lxc(
+            "pve",
+            101,
+            &desired,
+            &actual,
+            &mut operations,
+            &mut blockers,
+        )
+        .unwrap();
+
+        let Operation::ApiMutation { changes, .. } = &operations[0] else {
+            panic!("expected LXC API mutation")
+        };
+        assert_eq!(changes["arch"], "arm64");
+        assert!(changes["delete"].split(',').any(|field| field == "tags"));
+        assert!(blockers.is_empty());
+
+        actual["arch"] = serde_json::json!("arm64");
+        actual.as_object_mut().unwrap().remove("tags");
+        assert_eq!(lxc_options(&actual).unwrap(), desired.options.unwrap());
+    }
+
+    #[test]
+    fn omitted_lxc_options_are_backward_compatible_and_require_adoption() {
+        let actual = serde_json::json!({"arch": "amd64", "digest": "ignored"});
+
+        assert_eq!(
+            lxc_options(&actual).unwrap(),
+            BTreeMap::from([("arch".into(), "amd64".into())])
+        );
+        assert!(validate_lxc_option_key("password").is_err());
+        assert!(validate_lxc_option_key("rootfs").is_err());
+        assert!(validate_lxc_option_key("features").is_ok());
     }
 }

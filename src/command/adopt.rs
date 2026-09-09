@@ -133,7 +133,7 @@ fn candidates(
     captured: &CapturedState,
     plan: &Plan,
 ) -> Result<Vec<AdoptionCandidate>> {
-    let mut candidates = Vec::new();
+    let mut candidates = guest::adopt::option_candidates(local, captured)?;
     for operation in &plan.operations {
         let mut produced = match operation {
             Operation::ApiMutation {

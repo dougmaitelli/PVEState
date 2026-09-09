@@ -18,7 +18,7 @@ pub(crate) use cluster::ClusterConfig;
 pub(crate) use manifest::RepositoryManifest;
 pub(crate) use node::NodeConfig;
 pub(crate) use proxmox::{
-    DiskInterface, EfiSlot, GuestField, GuestKind, GuestRef, NetworkSlot, UsbSlot,
+    DiskInterface, EfiSlot, GuestField, GuestKind, GuestRef, LxcConfigField, NetworkSlot, UsbSlot,
 };
 pub(crate) use recovery_check::RecoveryChecks;
 pub(crate) use restore::{RestoreConfig, RestoreMount};
