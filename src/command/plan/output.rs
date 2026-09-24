@@ -58,6 +58,7 @@ fn print_operation(operation: &Operation) {
             resource,
             endpoint,
             changes,
+            before_values,
             environment_changes,
             ..
         } => {
@@ -67,8 +68,8 @@ fn print_operation(operation: &Operation) {
                 resource,
                 style(api_target(*target)).dim()
             );
-            for (field, value) in changes {
-                println!("      {:<22} {}", field, display_value(field, value));
+            for line in api_change_lines(changes, before_values) {
+                println!("      {line}");
             }
             for (field, variable) in environment_changes {
                 println!(
@@ -124,6 +125,38 @@ fn print_operation(operation: &Operation) {
             print_diff(domain.as_str(), before_content, "");
         },
     }
+}
+
+pub(super) fn api_change_lines(
+    changes: &BTreeMap<String, String>,
+    before_values: &BTreeMap<String, Option<String>>,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    for (field, value) in changes {
+        if field == "delete" && value.split(',').all(|key| before_values.contains_key(key)) {
+            for key in value.split(',') {
+                lines.push(format!(
+                    "{key:<22} {} (captured) → (removed) (local)",
+                    captured_value(key, &before_values[key]),
+                ));
+            }
+        } else if let Some(before) = before_values.get(field) {
+            lines.push(format!(
+                "{field:<22} {} (captured) → {} (local)",
+                captured_value(field, before),
+                display_value(field, value),
+            ));
+        } else {
+            lines.push(format!("{field:<22} {}", display_value(field, value)));
+        }
+    }
+    lines
+}
+
+fn captured_value(field: &str, value: &Option<String>) -> String {
+    value
+        .as_deref()
+        .map_or_else(|| "(unset)".into(), |value| display_value(field, value))
 }
 
 fn action(method: ApiMethod) -> console::StyledObject<&'static str> {
@@ -243,6 +276,23 @@ fn line_diff<'a>(before: &'a str, after: &'a str) -> Vec<DiffLine<'a>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn api_changes_distinguish_unset_empty_and_unknown_values() {
+        let changes = BTreeMap::from([
+            ("search".into(), "example.test".into()),
+            ("dns1".into(), "192.0.2.53".into()),
+            ("description".into(), "".into()),
+        ]);
+        let before = BTreeMap::from([
+            ("search".into(), Some(String::new())),
+            ("dns1".into(), None),
+        ]);
+        let lines = api_change_lines(&changes, &before).join("\n");
+        assert!(lines.contains("(empty) (captured) → example.test (local)"));
+        assert!(lines.contains("(unset) (captured) → 192.0.2.53 (local)"));
+        assert!(lines.contains(&format!("{:<22} (empty)", "description")));
+    }
 
     #[test]
     fn formats_removed_and_empty_values_for_people() {

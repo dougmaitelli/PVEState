@@ -14,5 +14,4 @@ pub(crate) struct SecretGroups {
     pub(crate) pbs_s3: Vec<String>,
     pub(crate) pbs_identity: Vec<String>,
     pub(crate) pve_to_pbs: Vec<String>,
-    pub(crate) application: Vec<String>,
 }

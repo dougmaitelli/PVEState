@@ -418,6 +418,15 @@
             "$ref": "#/$defs/Nic"
           }
         },
+        "options": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "os": {
           "type": "string"
         },

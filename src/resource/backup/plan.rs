@@ -185,6 +185,7 @@ fn s3_endpoint(
                 ("endpoint".into(), desired.endpoint_template.clone()),
                 ("region".into(), desired.region.clone()),
             ]),
+            before_values: BTreeMap::new(),
             environment_changes: BTreeMap::from([
                 (
                     "access-key".into(),
@@ -374,6 +375,7 @@ fn push(
         resource: resource.into(),
         endpoint: endpoint.into(),
         changes,
+        before_values: BTreeMap::new(),
         environment_changes: BTreeMap::new(),
         digest: None,
     });

@@ -215,6 +215,7 @@ mod tests {
                 resource: ResourceId::parse("lxc/101"),
                 endpoint: "/nodes/pve/lxc/101/config".into(),
                 changes: BTreeMap::new(),
+                before_values: BTreeMap::new(),
                 environment_changes: BTreeMap::new(),
                 digest: None,
             }],
@@ -328,6 +329,33 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(actual, expected);
+
+        let dns = plan
+            .operations
+            .iter()
+            .find(|op| op.domain() == Domain::Dns)
+            .unwrap();
+        let Operation::ApiMutation {
+            changes,
+            before_values,
+            ..
+        } = dns
+        else {
+            panic!("expected DNS API mutation");
+        };
+        let lines = output::api_change_lines(changes, before_values).join("\n");
+        assert!(lines.contains("old.example.test (captured) → example.test (local)"));
+        assert!(lines.contains("8.8.8.8 (captured) → (removed) (local)"));
+        assert!(
+            !lines.contains("192.0.2.53"),
+            "unchanged DNS server should be omitted"
+        );
+        assert!(
+            serde_json::to_value(dns)
+                .unwrap()
+                .get("before_values")
+                .is_none()
+        );
 
         let mut domains = plan
             .operations

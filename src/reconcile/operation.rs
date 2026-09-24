@@ -12,6 +12,8 @@ pub(crate) enum Operation {
         resource: ResourceId,
         endpoint: MutationEndpoint,
         changes: BTreeMap<String, String>,
+        #[serde(skip)]
+        before_values: BTreeMap<String, Option<String>>,
         #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
         environment_changes: BTreeMap<String, SecretName>,
         digest: Option<String>,

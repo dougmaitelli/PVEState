@@ -435,6 +435,7 @@ mod tests {
             resource: resource.into(),
             endpoint: format!("/{resource}").into(),
             changes: BTreeMap::new(),
+            before_values: BTreeMap::new(),
             environment_changes: BTreeMap::new(),
             digest: None,
         }

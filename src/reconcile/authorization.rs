@@ -317,6 +317,7 @@ mod tests {
             resource: ResourceId::parse("lxc/101"),
             endpoint: endpoint.into(),
             changes: BTreeMap::new(),
+            before_values: BTreeMap::new(),
             environment_changes: BTreeMap::new(),
             digest: None,
         }

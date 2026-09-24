@@ -308,6 +308,7 @@ fn push_update(
             resource: guest.to_string().into(),
             endpoint: guest.config_endpoint(node).into(),
             changes,
+            before_values: BTreeMap::new(),
             environment_changes: BTreeMap::new(),
             digest: actual["digest"].as_str().map(str::to_string),
         });

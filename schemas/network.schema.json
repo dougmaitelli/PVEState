@@ -38,6 +38,14 @@
     "bridges"
   ],
   "$defs": {
+    "AddressMethod": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "static",
+        "dhcp"
+      ]
+    },
     "Bridge": {
       "type": "object",
       "properties": {
@@ -74,7 +82,7 @@
           "default": null
         },
         "method": {
-          "type": "string"
+          "$ref": "#/$defs/AddressMethod"
         },
         "name": {
           "type": "string"
@@ -121,7 +129,7 @@
       "type": "object",
       "properties": {
         "method": {
-          "type": "string"
+          "$ref": "#/$defs/AddressMethod"
         },
         "name": {
           "type": "string"

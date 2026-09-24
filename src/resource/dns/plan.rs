@@ -25,12 +25,30 @@ pub(crate) fn plan(
             domain: Domain::Dns,
             resource: ResourceId::Named(local.guests.node.clone()),
             endpoint: endpoint.into(),
+            before_values: before_values(&changes, &actual),
             changes,
             environment_changes: BTreeMap::new(),
             digest: None,
         });
     }
     Ok(())
+}
+
+fn before_values(
+    changes: &BTreeMap<String, String>,
+    actual: &serde_json::Value,
+) -> BTreeMap<String, Option<String>> {
+    changes
+        .iter()
+        .flat_map(|(field, value)| {
+            if field == "delete" {
+                value.split(',').collect::<Vec<_>>()
+            } else {
+                vec![field.as_str()]
+            }
+        })
+        .map(|field| (field.into(), actual.get(field).map(value_string)))
+        .collect()
 }
 
 fn changes(

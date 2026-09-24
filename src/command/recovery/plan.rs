@@ -69,10 +69,6 @@ pub(super) fn create(
             blockers.push(format!("guest configuration for VMID {id}"));
         }
     }
-    if repo.restore.application.configure_command.is_none() {
-        blockers.push("application.configure_command".into());
-    }
-
     let mut plan = RecoveryPlan {
         schema_version: 2,
         created_at: Utc::now(),

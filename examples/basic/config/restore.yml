@@ -20,8 +20,3 @@ restore_order: [101, 201]
 protected_vmids: [111]
 reattach_mounts:
   - {vmid: 101, index: 0, source: /mnt/data/apps, target: /srv/data}
-application:
-  repository: git@example.test:infra/applications.git
-  docker_guest_vmid: 101
-  configure_playbook: null
-  configure_command: null

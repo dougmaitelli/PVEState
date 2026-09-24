@@ -12,7 +12,6 @@ pub(crate) struct RestoreConfig {
     pub(crate) restore_order: Vec<u32>,
     pub(crate) protected_vmids: Vec<u32>,
     pub(crate) reattach_mounts: Vec<RestoreMount>,
-    pub(crate) application: RestoreApplication,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -46,13 +45,4 @@ pub(crate) struct RestoreMount {
     pub(crate) index: u16,
     pub(crate) source: String,
     pub(crate) target: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct RestoreApplication {
-    pub(crate) repository: String,
-    pub(crate) docker_guest_vmid: u32,
-    pub(crate) configure_playbook: Option<String>,
-    pub(crate) configure_command: Option<String>,
 }

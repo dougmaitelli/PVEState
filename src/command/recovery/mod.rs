@@ -1,6 +1,5 @@
 mod bootstrap_pbs;
 mod bootstrap_pve;
-mod configure;
 mod identity;
 mod plan;
 mod restore;
@@ -20,7 +19,6 @@ pub(crate) enum Stage {
     BootstrapPve,
     BootstrapPbs,
     Restore,
-    Configure,
     All,
 }
 
@@ -62,12 +60,10 @@ pub(crate) fn run(
         Stage::BootstrapPve => bootstrap_pve::run(repo, ssh, events),
         Stage::BootstrapPbs => bootstrap_pbs::run(repo, ssh, events),
         Stage::Restore => restore::run(repo, ssh, events),
-        Stage::Configure => configure::run(repo, ssh),
         Stage::All => {
             bootstrap_pve::run(repo, ssh, events)?;
             bootstrap_pbs::run(repo, ssh, events)?;
-            restore::run(repo, ssh, events)?;
-            configure::run(repo, ssh)
+            restore::run(repo, ssh, events)
         },
         Stage::Plan => unreachable!(),
     }?;
@@ -88,7 +84,6 @@ impl Stage {
             Self::BootstrapPve => "bootstrap PVE",
             Self::BootstrapPbs => "bootstrap PBS",
             Self::Restore => "restore guests",
-            Self::Configure => "configure applications",
             Self::All => "all stages",
         }
     }

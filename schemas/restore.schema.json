@@ -3,9 +3,6 @@
   "title": "RestoreConfig",
   "type": "object",
   "properties": {
-    "application": {
-      "$ref": "#/$defs/RestoreApplication"
-    },
     "archives": {
       "type": "object",
       "additionalProperties": false,
@@ -61,8 +58,7 @@
     "archives",
     "restore_order",
     "protected_vmids",
-    "reattach_mounts",
-    "application"
+    "reattach_mounts"
   ],
   "$defs": {
     "PbsBootstrap": {
@@ -107,36 +103,6 @@
         "bucket",
         "region",
         "storage_attached_to_pve"
-      ]
-    },
-    "RestoreApplication": {
-      "type": "object",
-      "properties": {
-        "configure_command": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "configure_playbook": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "docker_guest_vmid": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "repository": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "repository",
-        "docker_guest_vmid"
       ]
     },
     "RestoreMount": {

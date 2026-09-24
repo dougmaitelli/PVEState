@@ -63,7 +63,6 @@ enum Recovery {
     BootstrapPve { target: String },
     BootstrapPbs { target: String },
     Restore { target: String },
-    Configure { target: String },
     All { target: String },
 }
 
@@ -132,7 +131,6 @@ fn run(cli: Cli, events: &dyn EventSink) -> Result<()> {
                 Recovery::BootstrapPve { target } => (recovery::Stage::BootstrapPve, target),
                 Recovery::BootstrapPbs { target } => (recovery::Stage::BootstrapPbs, target),
                 Recovery::Restore { target } => (recovery::Stage::Restore, target),
-                Recovery::Configure { target } => (recovery::Stage::Configure, target),
                 Recovery::All { target } => (recovery::Stage::All, target),
             };
             let repo = config::open(&cli.config_dir)?;
