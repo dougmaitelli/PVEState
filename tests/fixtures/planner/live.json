@@ -1,5 +1,6 @@
 {
   "pve": {
+    "/cluster/options": {},
     "/nodes/pve/lxc": [{"vmid": 101}],
     "/nodes/pve/qemu": [{"vmid": 201}],
     "/nodes/pve/lxc/101/config": {

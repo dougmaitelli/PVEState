@@ -180,6 +180,36 @@ older repositories and are normalized to the slot-keyed format when rewritten.
 Normal disks absent from the local slot map are removed through the guarded guest
 plan; unmodeled CD-ROM and cloud-init drives are preserved.
 
+Cluster-wide tag color overrides are managed in `config/cluster.yml`:
+
+```yaml
+tag_colors:
+  production:
+    background: "008844"
+    text: "ffffff"
+  testing:
+    background: "ffcc00"
+```
+
+Colors are quoted six-digit RGB hex strings without `#`. Omitting `text` lets
+Proxmox choose a contrasting text color. Omit `tag_colors` to leave overrides
+unmanaged; once present, the map owns all color overrides, so removing an entry
+restores that tag's default color and `tag_colors: {}` clears all overrides.
+Tag assignments on guests are independent of these cluster-wide colors.
+
+Run `pves capture` again to collect `/cluster/options`, then `pves plan`.
+`pves adopt --preview` includes `cluster:tag_colors`; adopting that ID imports
+the captured overrides, including when colors are not yet locally managed.
+Plans show captured and local tag-style values. Applying color changes requires
+`cluster` in `PVES_APPLY_DOMAINS` and a PVE mutation identity with `Sys.Modify`
+on `/`. Other tag-style options, including shape and ordering, are preserved.
+
+Human-readable plan diffs display tag names with their background and text colors:
+captured tags use captured overrides, and local tags use local overrides (or the
+captured palette when overrides are unmanaged). Tags without overrides use
+Proxmox's generated colors. Color-map diffs also color each tag name while keeping
+the hex values visible. Plain-text and JSON output remain free of styling.
+
 ### Safety model
 
 `apply` requires a plan less than 30 minutes old, an exact plan SHA, an exact

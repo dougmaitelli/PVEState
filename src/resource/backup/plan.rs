@@ -2,7 +2,7 @@ use crate::{
     client::{PbsClient, PveClient},
     config::LocalState,
     model::{PruneJob, SyncJob, VerifyJob},
-    reconcile::{ApiMethod, ApiTarget, Domain, Operation, PlanBuilder},
+    reconcile::{ApiMethod, ApiTarget, Domain, Operation, PlanBuilder, before_values},
 };
 use anyhow::{Context, Result};
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
@@ -75,12 +75,12 @@ fn pve_jobs(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation>) 
                 } else {
                     format!("/cluster/backup/{}", encoded(id))
                 },
-                changes,
+                (changes, current),
             );
         }
     }
     for id in &repo.backup.absent_pve_backup_jobs {
-        if find(actual, "id", id).is_some() {
+        if let Some(current) = find(actual, "id", id) {
             push(
                 operations,
                 ApiTarget::Pve,
@@ -88,7 +88,7 @@ fn pve_jobs(repo: &LocalState, actual: &Value, operations: &mut Vec<Operation>) 
                 Domain::Backup,
                 &format!("pve/{id}"),
                 format!("/cluster/backup/{}", encoded(id)),
-                BTreeMap::new(),
+                (BTreeMap::new(), Some(current)),
             );
         }
     }
@@ -123,15 +123,18 @@ fn datastore(
             Domain::Pbs,
             &format!("datastore/{}", desired.name),
             "/config/datastore".into(),
-            BTreeMap::from([
-                ("name".into(), desired.name.clone()),
-                ("path".into(), desired.local_cache_path.clone()),
-                ("backend".into(), wanted_backend),
-                (
-                    "gc-schedule".into(),
-                    desired.garbage_collection_schedule.clone(),
-                ),
-            ]),
+            (
+                BTreeMap::from([
+                    ("name".into(), desired.name.clone()),
+                    ("path".into(), desired.local_cache_path.clone()),
+                    ("backend".into(), wanted_backend),
+                    (
+                        "gc-schedule".into(),
+                        desired.garbage_collection_schedule.clone(),
+                    ),
+                ]),
+                None,
+            ),
         );
         return Ok(());
     };
@@ -162,7 +165,7 @@ fn datastore(
             Domain::Pbs,
             &format!("datastore/{}", desired.name),
             format!("/config/datastore/{}", encoded(&desired.name)),
-            changes,
+            (changes, Some(current)),
         );
     }
     Ok(())
@@ -216,7 +219,7 @@ fn s3_endpoint(
             Domain::Pbs,
             &format!("s3/{}", desired.id),
             format!("/config/s3/{}", encoded(&desired.id)),
-            changes,
+            (changes, Some(current)),
         );
     }
     Ok(())
@@ -274,7 +277,8 @@ fn reconcile_job(
     mut wanted: BTreeMap<String, String>,
     operations: &mut Vec<Operation>,
 ) {
-    let method = if let Some(current) = find(actual, "id", id) {
+    let current = find(actual, "id", id);
+    let method = if let Some(current) = current {
         wanted.retain(|key, value| current.get(key).map(value_string).as_deref() != Some(value));
         ApiMethod::Put
     } else {
@@ -293,14 +297,14 @@ fn reconcile_job(
             } else {
                 format!("{root}/{}", encoded(id))
             },
-            wanted,
+            (wanted, current),
         );
     }
 }
 
 fn absent_jobs(actual: &Value, absent: &[String], root: &str, operations: &mut Vec<Operation>) {
     for id in absent {
-        if find(actual, "id", id).is_some() {
+        if let Some(current) = find(actual, "id", id) {
             push(
                 operations,
                 ApiTarget::Pbs,
@@ -308,7 +312,7 @@ fn absent_jobs(actual: &Value, absent: &[String], root: &str, operations: &mut V
                 Domain::Pbs,
                 &format!("{}/{id}", root.trim_start_matches("/config/")),
                 format!("{root}/{}", encoded(id)),
-                BTreeMap::new(),
+                (BTreeMap::new(), Some(current)),
             );
         }
     }
@@ -366,8 +370,30 @@ fn push(
     domain: Domain,
     resource: &str,
     endpoint: String,
-    changes: BTreeMap<String, String>,
+    (changes, current): (BTreeMap<String, String>, Option<&Value>),
 ) {
+    let mut before = current
+        .map(|value| {
+            if method == ApiMethod::Delete {
+                deleted_job_values(value)
+            } else {
+                before_values(&changes, value)
+            }
+        })
+        .unwrap_or_default();
+    if let Some(options) = current
+        .and_then(|value| value.get("prune-backups"))
+        .and_then(Value::as_object)
+        && let Some(value) = before.get_mut("prune-backups")
+    {
+        *value = Some(
+            options
+                .iter()
+                .map(|(key, value)| format!("{key}={}", value_string(value)))
+                .collect::<Vec<_>>()
+                .join(","),
+        );
+    }
     operations.push(Operation::ApiMutation {
         target,
         method,
@@ -375,10 +401,50 @@ fn push(
         resource: resource.into(),
         endpoint: endpoint.into(),
         changes,
-        before_values: BTreeMap::new(),
+        before_values: before,
         environment_changes: BTreeMap::new(),
         digest: None,
     });
+}
+
+fn deleted_job_values(current: &Value) -> BTreeMap<String, Option<String>> {
+    // Configuration fields only: list responses can also contain task status and digests.
+    const FIELDS: &[&str] = &[
+        "id",
+        "node",
+        "storage",
+        "schedule",
+        "mode",
+        "vmid",
+        "prune-backups",
+        "store",
+        "keep-last",
+        "keep-hourly",
+        "keep-daily",
+        "keep-weekly",
+        "keep-monthly",
+        "keep-yearly",
+        "ignore-verified",
+        "outdated-after",
+        "remote-store",
+        "remove-vanished",
+        "sync-direction",
+        "remote",
+        "comment",
+        "enabled",
+        "disable",
+        "ns",
+        "remote-ns",
+        "max-depth",
+    ];
+    FIELDS
+        .iter()
+        .filter_map(|key| {
+            current
+                .get(*key)
+                .map(|value| ((*key).into(), Some(value_string(value))))
+        })
+        .collect()
 }
 
 fn find<'a>(items: &'a Value, key: &str, value: &str) -> Option<&'a Value> {
@@ -447,6 +513,140 @@ fn encoded(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deleted_jobs_keep_configuration_only_for_display() {
+        let temp = tempfile::tempdir().unwrap();
+        crate::config::scaffold::initialize(temp.path()).unwrap();
+        let mut repo = crate::config::open(temp.path()).unwrap();
+        repo.backup.pve_backup_jobs.clear();
+        repo.backup.absent_pve_backup_jobs = vec!["gone".into()];
+        let actual = serde_json::json!([{
+            "id": "gone", "schedule": "daily", "store": "backup",
+            "prune-backups": {"keep-last": 3}, "digest": "opaque",
+            "last-run-state": "OK", "secret-key": "never display"
+        }]);
+        let mut operations = Vec::new();
+        pve_jobs(&repo, &actual, &mut operations).unwrap();
+        for root in ["/config/prune", "/config/verify", "/config/sync"] {
+            absent_jobs(&actual, &["gone".into()], root, &mut operations);
+        }
+        assert_eq!(operations.len(), 4);
+        for operation in operations {
+            let Operation::ApiMutation {
+                method,
+                changes,
+                before_values,
+                ..
+            } = &operation
+            else {
+                panic!("expected API mutation")
+            };
+            assert_eq!(*method, ApiMethod::Delete);
+            assert!(changes.is_empty());
+            assert_eq!(before_values["schedule"].as_deref(), Some("daily"));
+            assert_eq!(
+                before_values["prune-backups"].as_deref(),
+                Some("keep-last=3")
+            );
+            for key in ["digest", "last-run-state", "secret-key"] {
+                assert!(!before_values.contains_key(key));
+            }
+            let saved = serde_json::to_value(operation).unwrap();
+            assert_eq!(saved["changes"], serde_json::json!({}));
+            assert!(saved.get("before_values").is_none());
+        }
+    }
+
+    #[test]
+    fn backup_and_pbs_updates_include_captured_values() {
+        let temp = tempfile::tempdir().unwrap();
+        crate::config::scaffold::initialize(temp.path()).unwrap();
+        let repo = crate::config::open(temp.path()).unwrap();
+        let mut operations = Vec::new();
+        pve_jobs(
+            &repo,
+            &serde_json::json!([{
+                "id": "backup-example", "storage": "old", "schedule": "daily",
+                "mode": "stop", "vmid": "101", "prune-backups": {"keep-last": 1}
+            }]),
+            &mut operations,
+        )
+        .unwrap();
+        let desired = repo.backup.pbs.s3_endpoint.as_ref().unwrap();
+        s3_endpoint(
+            desired,
+            &serde_json::json!([{
+                "id": desired.id, "endpoint": "old.example.test", "region": "old-region",
+                "secret-key": "must-not-appear"
+            }]),
+            &mut operations,
+        )
+        .unwrap();
+        for root in ["/config/prune", "/config/verify", "/config/sync"] {
+            reconcile_job(
+                &serde_json::json!([{
+                    "id": "example", "store": "old-store", "schedule": "weekly",
+                    "keep-last": 1, "ignore-verified": false, "remove-vanished": false
+                }]),
+                "example",
+                root,
+                BTreeMap::from([
+                    ("store".into(), "new-store".into()),
+                    ("schedule".into(), "daily".into()),
+                    ("keep-last".into(), "3".into()),
+                    ("ignore-verified".into(), "true".into()),
+                    ("remove-vanished".into(), "true".into()),
+                    ("remote".into(), "new-remote".into()),
+                ]),
+                &mut operations,
+            );
+        }
+        assert_eq!(operations.len(), 5);
+        for operation in &operations {
+            let Operation::ApiMutation {
+                changes,
+                before_values,
+                ..
+            } = operation
+            else {
+                unreachable!()
+            };
+            assert_eq!(
+                changes.keys().collect::<Vec<_>>(),
+                before_values.keys().collect::<Vec<_>>()
+            );
+            assert!(
+                !serde_json::to_string(operation)
+                    .unwrap()
+                    .contains("must-not-appear")
+            );
+            match operation.resource().to_string().as_str() {
+                "pve/backup-example" => {
+                    assert_eq!(
+                        before_values["prune-backups"].as_deref(),
+                        Some("keep-last=1")
+                    );
+                    assert_eq!(before_values["vmid"].as_deref(), Some("101"));
+                },
+                name if name.starts_with("s3/") => {
+                    assert_eq!(
+                        before_values["endpoint"].as_deref(),
+                        Some("old.example.test")
+                    );
+                    assert_eq!(before_values["region"].as_deref(), Some("old-region"));
+                    assert!(!before_values.contains_key("secret-key"));
+                },
+                _ => {
+                    assert_eq!(before_values["store"].as_deref(), Some("old-store"));
+                    assert_eq!(before_values["keep-last"].as_deref(), Some("1"));
+                    assert_eq!(before_values["ignore-verified"].as_deref(), Some("false"));
+                    assert_eq!(before_values["remove-vanished"].as_deref(), Some("false"));
+                    assert_eq!(before_values["remote"], None);
+                },
+            }
+        }
+    }
 
     #[test]
     fn pve_job_guest_order_is_semantic() {

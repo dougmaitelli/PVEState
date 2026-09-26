@@ -632,6 +632,7 @@ mod tests {
             confirm_plan_sha: Some("fixture".into()),
             target: Some(Url::parse(&fixture.pve_target).unwrap()),
             domains: BTreeSet::from([
+                crate::reconcile::Domain::Cluster,
                 crate::reconcile::Domain::Guest,
                 crate::reconcile::Domain::Pbs,
             ]),

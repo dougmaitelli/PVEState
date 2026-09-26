@@ -20,6 +20,7 @@ pub(crate) struct PveSnapshot {
 #[derive(Debug, Serialize)]
 pub(crate) struct ClusterResponses {
     pub(crate) version: RawResponse,
+    pub(crate) cluster_options: ObjectResponse,
     pub(crate) cluster_status: ObjectsResponse,
     pub(crate) cluster_resources: ObjectsResponse,
     pub(crate) backup_jobs: ObjectsResponse,
@@ -58,6 +59,7 @@ pub(crate) struct Guest {
 pub(crate) fn capture_pve(client: &dyn PveClient, events: &dyn EventSink) -> PveSnapshot {
     let requests = ClusterResponses {
         version: get(client, "/version", events),
+        cluster_options: get(client, "/cluster/options", events),
         cluster_status: get(client, "/cluster/status", events),
         cluster_resources: get(client, "/cluster/resources", events),
         backup_jobs: get(client, "/cluster/backup", events),
@@ -142,6 +144,7 @@ impl PveSnapshot {
     pub(crate) fn failures(&self) -> Vec<String> {
         let mut failures = self.enumeration_failures.clone();
         add_failure("cluster", &self.requests.version, &mut failures);
+        add_failure("cluster", &self.requests.cluster_options, &mut failures);
         add_failure("cluster", &self.requests.cluster_status, &mut failures);
         add_failure("cluster", &self.requests.cluster_resources, &mut failures);
         add_failure("cluster", &self.requests.backup_jobs, &mut failures);
@@ -244,7 +247,11 @@ mod tests {
         }
 
         fn get(&self, path: &str) -> Result<Value> {
-            if path.ends_with("/snapshot") || path.ends_with("/firewall/rules") {
+            if path == "/cluster/options" {
+                Ok(
+                    serde_json::json!({"tag-style": {"color-map": "production:008844:ffffff", "shape": "full"}}),
+                )
+            } else if path.ends_with("/snapshot") || path.ends_with("/firewall/rules") {
                 Ok(serde_json::json!([]))
             } else {
                 Ok(serde_json::json!({}))
@@ -262,6 +269,17 @@ mod tests {
         fn delete(&self, _: &str, _: &BTreeMap<String, String>) -> Result<()> {
             unreachable!()
         }
+    }
+
+    #[test]
+    fn captures_cluster_color_overrides_and_other_style_options() {
+        let captured = capture_pve(&FakePve, &crate::utility::progress::NullEventSink);
+        let options = captured.requests.cluster_options;
+        assert!(options.ok);
+        assert_eq!(options.path, "/cluster/options");
+        let style = &options.data.unwrap()["tag-style"];
+        assert_eq!(style["color-map"], "production:008844:ffffff");
+        assert_eq!(style["shape"], "full");
     }
 
     #[test]

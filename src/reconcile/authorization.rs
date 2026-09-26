@@ -121,7 +121,27 @@ fn verify_api_mutation(
         family,
         MutationEndpointFamily::GuestConfig { kind: "lxc", .. }
     );
-    let allowed = match family {
+    let allowed: ParameterPolicy = match family {
+        MutationEndpointFamily::ClusterOptions => {
+            if target != ApiTarget::Pve
+                || domain != Domain::Cluster
+                || method != ApiMethod::Put
+                || *resource != ResourceId::Cluster
+            {
+                bail!("API endpoint {endpoint} does not match its cluster operation")
+            }
+            if let Some(deleted) = changes.get("delete")
+                && (deleted != "tag-style" || changes.contains_key("tag-style"))
+            {
+                bail!("only tag-style may be removed by a cluster color operation")
+            }
+            if let Some(style) = changes.get("tag-style") {
+                crate::resource::tag_colors::TagStyle::from_api(Some(&serde_json::Value::String(
+                    style.clone(),
+                )))?;
+            }
+            |key| matches!(key, "tag-style" | "delete")
+        },
         MutationEndpointFamily::GuestConfig { node, kind, vmid } => {
             let ResourceId::Guest(guest) = resource else {
                 bail!("guest endpoint {endpoint} requires a guest resource")
@@ -321,6 +341,50 @@ mod tests {
             environment_changes: BTreeMap::new(),
             digest: None,
         }
+    }
+
+    #[test]
+    fn cluster_color_operations_have_restricted_parameters_and_methods() {
+        let valid = Operation::ApiMutation {
+            target: ApiTarget::Pve,
+            method: ApiMethod::Put,
+            domain: Domain::Cluster,
+            resource: ResourceId::Cluster,
+            endpoint: "/cluster/options".into(),
+            changes: BTreeMap::from([(
+                "tag-style".into(),
+                "color-map=web:008844:ffffff,shape=full".into(),
+            )]),
+            before_values: BTreeMap::new(),
+            environment_changes: BTreeMap::new(),
+            digest: None,
+        };
+        verify_operation(&valid).unwrap();
+        for changes in [
+            BTreeMap::from([("delete".into(), "tag-style,keyboard".into())]),
+            BTreeMap::from([("keyboard".into(), "en-us".into())]),
+            BTreeMap::from([("tag-style".into(), "color-map=web:invalid".into())]),
+            BTreeMap::from([
+                ("tag-style".into(), "shape=full".into()),
+                ("delete".into(), "tag-style".into()),
+            ]),
+        ] {
+            let mut operation = valid.clone();
+            let Operation::ApiMutation {
+                changes: actual, ..
+            } = &mut operation
+            else {
+                unreachable!()
+            };
+            *actual = changes;
+            assert!(verify_operation(&operation).is_err());
+        }
+        let mut operation = valid;
+        let Operation::ApiMutation { method, .. } = &mut operation else {
+            unreachable!()
+        };
+        *method = ApiMethod::Delete;
+        assert!(verify_operation(&operation).is_err());
     }
 
     #[test]

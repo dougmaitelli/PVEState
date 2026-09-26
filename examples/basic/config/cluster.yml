@@ -15,6 +15,9 @@ backup:
   s3:
     configured_in_pbs: true
     endpoint: managed_in_pbs
+# Omit tag_colors to leave overrides unmanaged. Use {} to clear all overrides.
+# tag_colors:
+#   production: {background: "008844", text: "ffffff"}
 firewall:
   enabled: true
   log_level_in: info

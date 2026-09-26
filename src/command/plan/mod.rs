@@ -8,17 +8,28 @@ use crate::{
     config::LocalState,
     discovery::CapturedState,
     reconcile::{Plan, PlanBuilder},
-    resource::{backup, dns, firewall, guest, network},
+    resource::{backup, dns, firewall, guest, network, tag_colors},
     utility::{atomic_file, progress, runtime_security},
 };
 use anyhow::Result;
 
-pub(crate) fn run(repo: &LocalState, events: &dyn progress::EventSink) -> Result<Plan> {
+pub(crate) struct PlanReport {
+    pub(crate) plan: Plan,
+    pub(crate) tag_palettes: output::TagPalettes,
+}
+
+pub(crate) fn run(repo: &LocalState, events: &dyn progress::EventSink) -> Result<PlanReport> {
     events.section("Comparing local configuration with captured state");
     runtime_security::prepare(&repo.runtime())?;
     validation::validate(repo, events)?;
     let captured = CapturedState::load(repo, chrono::Duration::minutes(30))?;
-    build_captured(repo, &captured, events)
+    let plan = build_captured(repo, &captured, events)?;
+    let tag_palettes = if plan.operations.iter().any(output::has_guest_tags) {
+        output::TagPalettes::load(repo, &captured.pve)?
+    } else {
+        output::TagPalettes::default()
+    };
+    Ok(PlanReport { plan, tag_palettes })
 }
 
 fn build_captured(
@@ -43,6 +54,7 @@ pub(super) fn build(
     events: &dyn progress::EventSink,
 ) -> Result<Plan> {
     let mut builder = PlanBuilder::new(capture_id, api.endpoint(), pbs.endpoint());
+    tag_colors::plan(repo, api, &mut builder)?;
     guest::plan(repo, api, &mut builder)?;
     dns::plan::plan(repo, api, &mut builder)?;
     backup::plan(repo, api, pbs, &mut builder)?;
@@ -329,6 +341,48 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(actual, expected);
+
+        for (resource, field, before, after) in [
+            ("lxc/101", "hostname", "old-apps", "apps"),
+            ("lxc/101", "cores", "1", "2"),
+            ("qemu/201", "usb1", "host=dead:beef", "(removed)"),
+            ("pve/backup-example", "schedule", "daily", "weekly"),
+            ("datastore/example-backup", "gc-schedule", "weekly", "daily"),
+            ("prune/prune-example", "schedule", "weekly", "daily"),
+        ] {
+            let operation = plan
+                .operations
+                .iter()
+                .find(|operation| {
+                    operation.resource().to_string() == resource
+                        && matches!(operation, Operation::ApiMutation { .. })
+                })
+                .unwrap();
+            let Operation::ApiMutation {
+                changes,
+                before_values,
+                ..
+            } = operation
+            else {
+                unreachable!()
+            };
+            assert_eq!(
+                before_values[field].as_deref(),
+                Some(before),
+                "{resource}/{field}"
+            );
+            let lines = output::api_change_lines(changes, before_values).join("\n");
+            assert!(
+                lines.contains(&format!("{before} (captured) → {after} (local)")),
+                "{resource}: {lines}"
+            );
+            assert!(
+                serde_json::to_value(operation)
+                    .unwrap()
+                    .get("before_values")
+                    .is_none()
+            );
+        }
 
         let dns = plan
             .operations

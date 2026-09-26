@@ -11,6 +11,9 @@ pub(crate) struct ClusterConfig {
     pub(crate) backup: ClusterBackup,
     #[serde(default)]
     pub(crate) firewall: Option<FirewallPolicy>,
+    /// Cluster-wide tag color overrides. Omit to leave unmanaged; {} clears overrides.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) tag_colors: Option<crate::resource::tag_colors::TagColors>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

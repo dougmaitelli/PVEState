@@ -1,7 +1,7 @@
 use crate::{
     client::PveClient,
     config::LocalState,
-    reconcile::{ApiMethod, ApiTarget, Domain, Operation, PlanBuilder, ResourceId},
+    reconcile::{ApiMethod, ApiTarget, Domain, Operation, PlanBuilder, ResourceId, before_values},
 };
 use anyhow::Result;
 use std::collections::BTreeMap;
@@ -32,23 +32,6 @@ pub(crate) fn plan(
         });
     }
     Ok(())
-}
-
-fn before_values(
-    changes: &BTreeMap<String, String>,
-    actual: &serde_json::Value,
-) -> BTreeMap<String, Option<String>> {
-    changes
-        .iter()
-        .flat_map(|(field, value)| {
-            if field == "delete" {
-                value.split(',').collect::<Vec<_>>()
-            } else {
-                vec![field.as_str()]
-            }
-        })
-        .map(|field| (field.into(), actual.get(field).map(value_string)))
-        .collect()
 }
 
 fn changes(

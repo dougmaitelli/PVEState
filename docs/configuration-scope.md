@@ -39,3 +39,9 @@ normal planning does not create missing guests or delete extra guests. Only IDs
 declared in `guests.yml` are owned; extra live guests are archived outside that
 ownership boundary. Storage definitions and host services follow the same
 explicit declared-only boundary.
+
+`cluster.yml`'s optional `tag_colors` map is production-managed: capture reads
+cluster options, adoption imports color overrides, and plans apply background
+and optional text colors through `/cluster/options`. An omitted map leaves colors
+unmanaged; an empty map clears the overrides. Other tag-style properties are
+preserved. This does not change which tags are assigned to guests.

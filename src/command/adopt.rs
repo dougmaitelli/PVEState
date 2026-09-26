@@ -4,7 +4,7 @@ use crate::{
     config::{AdoptionCandidate, ConfigDocument, LocalPatch, LocalState},
     discovery::CapturedState,
     reconcile::{Domain, Operation, Plan},
-    resource::{backup, firewall, guest, network},
+    resource::{backup, firewall, guest, network, tag_colors},
     utility::{progress::EventSink, runtime_security, yaml_patch},
 };
 use anyhow::{Context, Result, bail};
@@ -134,7 +134,18 @@ fn candidates(
     plan: &Plan,
 ) -> Result<Vec<AdoptionCandidate>> {
     let mut candidates = guest::adopt::option_candidates(local, captured)?;
+    candidates.extend(tag_colors::candidates(local, &captured.pve)?);
     for operation in &plan.operations {
+        // Cluster color candidates also cover adoption before local ownership begins.
+        if matches!(
+            operation,
+            Operation::ApiMutation {
+                domain: Domain::Cluster,
+                ..
+            }
+        ) {
+            continue;
+        }
         let mut produced = match operation {
             Operation::ApiMutation {
                 domain: Domain::Guest,
@@ -300,6 +311,69 @@ mod tests {
             AdoptionCandidate::blocked(&resource, "blocked", "local", "captured", "reason"),
         ];
         assert_eq!(selection(&candidates, true, &[]).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn cluster_colors_can_be_adopted_before_ownership_and_after_drift() {
+        #[derive(serde::Deserialize)]
+        struct Fixture {
+            pve: BTreeMap<String, Value>,
+            pbs: BTreeMap<String, Value>,
+        }
+        let temp = tempfile::tempdir().unwrap();
+        crate::config::scaffold::initialize(temp.path()).unwrap();
+        let mut local = crate::config::open(temp.path()).unwrap();
+        let mut fixture: Fixture =
+            serde_json::from_str(include_str!("../../tests/fixtures/planner/live.json")).unwrap();
+        fixture.pve.insert(
+            "/cluster/options".into(),
+            serde_json::json!({
+                "tag-style": {"color-map": "production:008844:ffffff", "shape": "full"}
+            }),
+        );
+        let captured = CapturedState::fixture(
+            "fixture-capture",
+            "https://pve.test:8006",
+            fixture.pve,
+            "https://pbs.test:8007",
+            fixture.pbs,
+            local.observed(),
+        );
+        for desired in [None, Some(BTreeMap::new())] {
+            local.cluster.tag_colors = desired;
+            let mut builder = crate::reconcile::PlanBuilder::new(
+                "fixture-capture",
+                "https://pve.test:8006",
+                "https://pbs.test:8007",
+            );
+            tag_colors::plan(&local, &captured.pve, &mut builder).unwrap();
+            let plan = builder.finish().unwrap();
+            assert_eq!(
+                plan.operations.len(),
+                usize::from(local.cluster.tag_colors.is_some())
+            );
+            let candidates = candidates(&local, &captured, &plan).unwrap();
+            let colors = candidates
+                .iter()
+                .filter(|candidate| candidate.id == "cluster:tag_colors")
+                .collect::<Vec<_>>();
+            assert_eq!(colors.len(), 1);
+            assert!(
+                selection(&candidates, true, &[])
+                    .unwrap()
+                    .contains("cluster:tag_colors")
+            );
+            let documents =
+                apply_local_patches(&local, colors[0].patches().unwrap().to_vec()).unwrap();
+            transaction::validate(&local, &documents).unwrap();
+            transaction::publish(&local, &documents).unwrap();
+            let adopted = crate::config::open(temp.path()).unwrap();
+            assert!(
+                tag_colors::candidates(&adopted, &captured.pve)
+                    .unwrap()
+                    .is_empty()
+            );
+        }
     }
 
     #[test]

@@ -2,7 +2,15 @@ use crate::reconcile::{ApiMethod, ApiTarget, Operation, Plan};
 use console::style;
 use std::collections::BTreeMap;
 
-pub(crate) fn print_human(plan: &Plan) {
+mod tags;
+pub(crate) use tags::TagPalettes;
+
+pub(super) fn has_guest_tags(operation: &Operation) -> bool {
+    matches!(operation, Operation::ApiMutation { domain: crate::reconcile::Domain::Guest, changes, .. }
+        if changes.contains_key("tags") || changes.get("delete").is_some_and(|value| value.split(',').any(|key| key == "tags")))
+}
+
+pub(crate) fn print_human(plan: &Plan, tag_palettes: &TagPalettes) {
     println!("{}", style("Live change plan").bold().cyan());
     println!("  {:<10} {}", "PVE", plan.target);
     println!("  {:<10} {}", "PBS", plan.pbs_target);
@@ -45,12 +53,12 @@ pub(crate) fn print_human(plan: &Plan) {
             style(format!("({})", operations.len())).dim()
         );
         for operation in operations {
-            print_operation(operation);
+            print_operation(operation, tag_palettes);
         }
     }
 }
 
-fn print_operation(operation: &Operation) {
+fn print_operation(operation: &Operation, tag_palettes: &TagPalettes) {
     match operation {
         Operation::ApiMutation {
             target,
@@ -68,14 +76,21 @@ fn print_operation(operation: &Operation) {
                 resource,
                 style(api_target(*target)).dim()
             );
-            for line in api_change_lines(changes, before_values) {
+            let lines = api_operation_lines(
+                *method,
+                changes,
+                before_values,
+                tag_palettes,
+                console::colors_enabled(),
+            );
+            for line in lines {
                 println!("      {line}");
             }
             for (field, variable) in environment_changes {
                 println!(
                     "      {:<22} {}",
                     field,
-                    style(format!("from ${variable}")).yellow()
+                    style(environment_change(*method, variable.as_ref())).yellow()
                 );
             }
             println!("      {}", style(endpoint).dim());
@@ -83,14 +98,15 @@ fn print_operation(operation: &Operation) {
         Operation::GrowDisk {
             resource,
             size_gb,
+            before_size_gb,
             endpoint,
             ..
         } => {
             println!(
-                "  {} {} → {} GiB",
+                "  {} {} {}",
                 style("GROW").yellow().bold(),
                 resource,
-                size_gb
+                disk_change(*before_size_gb, *size_gb)
             );
             println!("      {}", style(endpoint).dim());
         },
@@ -127,9 +143,65 @@ fn print_operation(operation: &Operation) {
     }
 }
 
+fn disk_change(before: Option<u64>, after: u64) -> String {
+    before.map_or_else(
+        || format!("→ {after} GiB"),
+        |before| format!("{before} GiB (captured) → {after} GiB (local)"),
+    )
+}
+
+fn environment_change(method: ApiMethod, variable: &str) -> String {
+    if method == ApiMethod::Post {
+        format!("(unset) (captured) → from ${variable} (local)")
+    } else {
+        format!("from ${variable}")
+    }
+}
+
+fn api_operation_lines(
+    method: ApiMethod,
+    changes: &BTreeMap<String, String>,
+    before_values: &BTreeMap<String, Option<String>>,
+    palettes: &TagPalettes,
+    colors: bool,
+) -> Vec<String> {
+    if method == ApiMethod::Delete {
+        return before_values
+            .iter()
+            .map(|(field, value)| {
+                format!(
+                    "{field:<22} {} (captured) → (removed) (local)",
+                    captured_value(field, value, &palettes.captured, colors),
+                )
+            })
+            .collect();
+    }
+    let unset;
+    let before = if method == ApiMethod::Post {
+        unset = changes.keys().map(|key| (key.clone(), None)).collect();
+        &unset
+    } else {
+        before_values
+    };
+    if colors {
+        api_change_lines_styled(changes, before, palettes, true)
+    } else {
+        api_change_lines(changes, before)
+    }
+}
+
 pub(super) fn api_change_lines(
     changes: &BTreeMap<String, String>,
     before_values: &BTreeMap<String, Option<String>>,
+) -> Vec<String> {
+    api_change_lines_styled(changes, before_values, &TagPalettes::default(), false)
+}
+
+fn api_change_lines_styled(
+    changes: &BTreeMap<String, String>,
+    before_values: &BTreeMap<String, Option<String>>,
+    tag_palettes: &TagPalettes,
+    colors: bool,
 ) -> Vec<String> {
     let mut lines = Vec::new();
     for (field, value) in changes {
@@ -137,26 +209,35 @@ pub(super) fn api_change_lines(
             for key in value.split(',') {
                 lines.push(format!(
                     "{key:<22} {} (captured) → (removed) (local)",
-                    captured_value(key, &before_values[key]),
+                    captured_value(key, &before_values[key], &tag_palettes.captured, colors),
                 ));
             }
         } else if let Some(before) = before_values.get(field) {
             lines.push(format!(
                 "{field:<22} {} (captured) → {} (local)",
-                captured_value(field, before),
-                display_value(field, value),
+                captured_value(field, before, &tag_palettes.captured, colors),
+                tags::display_value(field, value, &tag_palettes.local, colors),
             ));
         } else {
-            lines.push(format!("{field:<22} {}", display_value(field, value)));
+            lines.push(format!(
+                "{field:<22} {}",
+                tags::display_value(field, value, &tag_palettes.local, colors)
+            ));
         }
     }
     lines
 }
 
-fn captured_value(field: &str, value: &Option<String>) -> String {
-    value
-        .as_deref()
-        .map_or_else(|| "(unset)".into(), |value| display_value(field, value))
+fn captured_value(
+    field: &str,
+    value: &Option<String>,
+    palette: &crate::resource::tag_colors::TagColors,
+    colors: bool,
+) -> String {
+    value.as_deref().map_or_else(
+        || "(unset)".into(),
+        |value| tags::display_value(field, value, palette, colors),
+    )
 }
 
 fn action(method: ApiMethod) -> console::StyledObject<&'static str> {
@@ -275,7 +356,84 @@ fn line_diff<'a>(before: &'a str, after: &'a str) -> Vec<DiffLine<'a>> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn resource_creation_deletion_and_growth_show_both_sides() {
+        use super::*;
+        let changes = BTreeMap::from([("schedule".into(), "daily".into())]);
+        let before = BTreeMap::from([("schedule".into(), Some("weekly".into()))]);
+        let palettes = TagPalettes::default();
+        let created = api_operation_lines(
+            ApiMethod::Post,
+            &changes,
+            &BTreeMap::new(),
+            &palettes,
+            false,
+        );
+        assert_eq!(
+            created,
+            [format!(
+                "{:<22} (unset) (captured) → daily (local)",
+                "schedule"
+            )]
+        );
+        let deleted = api_operation_lines(
+            ApiMethod::Delete,
+            &BTreeMap::new(),
+            &before,
+            &palettes,
+            false,
+        );
+        assert_eq!(
+            deleted,
+            [format!(
+                "{:<22} weekly (captured) → (removed) (local)",
+                "schedule"
+            )]
+        );
+        assert_eq!(
+            environment_change(ApiMethod::Post, "SECRET_KEY"),
+            "(unset) (captured) → from $SECRET_KEY (local)"
+        );
+        assert_eq!(
+            disk_change(Some(32), 64),
+            "32 GiB (captured) → 64 GiB (local)"
+        );
+        assert_eq!(disk_change(None, 64), "→ 64 GiB");
+    }
+
     use super::*;
+
+    #[test]
+    fn tag_diffs_use_each_sides_palette_including_removals() {
+        let palettes = TagPalettes {
+            captured: serde_json::from_value(
+                serde_json::json!({"web": {"background": "ff0000", "text": "ffffff"}}),
+            )
+            .unwrap(),
+            local: serde_json::from_value(
+                serde_json::json!({"web": {"background": "0000ff", "text": "ffffff"}}),
+            )
+            .unwrap(),
+        };
+        let before = BTreeMap::from([("tags".into(), Some("web".into()))]);
+        for changes in [
+            BTreeMap::from([("tags".into(), "web;db".into())]),
+            BTreeMap::from([("delete".into(), "tags".into())]),
+        ] {
+            let rendered = api_change_lines_styled(&changes, &before, &palettes, true).join("\n");
+            let (captured, local) = rendered.split_once(" → ").unwrap();
+            assert!(captured.contains("\x1b[48;2;255;0;0mweb\x1b[0m"));
+            assert!(!local.contains("\x1b[48;2;255;0;0m"));
+            if changes.contains_key("tags") {
+                assert!(local.contains("\x1b[48;2;0;0;255mweb\x1b[0m"));
+            } else {
+                assert_eq!(local, "(removed) (local)");
+            }
+            let plain = api_change_lines_styled(&changes, &before, &palettes, false).join("\n");
+            assert_eq!(console::strip_ansi_codes(&rendered), plain);
+            assert!(!plain.contains('\x1b'));
+        }
+    }
 
     #[test]
     fn api_changes_distinguish_unset_empty_and_unknown_values() {

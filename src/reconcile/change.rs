@@ -9,6 +9,7 @@ use std::{fmt, ops::Deref};
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Domain {
+    Cluster,
     #[serde(rename = "guests")]
     Guest,
     Network,
@@ -94,6 +95,7 @@ impl Domain {
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::Guest => "guests",
+            Self::Cluster => "cluster",
             Self::Network => "network",
             Self::Firewall => "firewall",
             Self::Dns => "dns",
@@ -114,6 +116,7 @@ impl std::str::FromStr for Domain {
 
     fn from_str(value: &str) -> Result<Self> {
         match value {
+            "cluster" => Ok(Self::Cluster),
             "guests" => Ok(Self::Guest),
             "network" => Ok(Self::Network),
             "firewall" => Ok(Self::Firewall),
@@ -332,6 +335,7 @@ impl<'de> Deserialize<'de> for MutationEndpoint {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MutationEndpointFamily<'a> {
+    ClusterOptions,
     GuestConfig {
         node: &'a str,
         kind: &'a str,
@@ -361,6 +365,7 @@ fn mutation_endpoint_family(value: &str) -> Option<MutationEndpointFamily<'_>> {
         return None;
     }
     match segments.as_slice() {
+        ["cluster", "options"] => Some(MutationEndpointFamily::ClusterOptions),
         ["nodes", node, kind @ ("lxc" | "qemu"), vmid, "config"] => {
             Some(MutationEndpointFamily::GuestConfig { node, kind, vmid })
         },
@@ -402,6 +407,7 @@ pub(crate) fn validate_operation(
         bail!("operation target {target:?} is incompatible with domain {domain}");
     }
     match (domain, resource) {
+        (Domain::Cluster, ResourceId::Cluster) => Ok(()),
         (Domain::Guest, ResourceId::Guest(_) | ResourceId::GuestDisk(_, _))
         | (Domain::Network, ResourceId::Named(_))
         | (
@@ -487,6 +493,7 @@ mod tests {
     #[test]
     fn domain_parses_every_serialized_spelling() {
         for (spelling, expected) in [
+            ("cluster", Domain::Cluster),
             ("guests", Domain::Guest),
             ("network", Domain::Network),
             ("firewall", Domain::Firewall),

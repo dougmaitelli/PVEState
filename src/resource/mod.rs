@@ -6,3 +6,4 @@ pub(crate) mod guest;
 mod native;
 pub(crate) mod native_paths;
 pub(crate) mod network;
+pub(crate) mod tag_colors;

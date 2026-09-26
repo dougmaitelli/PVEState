@@ -98,9 +98,9 @@ fn run(cli: Cli, events: &dyn EventSink) -> Result<()> {
             let p = plan::run(&repo, events)?;
             events.finish(true);
             if json {
-                println!("{}", serde_json::to_string_pretty(&p)?);
+                println!("{}", serde_json::to_string_pretty(&p.plan)?);
             } else {
-                plan::print_human(&p);
+                plan::print_human(&p.plan, &p.tag_palettes);
             }
             Ok(())
         },

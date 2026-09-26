@@ -156,6 +156,12 @@ const ENTRIES: &[ScopeEntry] = &[
         "Creates, replaces, or removes the cluster firewall file with concurrent-change checks.",
     ),
     entry(
+        "cluster.yml",
+        "tag_colors",
+        ManagementClass::ProductionManaged,
+        "Adopts and applies cluster-wide tag background/text color overrides. Omitted maps are unmanaged; empty maps clear overrides. Other tag-style options are preserved.",
+    ),
+    entry(
         "node.yml",
         "firewall",
         ManagementClass::ProductionManaged,

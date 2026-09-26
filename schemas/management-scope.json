@@ -128,6 +128,13 @@
       "behavior": "Creates, replaces, or removes the cluster firewall file with concurrent-change checks."
     },
     {
+      "document": "cluster.yml",
+      "fields": "tag_colors",
+      "class": "production-managed",
+      "level": "applicable",
+      "behavior": "Adopts and applies cluster-wide tag background/text color overrides. Omitted maps are unmanaged; empty maps clear overrides. Other tag-style options are preserved."
+    },
+    {
       "document": "node.yml",
       "fields": "firewall",
       "class": "production-managed",

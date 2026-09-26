@@ -24,6 +24,8 @@ pub(crate) enum Operation {
         endpoint: ApiPath,
         disk: DiskId,
         size_gb: u64,
+        #[serde(skip)]
+        before_size_gb: Option<u64>,
     },
     WriteFile {
         domain: Domain,
@@ -97,4 +99,31 @@ impl Operation {
             Self::DeleteFile { target, .. } => format!("delete {}", target.path()),
         }
     }
+}
+
+pub(crate) fn before_values(
+    changes: &BTreeMap<String, String>,
+    actual: &serde_json::Value,
+) -> BTreeMap<String, Option<String>> {
+    changes
+        .iter()
+        .flat_map(|(field, value)| {
+            if field == "delete" {
+                value.split(',').collect::<Vec<_>>()
+            } else {
+                vec![field.as_str()]
+            }
+        })
+        .map(|field| {
+            (
+                field.into(),
+                actual.get(field).map(|value| {
+                    value
+                        .as_str()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| value.to_string())
+                }),
+            )
+        })
+        .collect()
 }

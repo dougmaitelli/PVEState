@@ -2,9 +2,11 @@
   "pve_target": "https://pve.test:8006",
   "pbs_target": "https://pbs.test:8007",
   "operations": [
+    {"action":"api-mutation","target":"pve","method":"put","domain":"cluster","resource":"cluster","endpoint":"/cluster/options","changes":{"tag-style":"color-map=production:008844:ffffff,shape=full"},"digest":null},
     {"action":"api-mutation","target":"pve","method":"put","domain":"guests","resource":"lxc/101","endpoint":"/nodes/pve/lxc/101/config","changes":{"cores":"4"},"digest":"abc"},
     {"action":"api-mutation","target":"pbs","method":"post","domain":"pbs","resource":"s3/archive","endpoint":"/config/s3","changes":{"id":"archive"},"environment_changes":{"access-key":"PBS_APPLY_S3_ACCESS_KEY"},"digest":null},
     {"action":"grow-disk","domain":"guests","resource":"qemu/201/scsi0","endpoint":"/nodes/pve/qemu/201/resize","disk":"scsi0","size_gb":64},
-    {"action":"api-mutation","target":"pbs","method":"delete","domain":"pbs","resource":"prune/old","endpoint":"/config/prune/old","changes":{},"digest":null}
+    {"action":"api-mutation","target":"pbs","method":"delete","domain":"pbs","resource":"prune/old","endpoint":"/config/prune/old","changes":{},"digest":null},
+    {"action":"api-mutation","target":"pve","method":"put","domain":"cluster","resource":"cluster","endpoint":"/cluster/options","changes":{"delete":"tag-style"},"digest":null}
   ]
 }

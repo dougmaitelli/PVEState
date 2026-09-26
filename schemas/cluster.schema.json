@@ -23,6 +23,19 @@
     "proxmox": {
       "$ref": "#/$defs/ProxmoxCluster"
     },
+    "tag_colors": {
+      "description": "Cluster-wide tag color overrides. Omit to leave unmanaged; {} clears overrides.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[A-Za-z0-9_][A-Za-z0-9_+.-]*$": {
+          "$ref": "#/$defs/TagColor"
+        }
+      }
+    },
     "workload_profile": {
       "$ref": "#/$defs/WorkloadProfile"
     }
@@ -375,6 +388,10 @@
         "name"
       ]
     },
+    "HexColor": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f]{6}$"
+    },
     "ProxmoxCluster": {
       "type": "object",
       "properties": {
@@ -393,6 +410,29 @@
         "endpoint",
         "existing_environment",
         "change_policy"
+      ]
+    },
+    "TagColor": {
+      "type": "object",
+      "properties": {
+        "background": {
+          "$ref": "#/$defs/HexColor"
+        },
+        "text": {
+          "description": "Omit to let Proxmox choose a contrasting text color.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HexColor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "background"
       ]
     },
     "WorkloadProfile": {

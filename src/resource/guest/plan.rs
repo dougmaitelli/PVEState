@@ -3,7 +3,7 @@ use crate::{
     client::PveClient,
     config::LocalState,
     model::{GuestField, GuestKind, GuestRef, Lxc, LxcConfigField, Vm},
-    reconcile::{ApiMethod, ApiTarget, Domain, Operation, PlanBuilder},
+    reconcile::{ApiMethod, ApiTarget, Domain, Operation, PlanBuilder, before_values},
 };
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -307,8 +307,8 @@ fn push_update(
             domain: Domain::Guest,
             resource: guest.to_string().into(),
             endpoint: guest.config_endpoint(node).into(),
+            before_values: before_values(&changes, actual),
             changes,
-            before_values: BTreeMap::new(),
             environment_changes: BTreeMap::new(),
             digest: actual["digest"].as_str().map(str::to_string),
         });
@@ -329,20 +329,20 @@ fn disk(
     let actual_storage = volume.split(':').next().unwrap_or("");
     let current = options
         .get("size")
-        .and_then(|value| value.trim_end_matches('G').parse::<u64>().ok())
-        .unwrap_or(0);
+        .and_then(|value| value.trim_end_matches('G').parse::<u64>().ok());
     if actual_storage != storage {
         blockers.push(format!("{guest}: storage moves are not automatic"));
     }
-    if size < current {
+    if size < current.unwrap_or(0) {
         blockers.push(format!("{guest}: disk shrinking is forbidden"));
-    } else if size > current {
+    } else if size > current.unwrap_or(0) {
         operations.push(Operation::GrowDisk {
             domain: Domain::Guest,
             resource: format!("{guest}/{key}").into(),
             endpoint: guest.resize_endpoint(node).into(),
             disk: key.into(),
             size_gb: size,
+            before_size_gb: current,
         });
     }
     Ok(())
@@ -698,7 +698,21 @@ mod tests {
         .unwrap();
         assert!(matches!(
             operations.as_slice(),
-            [Operation::GrowDisk { size_gb: 64, .. }]
+            [Operation::GrowDisk {
+                size_gb: 64,
+                before_size_gb: Some(32),
+                ..
+            }]
+        ));
+        let saved = serde_json::to_value(&operations[0]).unwrap();
+        assert!(saved.get("before_size_gb").is_none());
+        assert!(matches!(
+            serde_json::from_value::<Operation>(saved).unwrap(),
+            Operation::GrowDisk {
+                before_size_gb: None,
+                size_gb: 64,
+                ..
+            }
         ));
         assert!(blockers.is_empty());
     }
@@ -771,11 +785,63 @@ mod tests {
         };
         assert_eq!(changes["arch"], "arm64");
         assert!(changes["delete"].split(',').any(|field| field == "tags"));
+        let Operation::ApiMutation { before_values, .. } = &operations[0] else {
+            unreachable!()
+        };
+        assert_eq!(before_values["arch"].as_deref(), Some("amd64"));
+        assert_eq!(before_values["tags"].as_deref(), Some("old"));
+        assert!(!before_values.contains_key("features"));
+
         assert!(blockers.is_empty());
 
         actual["arch"] = serde_json::json!("arm64");
         actual.as_object_mut().unwrap().remove("tags");
         assert_eq!(lxc_options(&actual).unwrap(), desired.options.unwrap());
+    }
+
+    #[test]
+    fn guest_updates_preserve_captured_values_for_tags_and_devices() {
+        let changes = BTreeMap::from([
+            ("tags".into(), "production;web".into()),
+            ("memory".into(), "4096".into()),
+            ("description".into(), "".into()),
+            ("net1".into(), "bridge=vmbr1".into()),
+            ("delete".into(), "usb0,mp0".into()),
+        ]);
+        let actual = serde_json::json!({
+            "tags": "staging", "memory": 2048, "description": "old description",
+            "usb0": "host=dead:beef", "mp0": "/old,mp=/data", "digest": "unchanged"
+        });
+        let mut operations = Vec::new();
+        push_update(
+            "pve",
+            GuestRef::new(GuestKind::Lxc, 101),
+            changes.clone(),
+            &actual,
+            &mut operations,
+        );
+        let Operation::ApiMutation {
+            changes: planned,
+            before_values,
+            digest,
+            ..
+        } = &operations[0]
+        else {
+            panic!("expected update")
+        };
+        assert_eq!(planned, &changes);
+        assert_eq!(digest.as_deref(), Some("unchanged"));
+        assert_eq!(
+            before_values,
+            &BTreeMap::from([
+                ("tags".into(), Some("staging".into())),
+                ("memory".into(), Some("2048".into())),
+                ("description".into(), Some("old description".into())),
+                ("net1".into(), None),
+                ("usb0".into(), Some("host=dead:beef".into())),
+                ("mp0".into(), Some("/old,mp=/data".into())),
+            ])
+        );
     }
 
     #[test]
