@@ -3,14 +3,46 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ["**"]
+    # Version tags are validated by the release workflow before publishing.
+    tags: ["**", "!v*"]
+  workflow_call:
   pull_request:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      app: ${{ github.ref_type == 'tag' || steps.filter.outputs.app == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@v4
+        id: filter
+        if: github.ref_type != 'tag'
+        with:
+          predicate-quantifier: every
+          filters: |
+            app:
+              - '**'
+              - '!docs/**'
+              - '!screenshots/**'
+              - '!*.md'
+              - '!LICENSE'
+
   lint:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     name: Format and lint
     runs-on: ubuntu-latest
     steps:
@@ -24,6 +56,8 @@ jobs:
         run: cargo clippy --all-targets --all-features --locked -- -D warnings
 
   test:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     name: Test (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -36,3 +70,14 @@ jobs:
       - run: cargo test --all-targets --all-features --locked
       - run: cargo build --release --locked
         if: github.event_name == 'push'
+
+  ci-result:
+    name: CI result
+    if: always()
+    needs: [changes, lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require selected checks to pass
+        env:
+          FAILED: ${{ needs.changes.result != 'success' || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: test "$FAILED" = false
